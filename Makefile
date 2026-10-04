@@ -28,14 +28,14 @@ sizes:
 KIT := $(B)/kit/userland
 kit-stage:
 	rm -rf $(KIT) && mkdir -p $(KIT)/bin
-	@for p in $(PKGS); do [ -f $(STATE)/$$p.checked ] || continue; \
+	@set -e; for p in $(PKGS); do [ -f $(STATE)/$$p.checked ] || continue; \
 	  for b in $$($(MAKE) -s print-$$p-BINS); do cp $(SYSROOT)$(PREFIX)/$$b $(KIT)/bin/; done; \
 	  printf '%s\t%s\t%s\t%s\t%s\n' $$p "$$($(MAKE) -s print-$$p-VERSION)" \
 	    "$$($(MAKE) -s print-$$p-URL)" "$$($(MAKE) -s print-$$p-SHA256)" \
 	    "$$($(MAKE) -s print-$$p-LICENSE)" >> $(KIT)/SOURCES.txt; done
 	@cat $(KIT)/SOURCES.txt
 print-%:
-	@echo $($(subst -,_,$(patsubst print-%,%,$@)))
+	@printf '%s\n' '$($(subst -,_,$(patsubst print-%,%,$@)))'
 
 clean:
 	rm -rf $(OBJ) $(HOSTB) $(STATE) $(EXPECT) $(SYSROOT) $(SRC) $(B)/kit
