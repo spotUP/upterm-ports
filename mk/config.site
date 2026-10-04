@@ -1,0 +1,32 @@
+# config.site for m68k-amigaos (AmigaOS 3.x, ixemul 48.2 + ixemul-vtcon,
+# bebbo gcc 6.5, libixcompat). Answers configure cannot find out when cross
+# compiling (no run tests), and overrides where a link test would find the
+# wrong thing. Each answer says why; add one only from a measured failure.
+# Shared by every recipe; a package-specific answer goes in its recipe.mk
+# (<pkg>_ENV).
+
+# --- no fork(): ixemul has vfork only (vtcon ledger P7) ----------------------
+ac_cv_func_fork=no
+ac_cv_func_fork_works=no
+ac_cv_func_vfork=yes
+ac_cv_func_vfork_works=yes
+
+# --- headers the toolchain's sys-include has (another C library's), whose
+# functions ixemul does not have (cpython-amiga amiga/config.site) ---------
+ac_cv_header_libintl_h=no
+ac_cv_header_sys_lock_h=no
+ac_cv_header_sys_statvfs_h=no
+ac_cv_header_pthread_h=no
+# measured on grep 3.12: configure accepted these newlib headers from
+# sys-include; ixemul has none of them, and newlib's stdio_ext.h breaks the
+# build (_ELIDABLE_INLINE). gnulib supplies getopt.h and inttypes.h itself.
+ac_cv_header_stdio_ext_h=no
+ac_cv_header_getopt_h=no
+ac_cv_header_inttypes_h=no
+ac_cv_header_xlocale_h=no
+
+# --- libixcompat's locale layer (ixemul-vtcon compat/locale.c, wchar.c) ------
+# In the C locale mbrtowc is ISO 8859-1: every byte is a character, never
+# EILSEQ (compat/utf8.c), which POSIX.1-2018 asks for. gnulib's cross guess
+# "no" wrapped mbrtowc, mbrlen and btowc for nothing (measured on grep 3.12).
+gl_cv_func_mbrtowc_C_locale_sans_EILSEQ=yes

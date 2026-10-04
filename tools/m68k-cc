@@ -1,0 +1,20 @@
+#!/bin/sh
+# The C compiler every recipe uses: bebbo's m68k-amigaos-gcc for ixemul.
+# Compiles get the CPU flags as given; a call that links drops them,
+# because with -m68020 the driver picks the multilib libnix crt0
+# (lib/libm020/crt0.o: undefined DOSBase, __nocommandline) instead of
+# ixemul's crt0.o (measured 2026-10-04; neovim-amiga D-7, cpython-amiga).
+# The code stays 68020: only crt0 and libgcc come from the 68000 set.
+AMIGA=${AMIGA:-$HOME/opt/amiga}
+link=1
+for a; do
+	case $a in -c|-S|-E|-M|-MM) link=0 ;; esac
+done
+if [ $link = 1 ]; then
+	for a; do
+		shift
+		case $a in -m680[0-6]0|-m68020-60|-m68020-40|-mcpu=*) continue ;; esac
+		set -- "$@" "$a"
+	done
+fi
+exec "$AMIGA/bin/m68k-amigaos-gcc" -mcrt=ixemul "$@"
