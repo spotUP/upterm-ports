@@ -1,0 +1,5 @@
+tput-version	tput -V
+tic-version	tic -V
+infocmp-version	infocmp -V
+toe-version	toe -V
+tset-version	tset -V
