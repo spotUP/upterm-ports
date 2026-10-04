@@ -79,3 +79,14 @@ tic 239,432; toe 160,224; tabs 105,756. Staged with SOURCES.txt by `make kit-sta
 - R3 ncurses: copy tput, reset, clear, infocmp to VTC: (kit terminfo installed):
   `tput cols` / `tput lines` equal the window size, `infocmp vtcon` prints the entry,
   `clear` clears, `reset` restores after garbage; `tput -V` equals the expected output.
+
+## Rig results (main session, 2026-10-04, default rig, AmigaShell via the rig agent)
+
+- R1 spawnprobe: 13 of 14 [OK]; [FAIL] "spawnp: found by envp's PATH, saw envp" with
+  PATH=VTC: (an AmigaDOS-form PATH entry; check whether posix_spawnp should map Vol: entries
+  or the probe should pass /VTC). Everything else (exit status, dup2, open, chdir, sigmask,
+  envp, ENOENT without a leaked child or heap change) passes.
+- R2 grep 3.12: `grep --version`, `grep -n alpha /VTC/g.txt` (1:alpha, 3:gamma alpha),
+  `grep -ic beta` (1) correct; the UTF-8 case is not judged (the rig agent types the command
+  line as Latin-1 while the file is UTF-8) -- run the check/cases list through vsh in a window.
+- R3 ncurses: not run yet.
