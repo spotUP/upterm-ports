@@ -1,0 +1,17 @@
+version	grep --version
+fixed	grep alpha a.txt
+nomatch	grep zeta a.txt
+missing	grep alpha nosuchfile
+count	grep -c alpha a.txt
+number	grep -n TODO a.txt
+icase	grep -i beta a.txt
+extended	grep -E "^(alpha|gamma)" a.txt
+invert	grep -v a a.txt
+recursive	grep -rn TODO tree
+color	grep --color=always fix a.txt
+only	grep -o "a[lm][a-z]*" a.txt
+word	grep -w delta a.txt
+utf8-dot	LC_ALL=en_US.UTF-8 grep -o "caf." utf8.txt
+utf8-icase	LC_ALL=en_US.UTF-8 grep -i "café" utf8.txt
+c-dot	LC_ALL=C grep -o "caf." utf8.txt
+backref	grep -E "(l)\\1" a.txt
