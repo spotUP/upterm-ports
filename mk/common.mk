@@ -12,8 +12,11 @@ SYSROOT := $(B)/sysroot
 
 AMIGA   ?= $(HOME)/opt/amiga
 CROSS   := $(AMIGA)/bin/m68k-amigaos-
-IXEMUL  ?= $(HOME)/Code/ixemul-vtcon
-VTCON   ?= $(HOME)/Code/vtcon
+# The workspace directory that holds this repo and its siblings (the upterm
+# meta-repo creates it); the sibling defaults below hang off it.
+UPTERM_ROOT ?= $(abspath $(CURDIR)/..)
+IXEMUL  ?= $(UPTERM_ROOT)/ixemul-vtcon
+VTCON   ?= $(UPTERM_ROOT)/vtcon
 
 # Where the tools live on the Amiga, as ixemul spells it (/SYS/x = SYS:x).
 # Every package installs with DESTDIR=$(SYSROOT), so the libraries and
