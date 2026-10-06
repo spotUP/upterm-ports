@@ -40,3 +40,10 @@ progress is ledgered in `thoughts/shared/plans/2026-10-04-phase0-progress.md`.
 
 There is no lint or type-check step: the packages are upstream C built by their
 own build systems; `check_bin` is the gate.
+
+## Cross-repo changes
+
+A change that crosses two or more UP-Term repos is one commit per repo, all with the
+same subject line, plus one `repos.lock` update in the `upterm` meta-repo (re-pin with
+`bin/upterm-bootstrap --update`) carrying that subject line too. Release step:
+`upterm-bootstrap --update`, then `make dist` in vtcon; run `bin/upterm-doctor` first.
