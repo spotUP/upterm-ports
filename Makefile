@@ -23,8 +23,8 @@ sysroot: ixcompat ncurses
 sizes:
 	@column -t $(STATE)/sizes.tsv
 
-# The kit drawer (vtcon item 1.10 consumes it): every checked package's
-# programs, and SOURCES.txt from the recipes, the one list of what ships.
+# build/kit/userland: every checked package's programs (bin/) and SOURCES.txt
+# (package, version, URL, sha256, licence) from the recipes.
 KIT := $(B)/kit/userland
 kit-stage:
 	rm -rf $(KIT) && mkdir -p $(KIT)/bin
