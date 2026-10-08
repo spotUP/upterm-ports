@@ -1,0 +1,3 @@
+view	less lines.txt
+color	less -R colors.txt
+search	less lines.txt

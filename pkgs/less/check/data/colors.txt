@@ -1,0 +1,3 @@
+plain
+[31mred[0m and [1;32mbold green[0m
+[44mblue back[0m

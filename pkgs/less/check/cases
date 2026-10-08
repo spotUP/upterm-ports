@@ -1,0 +1,4 @@
+version	less --version | sed -n 1p
+cat-mode	less lines.txt
+cat-color	less -R colors.txt
+missing	less nosuchfile

@@ -120,8 +120,10 @@ $(STATE)/host-$(1).built: $(STATE)/$(1).unpacked pkgs/$(1)/recipe.mk
 	( $$($(1)_HOST_BUILD_CMD) ) > $$($(1)_HOBJ)/make.log 2>&1 || \
 		{ grep -E 'error|Error' $$($(1)_HOBJ)/make.log | head -30; exit 1; }
 	@touch $$@
-$(STATE)/host-$(1).expected: $(STATE)/host-$(1).built $$(wildcard pkgs/$(1)/check/*) tools/run-cases.sh
+$(STATE)/host-$(1).expected: $(STATE)/host-$(1).built $$(wildcard pkgs/$(1)/check/* pkgs/$(1)/check/keys/*) \
+		tools/run-cases.sh tools/run-tty.sh $$(if $$(wildcard pkgs/$(1)/check/tty),$(TOOLS)/ptyrun $(TOOLS)/terminfo/stamp)
 	$(ROOT)/tools/run-cases.sh $$($(1)_HOBJ)/inst/bin pkgs/$(1)/check $(EXPECT)/$(1)
+	$(ROOT)/tools/run-tty.sh $$($(1)_HOBJ)/inst/bin pkgs/$(1)/check $(EXPECT)/$(1)
 	@touch $$@
 
 $(1)-patches:
@@ -132,3 +134,21 @@ $(1)-patches:
 clean-$(1):
 	rm -rf $$($(1)_SRC) $$($(1)_OBJ) $$($(1)_HOBJ) $(EXPECT)/$(1) $(STATE)/$(1).* $(STATE)/host-$(1).*
 endef
+
+# ---- the terminal cases' tools (pkgs/<p>/check/tty) ---------------------------
+# ptyrun records what a program draws on a pseudo-terminal: the Mac build for
+# the expected outputs, the Amiga one for the rig (vtcon userland_rig.py). The
+# Mac's tic compiles vtcon's terminfo for the Mac side.
+TOOLS := $(B)/tools
+$(TOOLS)/ptyrun: tools/ptyrun.c
+	@mkdir -p $(TOOLS)
+	cc -Wall -Wno-deprecated-declarations -O2 -o $@ tools/ptyrun.c
+$(TOOLS)/ptyrun.amiga: tools/ptyrun.c $(STATE)/ixcompat.installed
+	@mkdir -p $(TOOLS)
+	$(ROOT)/tools/m68k-cc $(CPU) -O2 -Wall -I$(SYSINC) -o $@ tools/ptyrun.c $(SYSLIB)/libixcompat.a
+$(TOOLS)/terminfo/stamp: $(VTCON)/terminfo/vtcon.terminfo
+	rm -rf $(TOOLS)/terminfo && mkdir -p $(TOOLS)/terminfo
+	/usr/bin/tic -x -o $(TOOLS)/terminfo $(VTCON)/terminfo/vtcon.terminfo
+	@touch $@
+.PHONY: tty-tools
+tty-tools: $(TOOLS)/ptyrun $(TOOLS)/ptyrun.amiga $(TOOLS)/terminfo/stamp
