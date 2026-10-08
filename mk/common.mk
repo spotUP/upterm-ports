@@ -37,15 +37,20 @@ ifeq ($(shell [ $(JOBS) -le 4 ] && echo ok),)
 $(error JOBS=$(JOBS): at most 4 parallel jobs on this machine)
 endif
 
+comma := ,
 # $(call M68K_ENV,<pkg>): the cross environment for configure.
 # libixcompat goes in by its path: with -mcrt=ixemul the gcc driver puts the
 # SDK's -L directories before ours, so -lixcompat would find the toolchain's
 # old copy in ixemul/lib, not the sysroot's (measured 2026-10-04 with -Map).
+# The $STACK: cookie object reaches the linker through -Wl,: libtool refuses
+# an object file among a library's LIBS ("cannot build libtool library from
+# non-libtool objects", xz 5.8.4); programs link it, static libraries ignore it.
 M68K_ENV = CONFIG_SITE=$(ROOT)/mk/config.site \
 	CC="$(ROOT)/tools/m68k-cc" CPP="$(ROOT)/tools/m68k-cc -E" \
 	AR=$(CROSS)ar RANLIB=$(CROSS)ranlib STRIP=$(CROSS)strip NM=$(CROSS)nm \
-	CFLAGS="$(CPU) -O2" CPPFLAGS="-I$(SYSINC)" LDFLAGS="-L$(SYSLIB)" \
-	LIBS="$($(1)_LIBS) $(if $($(1)_STACK),$(OBJ)/$(1).stack.o) $(SYSLIB)/libixcompat.a" PKG_CONFIG=false
+	CFLAGS="$(CPU) -O2" CPPFLAGS="-I$(SYSINC)" \
+	LDFLAGS="-L$(SYSLIB)$(if $($(1)_STACK), -Wl$(comma)$(OBJ)/$(1).stack.o)" \
+	LIBS="$($(1)_LIBS) $(SYSLIB)/libixcompat.a" PKG_CONFIG=false
 BUILD_TRIPLE := $(shell sh $(ROOT)/tools/build-triple.sh)
 
 # $(call CHECK_PATH,<p>): the Mac bin directories a package's checks run with

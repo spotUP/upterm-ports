@@ -10,7 +10,8 @@ ixcompat_URL     := $(IXEMUL)
 ixcompat_LICENSE := BSD (ixemul-vtcon compat/)
 ixcompat_BINS    :=
 IXC_DEPS := $(wildcard $(IXEMUL)/compat/*.c $(IXEMUL)/compat/Makefile \
-	$(IXEMUL)/include/*.h $(IXEMUL)/include/sys/*.h $(VTCON)/engine/vtwidth.h)
+	$(IXEMUL)/include/*.h $(IXEMUL)/include/sys/*.h $(IXEMUL)/include/machine/*.h \
+	$(VTCON)/engine/vtwidth.h)
 
 .PHONY: ixcompat clean-ixcompat
 ixcompat: $(STATE)/ixcompat.installed
