@@ -24,7 +24,7 @@ passes, man page, licence met. The kit step is 1.10; tools are ticked when it la
 | 1.3 awk 20260426 | rig 17/17, staged | ports d0a6da1, 697c3ed; ixemul 03d9a2f atan2, fcc2c7b system(), 511c224 execve quoting; the other agent's 74c77ac (ReadItem parsing) fixed the vsh->ixemul quotes |
 | 1.4 less 710 | rig 7/7 (3 terminal cases), staged | ports 8691fa6; ixemul 14a4b3b tsearch, ebbdc56 /dev/tty = controlling tty |
 | 1.5 nano 9.2 | rig 3/3 (type+save, edit; bytes equal), staged with syntax files + etc/nanorc | ports d4d4198; ixemul 9e810a4 |
-| 1.6 findutils 4.11 | rig 8/9; -type d: gcc miscompile; KIT_HOLD | ports cf5119e; gcc fix cpython-amiga 7eeb010 (amiga/gcc/0004) not installed |
+| 1.6 findutils 4.11 | rig 9/9 (-type d too), staged | ports cf5119e; cc1 with cpython-amiga 7eeb010 (amiga/gcc/0004) installed 2026-10-08; ixemul 2767cac (libixcompat one member per C99 function) |
 | 1.7 diffutils 3.12 | rig 14/14, staged | ports 2d53f1a |
 | 1.8 patch 2.8 | rig 6/6, staged | ports 2d53f1a; ixemul e5d22d5 |
 | 1.9 mandoc 1.14.6 + pages | rig 8/8 (man pages through less), own pages vsh UPTerm upgetty sz | ports bcb06b5; ixemul 54bf915, b8f7643, b4630aa; vtcon 5aa2069 |
@@ -45,9 +45,11 @@ passes, man page, licence met. The kit step is 1.10; tools are ticked when it la
    `#kb-` size in Install.installer; also copy vtcon `man/*.1` into
    `Files/userland/share/man/man1` (sz.1 again as rz.1). Then `make dist`, install_rig (the
    grep reachability check), tick 1.2-1.5, 1.7-1.10.
-2. Owner installs cpython-amiga's build/gcc/bin/cc1 (gcc patches 0001-0004) into ~/opt/amiga;
-   then here: `rm -rf build/obj build/sysroot build/state/*.{configured,built,installed,checked}`,
-   rebuild every package, rerun all rig cases, drop `findutils_KIT_HOLD`, tick 1.6.
+2. Done 2026-10-08: cc1 with gcc 0001-0004 in ~/opt/amiga (the old one kept as
+   `~/opt/amiga/libexec/gcc/m68k-amigaos/6.5.0b/cc1.pre0004-2026-10-08`); every package rebuilt
+   from clean; 1 of 2,184 compile units changed (findutils find/ftsfind.c, the st_mode load),
+   0 of 14 libixcompat units, 0 of 17 in vtcon (counted by running both cc1s on every unit);
+   all rig cases rerun on rig 3; `findutils_KIT_HOLD` dropped. 1.6 is ticked with 1.10.
 3. Phase 3 (file, tree, ps/top, watch, script, ncdu, coreutils 9, fzy).
 
 ## Decisions (not to re-litigate)
@@ -74,8 +76,12 @@ passes, man page, licence met. The kit step is 1.10; tools are ticked when it la
   match; missing atan2, tsearch, strnlen, strtok_r, bswap*, putwchar, nanosleep, getpgid,
   RLIMIT_NOFILE, MAP_FAILED, utime.h's time_t.
 - gcc: bbb opt_strcpy deleted a load an earlier store read (find's directory modes).
-- vsh: a drawer named like a command in the current directory is entered (implicit CD) before
-  $PATH is searched: `man` in a directory holding a drawer `man` ran CD.
-- check_bin: the $STACK cookie may follow printable bytes; m68k_scan: moveq-bounded switch tables.
-- install_rig PYTHON check fails since ixemul 74c77ac: `"print(6*7)"` is `print(67)` under
-  ReadItem's `*` escapes (not this work's change).
+- vsh: a drawer named like a command in the current directory was entered (implicit CD) before
+  $PATH was searched: `man` in a directory holding a drawer `man` ran CD. Fixed vtcon 3dbf72f.
+- check_bin: the $STACK cookie may follow printable bytes; m68k_scan: moveq-bounded switch tables;
+  m68k_scan followed a move's bare absolute operand (a data-hunk read) as code into the cookie
+  (patch 2.8 after a relink): only pea/lea take a bare address (`make test`).
+- libixcompat kept all C99 functions in one member: gnulib's own strtoumax (findutils) clashed
+  with the one 3804757 added; now one member per function (ixemul 2767cac).
+- install_rig PYTHON check failed since ixemul 74c77ac (`"print(6*7)"` read as `print(67)`):
+  fixed in ixemul 5cc91cd, in quotes only *" ** *N *n *E *e are escapes.

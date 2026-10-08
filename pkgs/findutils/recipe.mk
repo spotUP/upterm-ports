@@ -13,6 +13,3 @@ findutils_HOST_CONFIGURE := --disable-nls
 findutils_BINS      := bin/find bin/xargs
 # provisional, grep's value: find recurses with the tree (fts)
 findutils_STACK     := 262144
-# out of the kit until ~/opt/amiga has a cc1 with cpython-amiga 7eeb010's
-# amiga/gcc/0004: the installed one miscompiles find (-type d matches nothing)
-findutils_KIT_HOLD := find miscompiled by the installed cc1 (bbb opt_strcpy, gcc patch 0004)
