@@ -66,11 +66,23 @@ def switch_targets(T, recent, mem, end):
     the bound is in a register, the entries run to the first case after
     the table, and a target inside the table or odd is not taken."""
     count = None
-    for base, ops in reversed(recent):
+    rev = list(reversed(recent))
+    for i, (base, ops) in enumerate(rev):
         if base.startswith("cmpi"):
             m = BOUND.match(ops)
             if m:
                 count = int(m.group(1)) + 1
+            break
+        if base.startswith("cmp"):
+            # the bound loaded into a register first: "moveq #N,dK; cmpl X,dK"
+            # (nano 9.2's vasnprintf: without it the table ran on into the
+            # code after it, and a code word became a "case" mid-instruction)
+            dst = ops.split(",")[-1].strip().lstrip("%")
+            for b2, o2 in rev[i + 1:]:
+                m = BOUND.match(o2)
+                if b2.startswith("moveq") and m and o2.split(",")[-1].strip().lstrip("%") == dst:
+                    count = int(m.group(1)) + 1
+                    break
             break
     out, first, p = [], end, T
     while p + 1 in mem:
