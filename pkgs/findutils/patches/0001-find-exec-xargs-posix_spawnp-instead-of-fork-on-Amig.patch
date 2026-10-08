@@ -1,0 +1,149 @@
+From bc1b6e62a491745d93dcc6deb3515a49c2b25127 Mon Sep 17 00:00:00 2001
+From: upterm-ports <upterm-ports@localhost>
+Date: Thu, 8 Oct 2026 17:56:44 +0200
+Subject: [PATCH] find -exec, xargs: posix_spawnp instead of fork on AmigaOS
+
+ixemul has vfork only. The forked child's work (stdin from /dev/null or
+/dev/tty, the directory to run in, xargs' slot variable) becomes spawn
+actions or the parent's environment; a command that cannot be run is the
+spawn's error, reported as the child's was (find: status 1; xargs: 126/127,
+E2BIG: fewer arguments).
+---
+ find/exec.c   | 36 ++++++++++++++++++++++++++++++++++++
+ xargs/xargs.c | 45 +++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 81 insertions(+)
+
+diff --git a/find/exec.c b/find/exec.c
+index 4ac5b12..beefd3b 100644
+--- a/find/exec.c
++++ b/find/exec.c
+@@ -18,6 +18,10 @@
+ /* config.h must be included first. */
+ #include <config.h>
+ 
++#ifdef __amigaos__
++# include <spawn.h>
++#endif
++
+ /* system headers. */
+ #include <assert.h>
+ #include <errno.h>
+@@ -316,6 +320,37 @@ launch (struct buildcmd_control *ctl, void *usercontext, int argc, char **argv)
+       signal (SIGCHLD, SIG_DFL);
+     }
+ 
++#ifdef __amigaos__
++  /* ixemul has no fork: posix_spawnp (libixcompat, over vfork), with the
++     child's preparation (stdin from /dev/null, the directory to run in)
++     as spawn actions. A command that cannot be run is reported here and
++     counts as an exit status of 1, as the forked child's _exit (1) did. */
++  {
++    posix_spawn_file_actions_t fa;
++    int err;
++
++    assert (NULL != execp->wd_for_exec);
++    posix_spawn_file_actions_init (&fa);
++    if (execp->close_stdin)
++      posix_spawn_file_actions_addopen (&fa, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
++    if (execp->wd_for_exec->desc >= 0)
++      posix_spawn_file_actions_addfchdir (&fa, execp->wd_for_exec->desc);
++    else if (execp->wd_for_exec->name)
++      posix_spawn_file_actions_addchdir (&fa, execp->wd_for_exec->name);
++    if (bc_args_exceed_testing_limit (argv))
++      err = E2BIG;
++    else
++      err = posix_spawnp (&child_pid, argv[0], &fa, NULL, argv, environ);
++    posix_spawn_file_actions_destroy (&fa);
++    if (err)
++      {
++        error (0, err, "%s", safely_quote_err_filename (0, argv[0]));
++        execp->last_child_status = 1 << 8;     /* exit status 1 */
++        child_pid = -1;
++      }
++  }
++  if (child_pid != -1)
++#else
+   child_pid = fork ();
+   if (child_pid == -1)
+     {
+@@ -353,6 +388,7 @@ launch (struct buildcmd_control *ctl, void *usercontext, int argc, char **argv)
+       _exit (1);
+     }
+ 
++#endif
+   while (waitpid (child_pid, &(execp->last_child_status), 0) == (pid_t) -1)
+     {
+       if (errno != EINTR)
+diff --git a/xargs/xargs.c b/xargs/xargs.c
+index da20a58..b82b96b 100644
+--- a/xargs/xargs.c
++++ b/xargs/xargs.c
+@@ -32,6 +32,10 @@
+ /* config.h must be included first. */
+ #include <config.h>
+ 
++#ifdef __amigaos__
++# include <spawn.h>
++#endif
++
+ /* system headers. */
+ 
+ #include <assert.h>
+@@ -1337,6 +1341,46 @@ xargs_do_exec (struct buildcmd_control *ctl, void *usercontext, int argc, char *
+       */
+       wait_for_proc (false, 0u);
+ 
++#ifdef __amigaos__
++      /* ixemul has no fork: posix_spawnp (libixcompat, over vfork) with
++         the child's work as spawn actions. The slot variable goes into our
++         own environment, which the child gets; a failed exec is the
++         spawn's return value, not an errno sent back through a pipe. */
++      {
++        posix_spawn_file_actions_t fa;
++        unsigned int slot;
++        int err;
++
++        (void) fd;
++        (void) buf;
++        (void) r;
++        for (slot = 0; slot < pids_alloc && pids[slot]; slot++)
++          ;
++        set_slot_var (slot);
++        posix_spawn_file_actions_init (&fa);
++        if (!keep_stdin || open_tty)
++          posix_spawn_file_actions_addopen (&fa, STDIN_FILENO,
++                                            open_tty ? "/dev/tty" : "/dev/null",
++                                            O_RDONLY, 0);
++        if (bc_args_exceed_testing_limit (argv))
++          err = E2BIG;
++        else
++          while ((err = posix_spawnp (&child, argv[0], &fa, NULL, argv, environ))
++                 == EAGAIN && procs_executing)
++            wait_for_proc (false, 1u);
++        posix_spawn_file_actions_destroy (&fa);
++        if (E2BIG == err)
++          return 0;     /* Failure; caller should pass fewer args */
++        if (err)
++          {
++            error (0, err, _("failed to run command %s"),
++                   quotearg_n_style (0, locale_quoting_style, argv[0]));
++            exit (ENOENT == err ? XARGS_EXIT_COMMAND_NOT_FOUND
++                                : XARGS_EXIT_COMMAND_CANNOT_BE_RUN);
++          }
++        add_proc (child);
++      }
++#else
+       if (pipe (fd))
+         {
+           /* TRANSLATORS: The pipe being referred to is an
+@@ -1474,6 +1518,7 @@ xargs_do_exec (struct buildcmd_control *ctl, void *usercontext, int argc, char *
+            */
+           add_proc (child);
+         }
++#endif
+     }
+   return 1;                     /* Success */
+ }
+-- 
+2.50.1 (Apple Git-155)
+

@@ -30,3 +30,8 @@ ac_cv_header_xlocale_h=no
 # EILSEQ (compat/utf8.c), which POSIX.1-2018 asks for. gnulib's cross guess
 # "no" wrapped mbrtowc, mbrlen and btowc for nothing (measured on grep 3.12).
 gl_cv_func_mbrtowc_C_locale_sans_EILSEQ=yes
+
+# --- getgroups (0, 0) returns the count (ixemul-vtcon 16e01bd,
+# rig 3 probe: 2). gnulib's cross guess "no" took a stub whose
+# signature conflicts with the replacement's (findutils 4.11) -------------
+ac_cv_func_getgroups_works=yes

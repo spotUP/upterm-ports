@@ -1,0 +1,9 @@
+name	find tree -name "*.txt"
+type-d	find tree -type d
+exec	find tree -name "*.c" -exec find {} -prune ";"
+exec-plus	find tree -name "*.txt" -exec find {} +
+print0-xargs	find tree -name "*.c" -print0 | xargs -0 find
+xargs-I	find tree -name "*.txt" | xargs -I {} find {} -prune
+missing	find nosuch
+exec-fail	find tree -name "*.c" -exec nosuchcmd {} ";"
+xargs-notfound	echo x | xargs nosuchcmd
