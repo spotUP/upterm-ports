@@ -1,0 +1,9 @@
+version	gzip --version
+roundtrip	gzip -c a.txt > a.gz && gzip -dc a.gz > a.out && gzip -l a.gz | sed -n "2s/  */ /gp" && zcat a.gz | sed -n 200p
+pipe	gzip -c < a.txt | gzip -dc | sed -n 1p
+zcat	zcat known.txt.gz | sed -n 3p
+gunzip	gunzip -c known.txt.gz | sed -n 199p
+list	gzip -l known.txt.gz | sed -n "2s/  */ /gp"
+deterministic	gzip -n -9 < a.txt > b.gz && gzip -l b.gz | sed -n "2s/  */ /gp"
+inplace	sed "" a.txt > c.txt && gzip c.txt && gzip -t c.txt.gz && gunzip c.txt.gz && sed -n 2p c.txt
+test-bad	gzip -t bad.gz

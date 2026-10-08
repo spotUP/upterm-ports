@@ -1,0 +1,40 @@
+From c43207188da193cec68d97e4cf076aed8da3a4dc Mon Sep 17 00:00:00 2001
+From: upterm-ports <upterm-ports@localhost>
+Date: Thu, 8 Oct 2026 19:34:59 +0200
+Subject: [PATCH] gunzip and zcat as copies of gzip on AmigaOS: the mode from
+ the name
+
+gzip 1.15 installs gunzip and zcat as shell scripts; on AmigaOS they are
+copies of the program (no links; no #! scripts from the AmigaDOS Shell),
+so the name selects the mode again, as gzip before 1.6 did.
+---
+ gzip.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/gzip.c b/gzip.c
+index 220f6fc..5e6478e 100644
+--- a/gzip.c
++++ b/gzip.c
+@@ -477,6 +477,19 @@ int main (int argc, char **argv)
+     if (4 < proglen && strequ (program_name + proglen - 4, ".exe"))
+       program_name[proglen - 4] = '\0';
+ 
++#ifdef __amigaos__
++    /* gunzip and zcat are copies of gzip on AmigaOS (no links, and the
++       upstream shell scripts do not run from the AmigaDOS Shell): the mode
++       comes from the name, as gzip before 1.6 did it.  AmigaDOS names
++       ignore case. */
++    if (strncasecmp (program_name, "un", 2) == 0
++        || strncasecmp (program_name, "gun", 3) == 0)
++      decompress = 1;
++    else if (strcasecmp (program_name + 1, "cat") == 0
++             || strcasecmp (program_name, "gzcat") == 0)
++      decompress = to_stdout = 1;
++#endif
++
+     /* Add options in GZIP environment variable if there is one */
+     argv_copy = argv;
+     env = add_envopt (&env_argc, &argv_copy, OPTIONS_VAR);
+-- 
+2.50.1 (Apple Git-155)
+

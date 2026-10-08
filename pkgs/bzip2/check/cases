@@ -1,0 +1,6 @@
+roundtrip	bzip2 -c a.txt > a.bz2 && bzip2 -dc a.bz2 | sed -n 200p
+pipe	bzip2 -c < a.txt | bzip2 -dc | sed -n 1p
+bzcat	bzcat known.txt.bz2 | sed -n 3p
+bunzip2	bunzip2 -c known.txt.bz2 | sed -n 199p
+inplace	sed "" a.txt > c.txt && bzip2 c.txt && bzip2 -t c.txt.bz2 && bunzip2 c.txt.bz2 && sed -n 2p c.txt
+test-bad	bzip2 -t bad.bz2

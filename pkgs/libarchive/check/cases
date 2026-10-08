@@ -1,0 +1,11 @@
+version	tar --version | sed -n "s/ - .*//p"
+extract-gz	tar xzf known.tar.gz -C . && sed -n 1p src/sub/b.txt
+list	tar tf known.tar.gz
+roundtrip-xz	tar cJf r.tar.xz src && tar tJf r.tar.xz && tar xOJf r.tar.xz src/sub/b.txt
+roundtrip-bz2	tar cjf r.tar.bz2 src && tar xOjf r.tar.bz2 src/sub/b.txt
+pipe	tar cf - src | tar tf -
+cpio	cpio --version | sed -n "s/ - .*//p"
+unzip	bsdunzip -l known.zip | sed -n "/b.txt/s/.* //p"
+unzip-x	bsdunzip -o -d z known.zip && sed -n 1p z/sub/b.txt
+cat	bsdcat known.tar.gz | tar tf -
+evil	tar xf evil.tar

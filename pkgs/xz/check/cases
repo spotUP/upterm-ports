@@ -1,0 +1,8 @@
+version	xz --version
+roundtrip	xz -c a.txt > a.xz && xz -dc a.xz | sed -n 200p
+pipe	xz -c < a.txt | xz -dc | sed -n 1p
+xzcat	xzcat known.txt.xz | sed -n 3p
+unxz	unxz -c known.txt.xz | sed -n 199p
+list	xz -l known.txt.xz
+inplace	sed "" a.txt > c.txt && xz c.txt && xz -t c.txt.xz && unxz c.txt.xz && sed -n 2p c.txt
+test-bad	xz -t bad.xz

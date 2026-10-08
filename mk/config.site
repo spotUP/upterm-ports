@@ -24,6 +24,9 @@ ac_cv_header_stdio_ext_h=no
 ac_cv_header_getopt_h=no
 ac_cv_header_inttypes_h=no
 ac_cv_header_xlocale_h=no
+# measured on libarchive 3.8.9: newlib's sys/utime.h redefines ixemul's
+# struct utimbuf (<utime.h> has it)
+ac_cv_header_sys_utime_h=no
 
 # --- libixcompat's locale layer (ixemul-vtcon compat/locale.c, wchar.c) ------
 # In the C locale mbrtowc is ISO 8859-1: every byte is a character, never
