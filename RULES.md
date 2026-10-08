@@ -30,6 +30,7 @@ progress is ledgered in `thoughts/shared/plans/2026-10-04-phase0-progress.md`.
 | macOS build of the same source + expected outputs of its check cases | `make host-<pkg>` (writes `build/expected/<pkg>/<case>.txt`) |
 | Host checks of one binary | `tools/check_bin.sh <pkg> "<stack bytes or empty>" <binary>...` |
 | 68030+/FPU scan alone | `python3 tools/m68k_scan.py <binary>` |
+| Host tests of the build tools (m68k_scan.py) | `make test` |
 | Binary sizes so far | `make sizes` (`build/state/sizes.tsv`) |
 | Stage the kit drawer + SOURCES.txt | `make kit-stage` (`build/kit/userland`) |
 | Refresh a package's patches after editing `build/src/<pkg>` | `make <pkg>-patches` |

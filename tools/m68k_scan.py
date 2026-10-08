@@ -29,6 +29,18 @@ LINE = re.compile(r"^\s*([0-9a-f]+):\t((?:[0-9a-f]{4} ?)+)\s*\t?(\S*)\s*(.*)$")
 SYM = re.compile(r"^([0-9a-f]+) <(.+)>:$")
 TARGET = re.compile(r"\b([0-9a-f]+) <")
 FUNCREF = re.compile(r"(?:^|#)([0-9a-f]+) <_[A-Za-z_]\w*>")
+IMMREF = re.compile(r"#([0-9a-f]+) <_[A-Za-z_]\w*>")
+
+
+def func_ref(base, ops):
+    """The function address an instruction takes, or None. pea and lea name
+    an address bare (pea 1234 <_f>); a move takes one only as an immediate
+    (movel #1234 <_f>,d0). A move's bare absolute operand is a memory read: in
+    patch 2.8, movel 564 <___upterm_stack_cookie>,sp@- read _ix_expand_cmd_line
+    from the data hunk, objdump named the address after the code symbol there,
+    and the scan decoded the $STACK: cookie as code (undecodable 0x434b)."""
+    f = (FUNCREF if base in ("pea", "lea") else IMMREF).search(ops)
+    return int(f.group(1), 16) if f else None
 TABLE = re.compile(r"%pc@\(([0-9a-f]+) <[^>]*>,%?d[0-7]:w\)")
 
 
@@ -158,9 +170,9 @@ def main():
                     if t:
                         targets.append(int(t.group(1), 16))
             elif base in ("pea", "lea", "movel", "movea", "moveal"):
-                f = FUNCREF.search(ops)
-                if f:
-                    targets.append(int(f.group(1), 16))
+                f = func_ref(base, ops)
+                if f is not None:
+                    targets.append(f)
             recent = (recent + [(base, ops)])[-6:]
             if TERMINAL.match(base):
                 break

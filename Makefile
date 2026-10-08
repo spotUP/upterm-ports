@@ -9,16 +9,21 @@ PKGS := $(sort $(patsubst pkgs/%/recipe.mk,%,$(wildcard pkgs/*/recipe.mk)))
 include $(foreach p,$(PKGS),pkgs/$(p)/recipe.mk)
 $(foreach p,$(PKGS),$(if $($(p)_LOCAL),,$(eval $(call PKG_RULES,$(p)))))
 
-.PHONY: help sysroot kit-stage sizes clean
+.PHONY: help sysroot kit-stage sizes clean test
 help:
 	@echo "make <pkg>        build, install into build/sysroot, check_bin (one package)"
 	@echo "make host-<pkg>   macOS build of the same source + expected outputs"
 	@echo "make sysroot      the libraries the tools build against"
 	@echo "make kit-stage    build/kit/userland: checked programs + SOURCES.txt"
+	@echo "make test         host tests of the build tools"
 	@echo "make clean-<pkg>  forget one package (sources, objects, stamps)"
 	@echo "packages: $(PKGS)"
 
 sysroot: ixcompat ncurses
+
+# host tests of the build tools (m68k_scan.py's flow rules)
+test:
+	python3 tools/test_m68k_scan.py
 
 sizes:
 	@column -t $(STATE)/sizes.tsv
