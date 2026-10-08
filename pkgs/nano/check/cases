@@ -1,0 +1,1 @@
+version	nano --version | sed -n 1p

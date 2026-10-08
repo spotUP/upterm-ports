@@ -1,0 +1,2 @@
+new	nano -I new.txt	new.txt
+edit	nano -I a.txt	a.txt

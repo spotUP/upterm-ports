@@ -51,6 +51,8 @@ BUILD_TRIPLE := $(shell sh $(ROOT)/tools/build-triple.sh)
 #   <p>_DEPS        packages whose install it builds against (stamps)
 #   <p>_CONFIGURE   extra configure arguments for the m68k build
 #   <p>_HOST_CONFIGURE  same for the macOS build (expected outputs)
+#   <p>_HOST_DEPS   packages whose macOS build it builds against (the same
+#                   library versions on both sides: ncurses for the screens)
 #   <p>_BINS        installed programs to check, relative to $(SYSROOT)$(PREFIX)
 #   <p>_STACK       the $STACK: cookie the programs must carry (empty: none)
 #   <p>_LIBS        extra libraries before -lixcompat
@@ -113,7 +115,8 @@ $(STATE)/$(1).checked: $(STATE)/$(1).installed tools/check_bin.sh
 
 # macOS build of the same source: the expected outputs for the rig checks
 host-$(1): $(STATE)/host-$(1).expected
-$(STATE)/host-$(1).built: $(STATE)/$(1).unpacked pkgs/$(1)/recipe.mk
+$(STATE)/host-$(1).built: $(STATE)/$(1).unpacked pkgs/$(1)/recipe.mk \
+		$$(foreach d,$$($(1)_HOST_DEPS),$(STATE)/host-$$(d).built)
 	rm -rf $$($(1)_HOBJ) && mkdir -p $$($(1)_HOBJ)
 	( $$($(1)_HOST_CONFIGURE_CMD) ) > $$($(1)_HOBJ)/configure.log 2>&1 || \
 		{ tail -25 $$($(1)_HOBJ)/configure.log; exit 1; }
@@ -140,6 +143,9 @@ endef
 # the expected outputs, the Amiga one for the rig (vtcon userland_rig.py). The
 # Mac's tic compiles vtcon's terminfo for the Mac side.
 TOOLS := $(B)/tools
+# the macOS ncurses 6 (make host-ncurses) for the screen programs' expected
+# outputs: the Mac's own ncurses 5.7 draws other colour sequences
+HOST_NCURSES := $(HOSTB)/ncurses/inst
 $(TOOLS)/ptyrun: tools/ptyrun.c
 	@mkdir -p $(TOOLS)
 	cc -Wall -Wno-deprecated-declarations -O2 -o $@ tools/ptyrun.c
