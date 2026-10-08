@@ -35,8 +35,10 @@ for bin; do
 	if [ -z "$f" ]; then ok "no fork"
 	else bad "links fork: $(echo $f)"; fi
 	if [ -n "$stack" ]; then
-		if strings -a "$bin" | grep -qx "\\\$STACK: *$stack"; then ok "\$STACK: $stack"
-		else bad "no \$STACK: $stack cookie (found: $(strings -a "$bin" | grep '^\$STACK:' | head -1))"; fi
+		# anywhere in a string, as vsh and AmigaOS 3.2 search for it: the
+		# bytes before the cookie can be printable (find 4.11: "<Nu$STACK:")
+		if strings -a "$bin" | grep -q "\\\$STACK: *$stack\$"; then ok "\$STACK: $stack"
+		else bad "no \$STACK: $stack cookie (found: $(strings -a "$bin" | grep -o '\$STACK: *[0-9]*' | head -1))"; fi
 	fi
 	# a flow-following scan: hunk executables keep const data in the code
 	# hunk, which a linear disassembly decodes as anything (m68k_scan.py)
