@@ -28,11 +28,17 @@ passes, man page, licence met. The kit step is 1.10; tools are ticked when it la
 | 1.7 diffutils 3.12 | rig 14/14, staged | ports 2d53f1a |
 | 1.8 patch 2.8 | rig 6/6, staged | ports 2d53f1a; ixemul e5d22d5 |
 | 1.9 mandoc 1.14.6 + pages | rig 8/8 (man pages through less), own pages vsh UPTerm upgetty sz | ports bcb06b5; ixemul 54bf915, b8f7643, b4630aa; vtcon 5aa2069 |
+| 2.1 gzip 1.15 (+ zlib 1.3.2) | rig 9/9, staged | ports afddeaf (patch: gunzip/zcat by name) |
+| 2.2 bzip2 1.0.8 | rig 6/6, staged | ports afddeaf |
+| 2.3 xz 5.8.4 | rig 8/8, staged | ports afddeaf |
+| 2.4 libarchive 3.8.9 (tar, cpio, bsdunzip, bsdcat) | rig 11/11, staged | ports afddeaf; ixemul 6279020 fstatfs, 610cf88, 3804757 ... |
+| 2.5 zip 3.0 | rig 6/6, staged | ports 8d13faf |
 | 1.10 kit | ports side done (kit-stage 76c4f8b); vtcon side held back | `thoughts/shared/handoffs/2026-10-08_vtcon-kit-userland.patch` |
 
 ## Next steps (ordered)
 
-1. When `git status` in vtcon shows `dist/Install.installer` clean: apply the handoff patch with
+1. When `git status` in vtcon shows `Makefile` and `dist/Install.installer` clean (at
+   19:45 Install.installer was clean but another agent had Makefile open): apply the handoff patch with
    these changes: the install.dos lines become their own part `copy-userland` (the Installer
    copies copy-parts itself, one drawer copy each: tests/test_dist_installer.py), e.g. a staged
    layout `userland/` copied as one drawer, plus the `(set #from ...)`/`(P_COPY)` entry and its
@@ -42,7 +48,7 @@ passes, man page, licence met. The kit step is 1.10; tools are ticked when it la
 2. Owner installs cpython-amiga's build/gcc/bin/cc1 (gcc patches 0001-0004) into ~/opt/amiga;
    then here: `rm -rf build/obj build/sysroot build/state/*.{configured,built,installed,checked}`,
    rebuild every package, rerun all rig cases, drop `findutils_KIT_HOLD`, tick 1.6.
-3. Phase 2 (archives).
+3. Phase 3 (file, tree, ps/top, watch, script, ncdu, coreutils 9, fzy).
 
 ## Decisions (not to re-litigate)
 
