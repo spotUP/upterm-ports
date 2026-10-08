@@ -1,0 +1,6 @@
+version	zip -v | sed -n "2s/,.*//p"
+create	zip -q -r t.zip src && bsdunzip -l t.zip | sed -n "/b.txt/s/.* //p"
+extract	zip -q -r t.zip src && bsdunzip -o -d x t.zip && sed -n 1p x/src/sub/b.txt
+stdin	echo hello | zip -q p.zip - && bsdunzip -p p.zip
+delete	zip -q -r t.zip src && zip -q -d t.zip src/sub/b.txt && bsdunzip -l t.zip | sed -n "/b.txt/p"
+show	zip -q -r t.zip src && zip -sf t.zip | sed -n "/b.txt/s/^ *//p"
