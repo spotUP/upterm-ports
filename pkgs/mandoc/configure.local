@@ -4,10 +4,10 @@
 # and run on rig 3 (ixemul-vtcon feature/ixemul-80); exit 0 = 1. nanosleep,
 # putwchar (wchar): libixcompat, added for this build.
 OSNAME="AmigaOS (UP-Term)"
-PREFIX="/SYS/UP-Term"
-MANDIR="/SYS/UP-Term/share/man"
-MANPATH_BASE="/SYS/UP-Term/share/man"
-MANPATH_DEFAULT="/SYS/UP-Term/share/man"
+PREFIX="/UP-Term"
+MANDIR="/UP-Term/share/man"
+MANPATH_BASE="/UP-Term/share/man"
+MANPATH_DEFAULT="/UP-Term/share/man"
 BINM_PAGER=less
 UTF8_LOCALE=en_US.UTF-8
 INSTALL_LIBMANDOC=0

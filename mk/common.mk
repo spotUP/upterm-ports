@@ -22,7 +22,10 @@ VTCON   ?= $(UPTERM_ROOT)/vtcon
 # Every package installs with DESTDIR=$(SYSROOT), so the libraries and
 # headers the next package builds against are under SYSINC/SYSLIB, and
 # the files the kit ships are under $(SYSROOT)$(PREFIX)/{bin,share}.
-PREFIX  := /SYS/UP-Term
+# The kit installs into a drawer the user picks and assigns it UP-Term: (vtcon
+# dist/install.dos), so the prefix is the assign, not SYS:UP-Term: nano's
+# syntax files, mandoc's MANPATH and the like are found wherever it is.
+PREFIX  := /UP-Term
 SYSINC  := $(SYSROOT)$(PREFIX)/include
 SYSLIB  := $(SYSROOT)$(PREFIX)/lib
 

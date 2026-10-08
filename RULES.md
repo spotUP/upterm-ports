@@ -36,7 +36,7 @@ progress is ledgered in `thoughts/shared/plans/2026-10-04-phase0-progress.md`.
 | Forget one package | `make clean-<pkg>` |
 | Everything | `make clean` |
 | libixcompat host tests (in ixemul-vtcon) | `make -C ~/Code/ixemul-vtcon/compat test` |
-| posix_spawn rig probe binary (in ixemul-vtcon) | `make -C ~/Code/ixemul-vtcon/compat spawnprobe CPPFLAGS=-I$PWD/build/sysroot/SYS/UP-Term/include` |
+| posix_spawn rig probe binary (in ixemul-vtcon) | `make -C ~/Code/ixemul-vtcon/compat spawnprobe CPPFLAGS=-I$PWD/build/sysroot/UP-Term/include` |
 
 There is no lint or type-check step: the packages are upstream C built by their
 own build systems; `check_bin` is the gate.
