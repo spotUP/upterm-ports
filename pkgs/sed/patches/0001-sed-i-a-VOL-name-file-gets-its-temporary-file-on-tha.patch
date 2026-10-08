@@ -1,0 +1,50 @@
+From 6acf68567e4dbd0493896cb0269de1533ccc6f49 Mon Sep 17 00:00:00 2001
+From: upterm-ports <upterm-ports@localhost>
+Date: Thu, 8 Oct 2026 16:36:39 +0200
+Subject: [PATCH] sed -i: a VOL:name file gets its temporary file on that
+ volume
+
+GNU sed puts the temporary file of -i in the input's directory, which it
+finds by the last '/'. An AmigaDOS name such as RAM:x.txt has none, so the
+file went to the current directory and the rename to RAM:x.txt failed with
+EXDEV (rig 3, 2026-10-08: sed -i s/a/b/ RAM:s1.txt left it unchanged, exit 4).
+---
+ sed/execute.c | 6 ++++++
+ sed/utils.c   | 4 ++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/sed/execute.c b/sed/execute.c
+index 606b453..0bb7978 100644
+--- a/sed/execute.c
++++ b/sed/execute.c
+@@ -587,6 +587,12 @@ open_next_file (const char *name, struct input *input)
+       tmpdir = xstrdup (input->in_file_name);
+       if ((p = strrchr (tmpdir, '/')))
+         *p = 0;
++#ifdef __amigaos__
++      /* VOL:name (an AmigaDOS volume or assign, no '/'): the temporary
++         file goes on that volume, or the rename crosses devices (EXDEV) */
++      else if ((p = strchr (tmpdir, ':')))
++        p[1] = 0;
++#endif
+       else
+         strcpy (tmpdir, ".");
+ 
+diff --git a/sed/utils.c b/sed/utils.c
+index 29b6d62..11700fc 100644
+--- a/sed/utils.c
++++ b/sed/utils.c
+@@ -188,6 +188,10 @@ ck_mkstemp (char **p_filename, const char *tmpdir,
+   idx_t tmpdirlen = strlen (tmpdir), baselen = strlen (base);
+   char *template = xmalloc (tmpdirlen + baselen + 8);
+   char *basecopy = mempcpy (template, tmpdir, tmpdirlen);
++#ifdef __amigaos__
++  /* "VOL:" names the volume's root; "VOL:/x" would be its parent */
++  if (!(tmpdirlen && tmpdir[tmpdirlen - 1] == ':'))
++#endif
+   *basecopy++ = '/';
+   char *suffix = mempcpy (basecopy, base, baselen);
+   memset (suffix, 'X', 6);
+-- 
+2.50.1 (Apple Git-155)
+

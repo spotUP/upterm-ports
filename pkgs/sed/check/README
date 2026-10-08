@@ -1,0 +1,4 @@
+The in-place cases write in RAM: (TMPDIR or /tmp on the Mac), an Amiga file
+system: the rig's VTC: is FS-UAE's host drawer, whose directory cache keeps a
+name the runner deleted from the Mac side (Rename u.txt u.txt.bak: "object
+already exists" after a rerun, 2026-10-08, rig 3).

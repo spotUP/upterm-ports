@@ -1,0 +1,18 @@
+version	sed --version | sed -n 1p
+subst	sed s/alpha/X/ a.txt
+global	sed s/alpha/X/g a.txt
+extended	sed -E "s/([a-z]+)=([0-9])/\2=\1/g" a.txt
+print	sed -n "/alpha/p" a.txt
+lines	sed -n "2,3p" a.txt
+delete	sed "/gamma/d" a.txt
+script	sed -f script.sed a.txt
+multi	sed -e s/beta/B/ -e s/zeta/Z/ a.txt
+stdin	sed s/foo/FOO/ < a.txt
+inplace	sed "" a.txt > t.txt; sed -i s/delta/DELTA/ t.txt; sed "" t.txt
+inplace-backup	d=RAM:; [ -d $d ] || d=${TMPDIR:-/tmp}/; sed "" a.txt > ${d}sedu.txt; sed -i.bak s/beta/BETA/ ${d}sedu.txt; sed "" ${d}sedu.txt ${d}sedu.txt.bak
+inplace-ram	d=RAM:; [ -d $d ] || d=${TMPDIR:-/tmp}/; sed "" a.txt > ${d}sedi.txt; sed -i s/epsilon/E/ ${d}sedi.txt; sed "" ${d}sedi.txt
+utf8-dot	LC_ALL=en_US.UTF-8 sed -n "s/caf./[&]/p" a.txt
+c-dot	LC_ALL=C sed -n "s/caf./[&]/p" a.txt
+missing	sed p nosuchfile
+badscript	sed "s/a/" a.txt
+
