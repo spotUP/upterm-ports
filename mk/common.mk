@@ -56,7 +56,9 @@ BUILD_TRIPLE := $(shell sh $(ROOT)/tools/build-triple.sh)
 #   <p>_LIBS        extra libraries before -lixcompat
 #   <p>_LICENSE     for SOURCES.txt
 #   <p>_POST_INSTALL  shell run after make install (optional)
-# and may replace a step: <p>_CONFIGURE_CMD, <p>_BUILD_CMD, <p>_INSTALL_CMD.
+# and may replace a step: <p>_CONFIGURE_CMD, <p>_BUILD_CMD, <p>_INSTALL_CMD,
+# and for the macOS build <p>_HOST_CONFIGURE_CMD, <p>_HOST_BUILD_CMD (which
+# must leave the programs in $(HOSTB)/<p>/inst/bin).
 # Each step leaves build/state/<p>.<step>; make <p> redoes only what is
 # out of date for that package (global rules section 6a).
 define PKG_RULES
@@ -68,6 +70,9 @@ $(1)_CONFIGURE_CMD ?= cd $$($(1)_OBJ) && $$(call M68K_ENV,$(1)) $$($(1)_ENV) $$(
 	--build=$(BUILD_TRIPLE) --host=m68k-amigaos --prefix=$(PREFIX) $$($(1)_CONFIGURE)
 $(1)_BUILD_CMD ?= $(MAKE) -C $$($(1)_OBJ) -j$(JOBS)
 $(1)_INSTALL_CMD ?= $(MAKE) -C $$($(1)_OBJ) install DESTDIR=$(SYSROOT)
+$(1)_HOST_CONFIGURE_CMD ?= cd $$($(1)_HOBJ) && $$($(1)_SRC)/configure --prefix=$$($(1)_HOBJ)/inst \
+	$$($(1)_HOST_CONFIGURE)
+$(1)_HOST_BUILD_CMD ?= $(MAKE) -C $$($(1)_HOBJ) -j$(JOBS) install
 
 .PHONY: $(1) host-$(1) clean-$(1) $(1)-patches
 $(1): $(STATE)/$(1).checked
@@ -110,10 +115,9 @@ $(STATE)/$(1).checked: $(STATE)/$(1).installed tools/check_bin.sh
 host-$(1): $(STATE)/host-$(1).expected
 $(STATE)/host-$(1).built: $(STATE)/$(1).unpacked pkgs/$(1)/recipe.mk
 	rm -rf $$($(1)_HOBJ) && mkdir -p $$($(1)_HOBJ)
-	( cd $$($(1)_HOBJ) && $$($(1)_SRC)/configure --prefix=$$($(1)_HOBJ)/inst \
-		$$($(1)_HOST_CONFIGURE) ) > $$($(1)_HOBJ)/configure.log 2>&1 || \
+	( $$($(1)_HOST_CONFIGURE_CMD) ) > $$($(1)_HOBJ)/configure.log 2>&1 || \
 		{ tail -25 $$($(1)_HOBJ)/configure.log; exit 1; }
-	$(MAKE) -C $$($(1)_HOBJ) -j$(JOBS) install > $$($(1)_HOBJ)/make.log 2>&1 || \
+	( $$($(1)_HOST_BUILD_CMD) ) > $$($(1)_HOBJ)/make.log 2>&1 || \
 		{ grep -E 'error|Error' $$($(1)_HOBJ)/make.log | head -30; exit 1; }
 	@touch $$@
 $(STATE)/host-$(1).expected: $(STATE)/host-$(1).built $$(wildcard pkgs/$(1)/check/*) tools/run-cases.sh

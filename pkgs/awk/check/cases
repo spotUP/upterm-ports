@@ -1,0 +1,15 @@
+version	awk --version
+sum	awk "{ s += \$2 } END { print s }" fruit.txt
+printf	awk "{ printf \"%-8s|%5.2f|%03d\n\", \$1, \$3, \$2 }" fruit.txt
+fs	awk -F: "{ print \$1, \$3 }" colon.txt
+nr	awk "NR == 2 { print NR, NF, \$0 }" fruit.txt
+pattern	awk "/an/ { print \$1 }" fruit.txt
+var	awk -v x=10 "BEGIN { print x * 2 }"
+math	awk "BEGIN { printf \"%.4f %.4f %.4f %d\n\", atan2(1, -1), sqrt(2), exp(1), int(-3.7) }"
+string	awk "BEGIN { s = \"Hello, World\"; print length(s), substr(s, 8), index(s, \"W\"), toupper(s); n = split(\"a:b:c\", p, \":\"); print n, p[3]; t = s; gsub(/o/, \"0\", t); print t }"
+system	awk "BEGIN { r = system(\"echo x\"); print \"rc\", r }"
+pipe-out	awk -f prog.awk fruit.txt
+getline	awk "BEGIN { while ((\"echo one two\" | getline line) > 0) print \"got\", line }"
+stdin	awk "{ print \$1 }" < fruit.txt
+missing	awk 1 nosuchfile
+syntax	awk "BEGIN { print ( }"
