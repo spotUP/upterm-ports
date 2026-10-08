@@ -1,0 +1,6 @@
+version	patch --version
+apply	patch -o - orig.txt fix.diff
+reverse	patch -R -o - new.txt fix.diff
+dry-run	patch --dry-run orig.txt fix.diff
+in-place	patch orig.txt fix.diff && patch -R orig.txt fix.diff
+fail	patch --dry-run wrong.txt fix.diff

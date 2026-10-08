@@ -1,0 +1,14 @@
+version	diff --version
+normal	diff old.txt new.txt
+unified	diff -u --label old --label new old.txt new.txt
+context	diff -c --label old --label new old.txt new.txt
+same	diff old.txt old.txt
+brief	diff -q old.txt new.txt
+recursive	diff -r d1 d2
+color	diff --color=always -u --label old --label new old.txt new.txt
+missing	diff old.txt nosuchfile
+cmp	cmp old.txt new.txt
+cmp-same	cmp old.txt old.txt
+diff3	diff3 new.txt old.txt yours.txt
+diff3-merge	diff3 -m new.txt old.txt yours.txt
+sdiff	sdiff -w 50 old.txt new.txt

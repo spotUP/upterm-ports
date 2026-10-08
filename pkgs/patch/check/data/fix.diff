@@ -1,0 +1,13 @@
+--- orig.txt
++++ orig.txt
+@@ -1,7 +1,8 @@
+ one
+-two
++TWO
+ three
+ four
+-five
++five and a half
+ six
+ seven
++eight

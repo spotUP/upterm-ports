@@ -35,3 +35,8 @@ gl_cv_func_mbrtowc_C_locale_sans_EILSEQ=yes
 # rig 3 probe: 2). gnulib's cross guess "no" took a stub whose
 # signature conflicts with the replacement's (findutils 4.11) -------------
 ac_cv_func_getgroups_works=yes
+
+# --- gnulib's "whether strcasecmp works" has no cross guess (diffutils 3.12
+# configure stops). Its test program on rig 3 exits 2 (no fr_FR ISO-8859-1
+# locale with Latin-1 tolower), which configure reads as "no" -------------
+gl_cv_func_strcasecmp_works=no
