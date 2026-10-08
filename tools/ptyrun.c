@@ -3,6 +3,8 @@
  *
  *   ptyrun [-s COLSxROWS] [-t SECONDS] KEYS OUT COMMAND [ARG...]
  *
+ * Words NAME=VALUE before COMMAND go into its environment (as env(1)
+ * takes them): a case can set LESS, say, without a shell.
  * COMMAND runs on the slave of a free /dev/ptyXY (its own session, the
  * slave as controlling terminal and as fds 0-2, the window size given;
  * default 80x24), found through $PATH. Everything it writes is appended to
@@ -114,6 +116,14 @@ int main(int argc, char **argv)
     if (argc < 4) {
         fprintf(stderr, "usage: ptyrun [-s COLSxROWS] [-t SECONDS] KEYS OUT COMMAND [ARG...]\n");
         return 2;
+    }
+    while (argc > 4 && argv[3][0] != '-' && strchr(argv[3], '=')) {
+        putenv(argv[3]);
+        argv[3] = argv[2];
+        argv[2] = argv[1];
+        argv[1] = argv[0];
+        argv++;
+        argc--;
     }
     if (!(keys = fopen(argv[1], "r")) || !(out = fopen(argv[2], "w"))) {
         perror("ptyrun");

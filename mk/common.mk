@@ -45,6 +45,9 @@ M68K_ENV = CONFIG_SITE=$(ROOT)/mk/config.site \
 	LIBS="$($(1)_LIBS) $(if $($(1)_STACK),$(OBJ)/$(1).stack.o) $(SYSLIB)/libixcompat.a" PKG_CONFIG=false
 BUILD_TRIPLE := $(shell sh $(ROOT)/tools/build-triple.sh)
 
+# $(call CHECK_PATH,<p>): the Mac bin directories a package's checks run with
+CHECK_PATH = $($(1)_HOBJ)/inst/bin$(foreach d,$($(1)_CHECK_DEPS),:$(HOSTB)/$(d)/inst/bin)
+
 # ---- the recipe driver --------------------------------------------------------
 # A package <p> is pkgs/<p>/recipe.mk. It sets:
 #   <p>_VERSION, <p>_URL, <p>_SHA256   the upstream archive (sha256-verified)
@@ -53,6 +56,8 @@ BUILD_TRIPLE := $(shell sh $(ROOT)/tools/build-triple.sh)
 #   <p>_HOST_CONFIGURE  same for the macOS build (expected outputs)
 #   <p>_HOST_DEPS   packages whose macOS build it builds against (the same
 #                   library versions on both sides: ncurses for the screens)
+#   <p>_CHECK_DEPS  packages whose programs its checks run (man pages
+#                   through less): on PATH for the cases, Mac and rig alike
 #   <p>_BINS        installed programs to check, relative to $(SYSROOT)$(PREFIX)
 #   <p>_STACK       the $STACK: cookie the programs must carry (empty: none)
 #   <p>_LIBS        extra libraries before -lixcompat
@@ -108,9 +113,10 @@ $(STATE)/$(1).installed: $(STATE)/$(1).built
 	$$($(1)_POST_INSTALL)
 	@touch $$@
 
+# a library package (no <p>_BINS, e.g. zlib) has no programs to check
 $(STATE)/$(1).checked: $(STATE)/$(1).installed tools/check_bin.sh
-	$(ROOT)/tools/check_bin.sh $(1) "$$($(1)_STACK)" \
-		$$(addprefix $(SYSROOT)$(PREFIX)/,$$($(1)_BINS))
+	$$(if $$($(1)_BINS),$(ROOT)/tools/check_bin.sh $(1) "$$($(1)_STACK)" \
+		$$(addprefix $(SYSROOT)$(PREFIX)/,$$($(1)_BINS)),@true)
 	@touch $$@
 
 # macOS build of the same source: the expected outputs for the rig checks
@@ -124,9 +130,10 @@ $(STATE)/host-$(1).built: $(STATE)/$(1).unpacked pkgs/$(1)/recipe.mk \
 		{ grep -E 'error|Error' $$($(1)_HOBJ)/make.log | head -30; exit 1; }
 	@touch $$@
 $(STATE)/host-$(1).expected: $(STATE)/host-$(1).built $$(wildcard pkgs/$(1)/check/* pkgs/$(1)/check/keys/*) \
-		tools/run-cases.sh tools/run-tty.sh $$(if $$(wildcard pkgs/$(1)/check/tty),$(TOOLS)/ptyrun $(TOOLS)/terminfo/stamp)
-	$(ROOT)/tools/run-cases.sh $$($(1)_HOBJ)/inst/bin pkgs/$(1)/check $(EXPECT)/$(1)
-	$(ROOT)/tools/run-tty.sh $$($(1)_HOBJ)/inst/bin pkgs/$(1)/check $(EXPECT)/$(1)
+		tools/run-cases.sh tools/run-tty.sh $$(if $$(wildcard pkgs/$(1)/check/tty),$(TOOLS)/ptyrun $(TOOLS)/terminfo/stamp) \
+		$$(foreach d,$$($(1)_CHECK_DEPS),$(STATE)/host-$$(d).built)
+	$(ROOT)/tools/run-cases.sh "$$(call CHECK_PATH,$(1))" pkgs/$(1)/check $(EXPECT)/$(1)
+	$(ROOT)/tools/run-tty.sh "$$(call CHECK_PATH,$(1))" pkgs/$(1)/check $(EXPECT)/$(1)
 	@touch $$@
 
 $(1)-patches:

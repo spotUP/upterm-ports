@@ -1,0 +1,7 @@
+version	mandoc -V
+ascii	mandoc -T ascii page.1
+utf8	mandoc -T utf8 page.1
+man-file	man -l page.1
+manpath	man -M pages page
+lint	mandoc -T lint bad.1
+missing	man -M pages nosuchpage

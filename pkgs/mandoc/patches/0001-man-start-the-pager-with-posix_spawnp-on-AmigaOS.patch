@@ -1,0 +1,83 @@
+From afc3386c9c8bee77a503e4b6876652828bfe4559 Mon Sep 17 00:00:00 2001
+From: upterm-ports <upterm-ports@localhost>
+Date: Thu, 8 Oct 2026 18:31:38 +0200
+Subject: [PATCH] man: start the pager with posix_spawnp on AmigaOS
+
+ixemul has vfork only and no job control to wait for: the pager is
+spawned and waited for; no terminal process group is saved or restored.
+---
+ main.c | 37 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+
+diff --git a/main.c b/main.c
+index c5a7cff..4b06669 100644
+--- a/main.c
++++ b/main.c
+@@ -20,6 +20,11 @@
+  */
+ #include "config.h"
+ 
++#ifdef __amigaos__
++#include <spawn.h>
++extern char **environ;
++#endif
++
+ #include <sys/types.h>
+ #include <sys/ioctl.h>
+ #include <sys/param.h>	/* MACHINE */
+@@ -1217,6 +1222,23 @@ woptions(char *arg, enum mandoc_os *os_e, int *wstop)
+  * Wait until moved to the foreground,
+  * then fork the pager and wait for the user to close it.
+  */
++#ifdef __amigaos__
++/*
++ * ixemul has no fork and no job control to wait for: start the pager
++ * with posix_spawnp and wait for it to end.
++ */
++static void
++run_pager(struct outstate *outst, char *tag_target)
++{
++	pid_t	 pager_pid;
++	int	 status;
++
++	outst->tag_files->tcpgid = -1;	/* no terminal group to restore */
++	pager_pid = spawn_pager(outst, tag_target);
++	while (waitpid(pager_pid, &status, 0) == -1 && errno == EINTR)
++		continue;
++}
++#else
+ static void
+ run_pager(struct outstate *outst, char *tag_target)
+ {
+@@ -1271,6 +1293,8 @@ run_pager(struct outstate *outst, char *tag_target)
+ 	}
+ }
+ 
++#endif
++
+ static pid_t
+ spawn_pager(struct outstate *outst, char *tag_target)
+ {
+@@ -1341,6 +1365,19 @@ spawn_pager(struct outstate *outst, char *tag_target)
+ 	}
+ 	argv[argc] = NULL;
+ 
++#ifdef __amigaos__
++	{
++		int err = posix_spawnp(&pager_pid, argv[0], NULL, NULL,
++		    argv, environ);
++		if (err != 0) {
++			mandoc_msg(MANDOCERR_EXEC, 0, 0, "%s: %s",
++			    argv[0], strerror(err));
++			exit(mandoc_msg_getrc());
++		}
++		outst->tag_files->pager_pid = pager_pid;
++		return pager_pid;
++	}
++#endif
+ 	switch (pager_pid = fork()) {
+ 	case -1:
+ 		mandoc_msg(MANDOCERR_FORK, 0, 0, "%s", strerror(errno));
+-- 
+2.50.1 (Apple Git-155)
+
