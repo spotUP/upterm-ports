@@ -23,17 +23,11 @@ sysroot: ixcompat ncurses
 sizes:
 	@column -t $(STATE)/sizes.tsv
 
-# build/kit/userland: every checked package's programs (bin/) and SOURCES.txt
-# (package, version, URL, sha256, licence) from the recipes.
-KIT := $(B)/kit/userland
+# build/kit/userland (programs, pages, data, licences, SOURCES.txt) and
+# build/kit/userland-src (the corresponding source): tools/kit-stage.sh
 kit-stage:
-	rm -rf $(KIT) && mkdir -p $(KIT)/bin
-	@set -e; for p in $(PKGS); do [ -f $(STATE)/$$p.checked ] || continue; \
-	  for b in $$($(MAKE) -s print-$$p-BINS); do cp $(SYSROOT)$(PREFIX)/$$b $(KIT)/bin/; done; \
-	  printf '%s\t%s\t%s\t%s\t%s\n' $$p "$$($(MAKE) -s print-$$p-VERSION)" \
-	    "$$($(MAKE) -s print-$$p-URL)" "$$($(MAKE) -s print-$$p-SHA256)" \
-	    "$$($(MAKE) -s print-$$p-LICENSE)" >> $(KIT)/SOURCES.txt; done
-	@cat $(KIT)/SOURCES.txt
+	ROOT=$(ROOT) B=$(B) STATE=$(STATE) SYSROOT=$(SYSROOT) PREFIX=$(PREFIX) SRC=$(SRC) \
+	IXEMUL=$(IXEMUL) PKGS="$(PKGS)" sh tools/kit-stage.sh
 print-%:
 	@printf '%s\n' '$($(subst -,_,$(patsubst print-%,%,$@)))'
 

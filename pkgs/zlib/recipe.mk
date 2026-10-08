@@ -14,3 +14,4 @@ zlib_CONFIGURE_CMD = rsync -a --exclude .git $(zlib_SRC)/ $(zlib_OBJ)/ && cd $(z
 zlib_BUILD_CMD = $(MAKE) -C $(zlib_OBJ) libz.a
 zlib_INSTALL_CMD = $(MAKE) -C $(zlib_OBJ) install-libs install-headers DESTDIR=$(SYSROOT) \
 	|| $(MAKE) -C $(zlib_OBJ) install DESTDIR=$(SYSROOT)
+zlib_LICENSE_FILES := LICENSE

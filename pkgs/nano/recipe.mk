@@ -20,3 +20,5 @@ nano_HOST_CONFIGURE := --disable-nls --disable-libmagic --enable-utf8 \
 nano_BINS      := bin/nano
 # provisional, grep's value: the regex code recurses
 nano_STACK     := 262144
+# the syntax definitions, read through kit/etc/nanorc (the system nanorc)
+nano_DATA := share/nano

@@ -1,0 +1,135 @@
+diff --git a/Makefile b/Makefile
+index 1c4e4ac..7281751 100644
+--- a/Makefile
++++ b/Makefile
+@@ -230,8 +230,9 @@ $(BUILD)/terminfo/76/vtcon: terminfo/vtcon.terminfo
+ 	@cp $(BUILD)/terminfo/76/vtcon.tmp $(BUILD)/terminfo/v/vtcon; mv $(BUILD)/terminfo/76/vtcon.tmp $(BUILD)/terminfo/76/vtcon
+ 
+ # The kit's terminal entries: vtcon and GNU screen's, in first-letter
+-# directories (v/vtcon): the Amiga's ncurses 5.5 reads those, tic on macOS
+-# writes hex ones (76/).
++# directories (v/vtcon), which the Amiga's ncurses 5.5 reads, and in the hex
++# ones tic on macOS writes (76/vtcon), which ncurses 6 reads (upterm-ports'
++# less, nano, tput: built with cf_cv_mixedcase=no, Amiga names ignore case).
+ KIT_TERMINFO := terminfo/vtcon.terminfo terminfo/screen.terminfo
+ $(BUILD)/kit-terminfo/stamp: $(KIT_TERMINFO)
+ 	rm -rf $(BUILD)/kit-terminfo $(BUILD)/kit-terminfo.tmp
+@@ -239,6 +240,7 @@ $(BUILD)/kit-terminfo/stamp: $(KIT_TERMINFO)
+ 	for f in $(KIT_TERMINFO); do tic -x -o $(BUILD)/kit-terminfo.tmp $$f; done
+ 	cd $(BUILD)/kit-terminfo.tmp && for p in */*; do n=$${p#*/}; c=$$(printf %s "$$n" | cut -c1); \
+ 	  mkdir -p ../kit-terminfo/$$c && cp "$$p" ../kit-terminfo/$$c/; done
++	cp -R $(BUILD)/kit-terminfo.tmp/. $(BUILD)/kit-terminfo/
+ 	rm -rf $(BUILD)/kit-terminfo.tmp
+ 	touch $@
+ 
+@@ -790,9 +792,14 @@ PYTHON_DIST ?= $(UPTERM_ROOT)/cpython-amiga/build/m68k/dist/Python3
+ NVIM_DIST ?= $(UPTERM_ROOT)/neovim-amiga/build/v012/dist/nvim
+ # ixnet.library from the same build (ixnet refuses an ixemul of another revision)
+ IXNET_LIB ?= $(dir $(IXEMUL_LIB))../../../../ixnet/68020/amigaos/ixnet.library
++# the Unix tool ports: staged by `make kit-stage` in upterm-ports (programs,
++# pages, licences, SOURCES.txt) with their source beside it; the source goes
++# into build/UP-Term-src.lha, published next to the kit (plan D2)
++UPTERM_PORTS ?= $(UPTERM_ROOT)/upterm-ports
++PORTS_KIT ?= $(UPTERM_PORTS)/build/kit/userland
+ dist: amiga $(BUILD)/amiga/UPConsole $(BUILD)/amiga/up-console.device $(BUILD)/terminfo/76/vtcon $(BUILD)/kit-terminfo/stamp $(UNIFONT_PAGES)/stamp $(EMOJI_PAGES)/stamp
+ 	rm -rf $(BUILD)/dist && mkdir -p $(KIT)/Files/terminfo $(KIT)/Files/libs
+-	cd $(BUILD)/kit-terminfo && cp -R [a-z] $(CURDIR)/$(KIT)/Files/terminfo/
++	cd $(BUILD)/kit-terminfo && cp -R [a-z] [0-9]* $(CURDIR)/$(KIT)/Files/terminfo/
+ 	cp $(SCREEN_BIN) $(KIT)/Files/screen
+ 	cp dist/screenrc $(KIT)/Files/screenrc
+ 	cp $(TMUX_BIN) $(KIT)/Files/tmux
+@@ -809,6 +816,8 @@ dist: amiga $(BUILD)/amiga/UPConsole $(BUILD)/amiga/up-console.device $(BUILD)/t
+ 	mkdir -p $(KIT)/Files/themes && cp themes/*.conf themes/ATTRIBUTION.md $(KIT)/Files/themes/
+ 	rm -rf $(KIT)/Files/coreutils && mkdir -p $(KIT)/Files/coreutils
+ 	cp -R dist/gg/coreutils-5.2.1/bin dist/gg/coreutils-5.2.1/COPYING dist/gg/coreutils-5.2.1/SOURCE.txt dist/gg/coreutils-5.2.1/coreutils-5.2.1-src.tar.bz2 $(KIT)/Files/coreutils/
++	@test -f $(PORTS_KIT)/SOURCES.txt || { echo "dist: no $(PORTS_KIT)/SOURCES.txt: make kit-stage in upterm-ports first"; exit 1; }
++	rm -rf $(KIT)/Files/userland && cp -R $(PORTS_KIT) $(KIT)/Files/userland
+ 	cp $(BUILD)/amiga/upprefs "$(KIT)/Files/UP-Term Prefs"
+ 	cp $(BUILD)/amiga/upicon $(KIT)/Files/upicon
+ 	cp $(BUILD)/amiga/sz $(BUILD)/amiga/rz $(BUILD)/amiga/upgetty $(BUILD)/amiga/UPTerm $(BUILD)/amiga/UPDemo $(BUILD)/amiga/uptelnet $(BUILD)/amiga/hl $(BUILD)/amiga/mdv $(BUILD)/amiga/Claude $(KIT)/Files/
+@@ -837,6 +846,8 @@ dist: amiga $(BUILD)/amiga/UPConsole $(BUILD)/amiga/up-console.device $(BUILD)/t
+ 	python3 tools/mkicon.py $(KIT)/Uninstall.info --tool C:IconX --plain
+ 	cd $(BUILD)/dist && rm -f ../UP-Term.lha && lha -aq ../UP-Term.lha UP-Term
+ 	@ls -la $(BUILD)/UP-Term.lha
++	cd $(PORTS_KIT)/.. && rm -f $(CURDIR)/$(BUILD)/UP-Term-src.lha && lha -aq $(CURDIR)/$(BUILD)/UP-Term-src.lha userland-src
++	@ls -la $(BUILD)/UP-Term-src.lha
+ 
+ # The kit says what it was built from: Files/VERSIONS has a line per part, and
+ # it is in the lha archive.
+diff --git a/dist/LICENSES.txt b/dist/LICENSES.txt
+index 4477c01..c876043 100644
+--- a/dist/LICENSES.txt
++++ b/dist/LICENSES.txt
+@@ -19,6 +19,13 @@ and libixcompat (linked into  BSD and other authors keep       LICENSES.README),
+ every Amiga program)          their notices in their files)
+ GNU coreutils 5.2.1 (Files/   GPL v2 (Files/coreutils/COPYING) Files/coreutils/coreutils-5.2.1-src.tar.bz2;
+ coreutils)                                                     vtcon dist/gg/coreutils-5.2.1/SOURCE.txt
++Unix tool ports (Files/       per package, the licence files   UP-Term-src.lha (published next to
++userland, UP-Term:bin): GNU   in UP-Term:licenses/<package>;   UP-Term.lha): each upstream archive with
++grep, sed, diffutils, patch,  GPL v3 or later: grep, sed,      UP-Term's patches, recipes and build
++nano; less; onetrue-awk;      diffutils, patch, nano; less     scripts (upterm-ports repo); the list
++mandoc (man); ncurses 6       GPL v3 or BSD-2; awk MIT-like;   with versions, URLs and sha256 is
++tools; zlib (linked)          mandoc ISC; ncurses MIT; zlib    UP-Term:licenses/SOURCES.txt
++                              Zlib
+ bebboget 1.11                 GPL v3 or later (COPYING,        Files/net/bebboget-1.11/bebboget-1.11-src.tar.bz2
+                               LICENSE)
+ BebboSSH 1.45 (bebbossh,      GPL v3 or later (COPYING); some  Files/net/bebbossh-1.45/bebbossh-1.45-src.tar.bz2
+diff --git a/dist/README.txt b/dist/README.txt
+index b787d77..bfb3cf6 100644
+--- a/dist/README.txt
++++ b/dist/README.txt
+@@ -368,6 +368,15 @@ VSH (the shell)
+   /tmp is TMP:; without one Install assigns it to T: at every boot.
+   coreutils is GPL v2: COPYING and the complete source are in the kit's
+   Files/coreutils drawer.
++  Beside them, the Unix tool ports: grep, sed, awk (the One True Awk),
++  less, nano, diff, cmp, diff3, sdiff, patch, man (mandoc) and ncurses'
++  tput, tset, reset, clear, tabs, infocmp, tic, toe. Their manual pages are
++  in UP-Term:share/man:  man grep  pages it through less;  man -T utf8 ...
++  writes UTF-8. nano colours code with the syntax files in
++  UP-Term:share/nano (UP-Term:etc/nanorc includes them). Each package's
++  licence is in UP-Term:licenses, with SOURCES.txt (version, upstream
++  archive, sha256); the complete source with UP-Term's patches and build
++  recipes is UP-Term-src.lha, published next to UP-Term.lha.
+   Differences from bash
+     vsh is being brought to bash 5 behaviour. A difference that stays on
+     purpose (AmigaOS cannot do it, or it was decided) gets one line here,
+diff --git a/dist/install.dos b/dist/install.dos
+index 1ba1106..b6caf15 100644
+--- a/dist/install.dos
++++ b/dist/install.dos
+@@ -301,6 +301,19 @@ Lab copy-coreutils
+ ; keeps its own commands.
+ MakeDir >NIL: UP-Term:bin
+ Copy coreutils/bin UP-Term:bin ALL CLONE QUIET
++; The Unix tool ports (upterm-ports): grep, sed, awk, less, nano, diff, cmp,
++; diff3, sdiff, patch, man and ncurses' tput, reset, clear... beside coreutils;
++; their pages in UP-Term:share/man (man's default MANPATH, /UP-Term/share/man),
++; nano's syntax files and its system nanorc (UP-Term:etc/nanorc), and every
++; package's licence in UP-Term:licenses. SOURCES.txt there names each one's
++; version and upstream archive; the complete source with UP-Term's patches
++; and build recipes is UP-Term-src.lha, published next to UP-Term.lha.
++Copy userland/bin UP-Term:bin ALL CLONE QUIET
++MakeDir >NIL: UP-Term:share UP-Term:etc UP-Term:licenses
++Copy userland/share UP-Term:share ALL CLONE QUIET
++Copy userland/etc UP-Term:etc ALL CLONE QUIET
++Copy userland/licenses UP-Term:licenses ALL CLONE QUIET
++Copy userland/SOURCES.txt UP-Term:licenses/SOURCES.txt CLONE QUIET
+ If NOT "{STEP}" EQ ""
+   Quit 0
+ EndIf
+diff --git a/tools/rig/install_rig.py b/tools/rig/install_rig.py
+index 049e669..00658bf 100644
+--- a/tools/rig/install_rig.py
++++ b/tools/rig/install_rig.py
+@@ -354,6 +354,10 @@ def _main(dest=None):
+     rc, out = run('C:vsh -c "ls --version"')
+     check(rc == 0 and 'coreutils' in out and '5.2.1' in out, 'vsh\'s ls is GNU coreutils 5.2.1 (through $PATH)', out)
+     check((run('List >NIL: C:ls')[0] == 0) == ls_before, 'Install put no ls in C:', '')
++    # the reachability test of the Unix tool ports (unix-tool-ports plan 1.10):
++    # Install put upterm-ports' grep in UP-Term:bin and vsh's $PATH reaches it
++    rc, out = run('C:vsh -c "grep --version"')
++    check(rc == 0 and 'GNU grep' in out and '3.12' in out, 'vsh\'s grep is the ports\' GNU grep 3.12 (through $PATH)', out)
+     # .. is the parent (on RAM:, a real volume -- VTC:'s root is its own
+     # parent, an FS-UAE quirk). rm -r runs from outside: AmigaDOS keeps the
+     # current directory locked, so a shell can never delete the drawer it is in

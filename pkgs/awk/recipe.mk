@@ -28,3 +28,4 @@ awk_INSTALL_CMD = install -d $(SYSROOT)$(PREFIX)/bin $(SYSROOT)$(PREFIX)/share/m
 awk_HOST_CONFIGURE_CMD = rsync -a --exclude .git $(awk_SRC)/ $(awk_HOBJ)/
 awk_HOST_BUILD_CMD = $(MAKE) -C $(awk_HOBJ) a.out && \
 	mkdir -p $(awk_HOBJ)/inst/bin && cp $(awk_HOBJ)/a.out $(awk_HOBJ)/inst/bin/awk
+awk_LICENSE_FILES := LICENSE

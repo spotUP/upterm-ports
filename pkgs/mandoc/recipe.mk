@@ -29,3 +29,6 @@ mandoc_HOST_BUILD_CMD = $(MAKE) -C $(mandoc_HOBJ) mandoc && mkdir -p $(mandoc_HO
 	cp $(mandoc_HOBJ)/mandoc $(mandoc_HOBJ)/inst/bin/mandoc && cp $(mandoc_HOBJ)/mandoc $(mandoc_HOBJ)/inst/bin/man
 # the terminal case pages through less (PAGER): stage it beside man
 mandoc_CHECK_DEPS := less
+mandoc_LICENSE_FILES := LICENSE
+# the languages its pages are written in, for man -l users
+mandoc_MANS := share/man/man7/mdoc.7 share/man/man7/man.7 share/man/man7/roff.7

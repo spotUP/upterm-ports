@@ -14,3 +14,4 @@ less_LIBS      := -lncursesw
 less_BINS      := bin/less
 # provisional, grep's value: the regex code recurses
 less_STACK     := 262144
+less_LICENSE_FILES := COPYING LICENSE

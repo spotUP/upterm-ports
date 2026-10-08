@@ -1,0 +1,3 @@
+## UP-Term's system nanorc (/UP-Term/etc/nanorc): the syntax colouring
+## shipped in /UP-Term/share/nano. Your own settings go in ~/.nanorc.
+include "/UP-Term/share/nano/*.nanorc"
