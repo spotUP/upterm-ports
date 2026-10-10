@@ -1,0 +1,54 @@
+.Dd October 10, 2026
+.Dt SCRIPT 1
+.Os
+.Sh NAME
+.Nm script
+.Nd make a typescript of a terminal session
+.Sh SYNOPSIS
+.Nm
+.Op Fl aefq
+.Op Fl c Ar command
+.Op Ar file Op Ar command ...
+.Sh DESCRIPTION
+.Nm
+starts a shell on a pseudo-terminal and copies everything the terminal
+shows, to the screen and to
+.Ar file
+(default
+.Pa typescript ) .
+It ends when the shell does.
+With
+.Fl c
+or with words after the file, the command runs instead of an interactive
+shell.
+The file starts with a line
+.Dq Script started on
+and the date and ends with
+.Dq Script done on ,
+the date and the command's exit status.
+.Pp
+The options are:
+.Bl -tag -width Ds
+.It Fl a
+Append to the file.
+.It Fl c Ar command
+Run the command through
+.Ev SHELL Fl c
+and end with it.
+.It Fl e
+Exit with the command's status.
+.It Fl f
+Flush the file after each write.
+.It Fl q
+Leave out the messages on the terminal.
+.It Fl V
+Print the version.
+.El
+.Sh ENVIRONMENT
+.Bl -tag -width SHELL
+.It Ev SHELL
+The shell to start; the default is
+.Pa /bin/sh .
+.El
+.Sh SEE ALSO
+.Xr sh 1

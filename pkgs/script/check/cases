@@ -1,0 +1,8 @@
+version	script -V
+command	export SHELL=/bin/sh; script -q -c "echo hello" t.txt </dev/null; grep -v 'Script ' t.txt
+bsdform	export SHELL=/bin/sh; script -q t.txt echo hi </dev/null; grep -v 'Script ' t.txt
+status	export SHELL=/bin/sh; script -q -e -c "exit 3" t.txt </dev/null; echo "rc=$?"; grep -o 'COMMAND_EXIT_CODE="[0-9]*"' t.txt
+noerr	export SHELL=/bin/sh; script -q -c "exit 3" t.txt </dev/null; echo "rc=$?"
+append	export SHELL=/bin/sh; script -q -c "echo one" t.txt </dev/null; script -q -a -c "echo two" t.txt </dev/null; grep -c 'Script started' t.txt
+messages	export SHELL=/bin/sh; script -c "echo m" t.txt </dev/null
+started	export SHELL=/bin/sh; script -q -c "echo m" t.txt </dev/null; sed 's/ on .*\[/ [/' t.txt | sed -n 1p
