@@ -44,3 +44,4 @@ file_HOST_BUILD_CMD = $(MAKE) -C $(file_HOBJ)/src magic.h && $(MAKE) -C $(file_H
 	cp $(file_HOBJ)/trim/magic.mgc $(file_HOBJ)/inst/share/misc/magic.mgc
 file_RIG_DATA := share/misc/magic.mgc
 file_CHECK_DEPS := sed
+file_DATA := share/misc/magic.mgc
