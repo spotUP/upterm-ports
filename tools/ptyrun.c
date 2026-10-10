@@ -98,10 +98,9 @@ static int pump(int ms)
 
 int main(int argc, char **argv)
 {
-    static const char c1[] = "pqrstu", c2[] = "0123456789abcdef";
-    char mname[16], sname[64], line[512], text[512], marks[300];
+    char sname[64], line[512], text[512], marks[300];
     struct winsize ws;
-    int cols = 80, rows = 24, secs = 30, i, j, st = 0, pid, step = 0, done = 0;
+    int cols = 80, rows = 24, secs = 30, st = 0, pid, step = 0, done = 0;
     FILE *keys, *mk;
     long end;
     const char *infile = 0;
@@ -140,27 +139,12 @@ int main(int argc, char **argv)
         perror(marks);
         return 2;
     }
-#ifdef __APPLE__
-    /* the Mac side (expected outputs): Unix 98 ptys */
-    (void)c1; (void)c2; (void)i; (void)j; (void)mname;
+    /* Unix 98 ptys, on the Mac and over ixemul's /dev/ptyXY (libixcompat) */
     if ((master = posix_openpt(O_RDWR | O_NOCTTY)) < 0 || grantpt(master) || unlockpt(master)) {
         perror("ptyrun: posix_openpt");
         return 2;
     }
     snprintf(sname, sizeof(sname), "%s", ptsname(master));
-#else
-    for (i = 0; c1[i] && master < 0; i++)
-        for (j = 0; c2[j] && master < 0; j++) {
-            sprintf(mname, "/dev/pty%c%c", c1[i], c2[j]);
-            master = open(mname, O_RDWR);
-        }
-    if (master < 0) {
-        fprintf(stderr, "ptyrun: no free /dev/ptyXY: %s\n", strerror(errno));
-        return 2;
-    }
-    strcpy(sname, mname);
-    sname[5] = 't';
-#endif
     memset(&ws, 0, sizeof(ws));
     ws.ws_col = cols;
     ws.ws_row = rows;
