@@ -1,0 +1,2 @@
+select	STDIN=files.txt fzy -l 6
+query	STDIN=files.txt fzy -q tc

@@ -4,7 +4,9 @@
  *   ptyrun [-s COLSxROWS] [-t SECONDS] KEYS OUT COMMAND [ARG...]
  *
  * Words NAME=VALUE before COMMAND go into its environment (as env(1)
- * takes them): a case can set LESS, say, without a shell.
+ * takes them): a case can set LESS, say, without a shell. The word
+ * STDIN=FILE is no variable: the program's standard input is FILE, not the
+ * terminal (fzy reads its choices from stdin and draws on /dev/tty).
  * COMMAND runs on the slave of a free /dev/ptyXY (its own session, the
  * slave as controlling terminal and as fds 0-2, the window size given;
  * default 80x24), found through $PATH. Everything it writes is appended to
@@ -102,6 +104,7 @@ int main(int argc, char **argv)
     int cols = 80, rows = 24, secs = 30, i, j, st = 0, pid, step = 0, done = 0;
     FILE *keys, *mk;
     long end;
+    const char *infile = 0;
 
     while (argc > 1 && argv[1][0] == '-') {
         if (!strcmp(argv[1], "-s") && argc > 2)
@@ -118,7 +121,10 @@ int main(int argc, char **argv)
         return 2;
     }
     while (argc > 4 && argv[3][0] != '-' && strchr(argv[3], '=')) {
-        putenv(argv[3]);
+        if (!strncmp(argv[3], "STDIN=", 6))
+            infile = argv[3] + 6;
+        else
+            putenv(argv[3]);
         argv[3] = argv[2];
         argv[2] = argv[1];
         argv[1] = argv[0];
@@ -166,11 +172,20 @@ int main(int argc, char **argv)
         if ((s = open(sname, O_RDWR)) < 0)
             _exit(126);
         ioctl(s, TIOCSCTTY, 0);
+        ioctl(s, TIOCSWINSZ, &ws);	/* macOS: the size set on the master reads 0x0 through /dev/tty */
         dup2(s, 0);
         dup2(s, 1);
         dup2(s, 2);
         if (s > 2)
             close(s);
+        if (infile) {
+            int f = open(infile, O_RDONLY);
+            if (f < 0)
+                _exit(126);
+            dup2(f, 0);
+            if (f > 0)
+                close(f);
+        }
         close(master);
         execvp(argv[3], argv + 3);
         _exit(127);

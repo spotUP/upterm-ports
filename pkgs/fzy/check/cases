@@ -1,0 +1,10 @@
+version	fzy --version
+filter	fzy -e mtc < files.txt
+filter-scores	fzy -e tc -s < files.txt
+filter-case	fzy -e MATCH < files.txt
+filter-none	fzy -e zzz < files.txt
+filter-lines	fzy -e c -l 3 < files.txt
+workers	fzy -j 2 -e tc < files.txt
+pipe	cat short.txt | fzy -e a
+longopt	fzy --show-matches=gam --show-scores < short.txt
+bad-option	fzy --nosuchoption < short.txt

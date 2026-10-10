@@ -1,0 +1,90 @@
+From 33c283bf5805da9c0416e404434658e4fbf3eb5a Mon Sep 17 00:00:00 2001
+From: upterm-ports <upterm-ports@localhost>
+Date: Sat, 10 Oct 2026 12:36:47 +0200
+Subject: [PATCH] choices: search in the calling thread (FZY_NO_THREADS),
+ AmigaOS has no pthreads
+
+---
+ src/choices.c | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/src/choices.c b/src/choices.c
+index a8c24b6..aa6fe35 100644
+--- a/src/choices.c
++++ b/src/choices.c
+@@ -1,7 +1,17 @@
+ #include <stdlib.h>
+ #include <stdio.h>
+ #include <string.h>
++#ifdef FZY_NO_THREADS
++/* AmigaOS has no pthreads: one worker, run in the caller's thread */
++typedef int pthread_t;
++typedef int pthread_mutex_t;
++#define pthread_mutex_lock(m) ((void)(m))
++#define pthread_mutex_unlock(m) ((void)(m))
++#define pthread_mutex_init(m, a) (*(m) = 0)
++#define pthread_mutex_destroy(m) ((void)(m))
++#else
+ #include <pthread.h>
++#endif
+ #include <unistd.h>
+ #include <errno.h>
+ 
+@@ -107,11 +117,15 @@ void choices_init(choices_t *c, options_t *options) {
+ 	c->capacity = c->size = 0;
+ 	choices_resize(c, INITIAL_CHOICE_CAPACITY);
+ 
++#ifdef FZY_NO_THREADS
++	c->worker_count = 1;
++#else
+ 	if (options->workers) {
+ 		c->worker_count = options->workers;
+ 	} else {
+ 		c->worker_count = (int)sysconf(_SC_NPROCESSORS_ONLN);
+ 	}
++#endif
+ 
+ 	choices_reset_search(c);
+ }
+@@ -240,6 +254,7 @@ static void *choices_search_worker(void *data) {
+ 	/* Sort the partial result */
+ 	qsort(result->list, result->size, sizeof(struct scored_result), cmpchoice);
+ 
++#ifndef FZY_NO_THREADS
+ 	/* Fan-in, merging results */
+ 	for(unsigned int step = 0;; step++) {
+ 		if (w->worker_num % (2 << step))
+@@ -256,6 +271,7 @@ static void *choices_search_worker(void *data) {
+ 
+ 		w->result = merge2(w->result, job->workers[next_worker].result);
+ 	}
++#endif
+ 
+ 	return NULL;
+ }
+@@ -273,6 +289,13 @@ void choices_search(choices_t *c, const char *search) {
+ 	job->workers = calloc(c->worker_count, sizeof(struct worker));
+ 
+ 	struct worker *workers = job->workers;
++#ifdef FZY_NO_THREADS
++	workers[0].job = job;
++	workers[0].worker_num = 0;
++	workers[0].result.size = 0;
++	workers[0].result.list = malloc(c->size * sizeof(struct scored_result));
++	choices_search_worker(&workers[0]);
++#else
+ 	for (int i = c->worker_count - 1; i >= 0; i--) {
+ 		workers[i].job = job;
+ 		workers[i].worker_num = i;
+@@ -291,6 +314,8 @@ void choices_search(choices_t *c, const char *search) {
+ 		exit(EXIT_FAILURE);
+ 	}
+ 
++#endif
++
+ 	c->results = workers[0].result.list;
+ 	c->available = workers[0].result.size;
+ 
+-- 
+2.50.1 (Apple Git-155)
+
