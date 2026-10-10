@@ -71,6 +71,8 @@ CHECK_PATH = $($(1)_HOBJ)/inst/bin$(foreach d,$($(1)_CHECK_DEPS),:$(HOSTB)/$(d)/
 #   <p>_LIBS        extra libraries before -lixcompat
 #   <p>_LICENSE     for SOURCES.txt
 #   <p>_POST_INSTALL  shell run after make install (optional)
+#   <p>_OWN         our own program: the source is pkgs/<p>/src (no download, no
+#                   <p>_URL/SHA256), copied to build/src/<p> as the unpack step
 # and may replace a step: <p>_CONFIGURE_CMD, <p>_BUILD_CMD, <p>_INSTALL_CMD,
 # and for the macOS build <p>_HOST_CONFIGURE_CMD, <p>_HOST_BUILD_CMD (which
 # must leave the programs in $(HOSTB)/<p>/inst/bin).
@@ -94,11 +96,12 @@ $(1): $(STATE)/$(1).checked
 
 $(STATE)/$(1).fetched: pkgs/$(1)/recipe.mk
 	@mkdir -p $(STATE)
-	$(ROOT)/tools/fetch.sh $$($(1)_URL) $$($(1)_SHA256) $$($(1)_ARCHIVE)
+	$$(if $$($(1)_OWN),,$(ROOT)/tools/fetch.sh $$($(1)_URL) $$($(1)_SHA256) $$($(1)_ARCHIVE))
 	@touch $$@
 
-$(STATE)/$(1).unpacked: $(STATE)/$(1).fetched $$(wildcard pkgs/$(1)/patches/*.patch)
-	$(ROOT)/tools/unpack.sh $$($(1)_ARCHIVE) $$($(1)_SRC) $(ROOT)/pkgs/$(1)/patches > /dev/null
+$(STATE)/$(1).unpacked: $(STATE)/$(1).fetched $$(wildcard pkgs/$(1)/patches/*.patch) $$(if $$($(1)_OWN),$$(wildcard pkgs/$(1)/src/*))
+	$$(if $$($(1)_OWN),rm -rf $$($(1)_SRC) && mkdir -p $$($(1)_SRC) && cp -R $(ROOT)/pkgs/$(1)/src/. $$($(1)_SRC)/, \
+		$(ROOT)/tools/unpack.sh $$($(1)_ARCHIVE) $$($(1)_SRC) $(ROOT)/pkgs/$(1)/patches > /dev/null)
 	@touch $$@
 
 $(STATE)/$(1).configured: $(STATE)/$(1).unpacked pkgs/$(1)/recipe.mk mk/config.site \

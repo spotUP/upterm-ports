@@ -60,6 +60,14 @@ for p in $PKGS; do
 		mkdir -p "$KIT/$(dirname "$d")" && cp -R "$SYSROOT$PREFIX/$d" "$KIT/$(dirname "$d")/"
 	done
 	[ -d "$ROOT/pkgs/$p/kit" ] && cp -R "$ROOT/pkgs/$p/kit/." "$KIT/"
+	mkdir -p "$KSRC/$p"
+	if [ -n "$(var "$p" OWN)" ]; then
+		# our own program: no licence file to carry, the source is pkgs/<p>/src
+		cp -R "$ROOT/pkgs/$p/." "$KSRC/$p/"
+		printf '%s\t%s\t%s\t%s\t%s\n' "$p" "$(var "$p" VERSION)" "own (pkgs/$p/src)" \
+			"-" "$(var "$p" LICENSE)" >> "$KIT/SOURCES.txt"
+		continue
+	fi
 	lic=$(var "$p" LICENSE_FILES)
 	[ -n "$lic" ] || lic=COPYING
 	mkdir -p "$KIT/licenses/$p"
@@ -67,7 +75,6 @@ for p in $PKGS; do
 		[ -f "$SRC/$p/$f" ] || { echo "kit-stage: $p: no licence file $f in $SRC/$p" >&2; exit 1; }
 		cp "$SRC/$p/$f" "$KIT/licenses/$p/"
 	done
-	mkdir -p "$KSRC/$p"
 	cp "$B/dl/$(basename "$(var "$p" ARCHIVE)")" "$KSRC/$p/"
 	cp -R "$ROOT/pkgs/$p/." "$KSRC/$p/"
 	printf '%s\t%s\t%s\t%s\t%s\n' "$p" "$(var "$p" VERSION)" "$(var "$p" URL)" \

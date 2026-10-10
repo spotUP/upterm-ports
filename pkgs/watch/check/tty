@@ -1,0 +1,3 @@
+plain	watch -t -n 0.3 cat a.txt
+diff	watch -t -d -n 0.3 "echo x >> c.txt; cat c.txt"
+title	watch -n 5 echo xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

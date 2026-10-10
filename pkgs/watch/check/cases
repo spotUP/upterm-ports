@@ -1,0 +1,6 @@
+version	watch -v
+usage	watch 2>&1 | sed -n 1p
+chgexit	watch -t -g -n 0.2 "echo x >> c.txt; cat c.txt"
+errexit	watch -t -e -n 0.2 "echo failing; false"
+exec	watch -t -x -e -n 0.2 grep zzz a.txt
+interval	watch -t -g -n 0.2 "echo z >> e.txt; cat e.txt; echo done"

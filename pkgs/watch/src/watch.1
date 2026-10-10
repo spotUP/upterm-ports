@@ -1,0 +1,63 @@
+.Dd October 10, 2026
+.Dt WATCH 1
+.Os
+.Sh NAME
+.Nm watch
+.Nd run a command repeatedly and show its output
+.Sh SYNOPSIS
+.Nm
+.Op Fl bcdegptx
+.Op Fl n Ar seconds
+.Ar command Op Ar argument ...
+.Nm
+.Fl v | Fl h
+.Sh DESCRIPTION
+.Nm
+runs
+.Ar command
+every two seconds and shows its output on the whole screen, with a header
+that names the command, the interval and the time.
+The command runs through
+.Pa /bin/sh Fl c
+with the words joined by spaces, or directly with
+.Fl x .
+Its standard output and standard error are shown together; lines are cut at
+the width of the window.
+.Pp
+The options are:
+.Bl -tag -width Ds
+.It Fl n , \-interval Ar seconds
+Seconds between runs; the least is 0.1.
+.It Fl d , \-differences
+Show the characters that changed since the last run in reverse video.
+.It Fl t , \-no\-title
+Leave out the header.
+.It Fl e , \-errexit
+Stop, after a key, when the command exits with a non-zero status (exit status 8).
+.It Fl g , \-chgexit
+Stop when the output changes.
+.It Fl b , \-beep
+Ring the bell when the command exits with a non-zero status.
+.It Fl c , \-color
+Pass the command's colour sequences through; other escape sequences are dropped.
+.It Fl p , \-precise
+Count the interval from the start of a run, not from its end.
+.It Fl x , \-exec
+Run the command directly, without a shell.
+.It Fl v , \-version
+Print the version.
+.It Fl h , \-help
+Print a short help text.
+.El
+.Pp
+While it runs:
+.Ql q
+quits and a space runs the command again at once.
+.Sh EXIT STATUS
+0 after
+.Ql q
+or a signal, 1 on a usage error, 8 after
+.Fl e
+stopped it.
+.Sh SEE ALSO
+.Xr sh 1
