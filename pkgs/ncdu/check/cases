@@ -1,0 +1,9 @@
+version	ncdu -v
+scan-big	ncdu -0 -o- proj | grep -o '"name":"big.bin","asize":3000'
+scan-small	ncdu -0 -o- proj | grep -o '"name":"small.c","asize":1000'
+scan-mid	ncdu -0 -o- proj | grep -o '"name":"mid.c","asize":2000'
+scan-notes	ncdu -0 -o- proj | grep -o '"name":"notes.txt","asize":500'
+scan-manual	ncdu -0 -o- proj | grep -o '"name":"manual.txt","asize":4096'
+exclude	ncdu -0 -o- -X exclude.txt proj | grep -c excluded
+convert	ncdu -f export.json -o- | grep -v progname
+usage	ncdu -h | sed -n 1p

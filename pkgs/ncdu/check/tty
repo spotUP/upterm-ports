@@ -1,0 +1,3 @@
+browse	ncdu -f export.json
+sort	ncdu -f export.json
+help	ncdu -f export.json

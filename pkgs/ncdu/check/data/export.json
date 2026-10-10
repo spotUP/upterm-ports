@@ -1,0 +1,9 @@
+[1,2,{"progname":"ncdu","progver":"1.22","timestamp":1700000000},
+[{"name":"proj","asize":160,"dev":1},
+{"name":"big.bin","asize":3000,"dsize":4096},
+[{"name":"docs","asize":128},
+{"name":"notes.txt","asize":500,"dsize":4096},
+{"name":"manual.txt","asize":4096,"dsize":4096}],
+[{"name":"src","asize":128},
+{"name":"small.c","asize":1000,"dsize":4096},
+{"name":"mid.c","asize":2000,"dsize":4096}]]]
