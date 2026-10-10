@@ -85,3 +85,18 @@ passes, man page, licence met. The kit step is 1.10; tools are ticked when it la
   with the one 3804757 added; now one member per function (ixemul 2767cac).
 - install_rig PYTHON check failed since ixemul 74c77ac (`"print(6*7)"` read as `print(67)`):
   fixed in ixemul 5cc91cd, in quotes only *" ** *N *n *E *e are escapes.
+
+## Phase 3 (2026-10-10, rig 3, ixemul-vtcon 06baad5 build295 installed on rig 3)
+
+| ID | State | Evidence |
+|---|---|---|
+| 3.9 fzy 1.0 | rig 12/12 (2 terminal cases), staged | ports 946cbe2 (patch 0001: search in the calling thread); ixemul a105524 getopt_long/pselect, 8ff7a77 INFINITY |
+| 3.2 tree 2.2.1 | rig 20/20, staged | ports dfa8b7a |
+| 3.1 file 5.48 | rig 34/34, staged with share/misc/magic.mgc (3.4 MB, trimmed) | ports c17843e, 6179535 (patch 0001: no fork in writechild); ixemul 47b6874 inttypes.h, a0cb0bd isless; vtcon de859fd |
+| 3.6 ncdu 1.22 | rig 12/12 (3 terminal cases), staged | ports 1d9a77d |
+| 3.4 watch 1.0 (own) | rig 9/9 (3 terminal cases), staged | ports c8087aa (recipes may be `<p>_OWN`: source in pkgs/<p>/src) |
+| 3.5 script 1.0 (own) | rig 9/9 (1 terminal case), staged | ports 81c318a, 268bfd0; ixemul 69feef4 (posix_openpt, grantpt, unlockpt, ptsname) |
+| 3.3 ps/top | not started: owner decision | CPU accounting needs a Dispatch/tc_Switch patch or a sampler; a native tool needs the vtcon Makefile + kit copy |
+| 3.7 coreutils 9 | not started | bigger item, after the rest |
+
+Notes: ptyrun got a `STDIN=file` word (fzy reads choices from stdin, draws on /dev/tty) and sets the window size through the slave (macOS reads 0x0 through /dev/tty otherwise: fzy drew 2^32 lines) and uses posix_openpt on both sides. userland_rig.py: `<pkg>_RIG_DATA` (file's magic.mgc) is copied under VTC:userland and UP-Term: is assigned there. File's trimmed magic list: `file_MAGDIR`. A case whose command can loop forever (watch -g on an unchanging output) hangs the rig: send `ami.py break`.
