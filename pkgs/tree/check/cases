@@ -1,0 +1,20 @@
+version	tree --version
+basic	tree d
+all	tree -a d
+dirsonly	tree -d d
+level	tree -L 1 d
+pattern	tree -P "*.txt" d
+ignore	tree -I "*.c" d
+prune	tree --prune -P "*.txt" d
+fullpath	tree -f -i d
+dirsfirst	tree --dirsfirst -r d
+filelimit	tree --filelimit 3 d
+noreport	tree --noreport d
+ascii	tree --charset=ascii d
+json	tree -J d
+xml	tree -X d
+html	tree -H . --charset=utf-8 d
+missing	tree nosuchdir
+classify	tree -F -d d
+matchdirs	tree --matchdirs -P "s*" d
+fromfile	tree --fromfile list.txt

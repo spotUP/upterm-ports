@@ -1,0 +1,4 @@
+proj/main.c
+proj/lib/a.c
+proj/lib/b.c
+proj/README
