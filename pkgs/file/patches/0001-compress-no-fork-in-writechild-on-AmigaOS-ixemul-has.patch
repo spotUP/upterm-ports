@@ -1,0 +1,31 @@
+From d8bbea30ed50823f8b3a5fc52d8139e7873e6a4e Mon Sep 17 00:00:00 2001
+From: upterm-ports <upterm-ports@localhost>
+Date: Sat, 10 Oct 2026 13:03:10 +0200
+Subject: [PATCH] compress: no fork() in writechild on AmigaOS (ixemul has only
+ vfork); the built-in decompressors and posix_spawnp need none
+
+---
+ src/compress.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/compress.c b/src/compress.c
+index 7f1d584..9d1651e 100644
+--- a/src/compress.c
++++ b/src/compress.c
+@@ -1003,7 +1003,13 @@ writechild(int fd, const void *old, size_t n)
+ 	 * fork again, to avoid blocking because both
+ 	 * pipes filled
+ 	 */
++#ifdef __amigaos__
++	/* ixemul has no fork; a decompressor reading a pipe cannot be fed */
++	errno = ENOSYS;
++	pid = -1;
++#else
+ 	pid = fork();
++#endif
+ 	if (pid == -1) {
+ 		DPRINTF("Fork failed (%s)\n", strerror(errno));
+ 		return -1;
+-- 
+2.50.1 (Apple Git-155)
+

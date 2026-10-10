@@ -1,0 +1,8 @@
+# file 5.48 (after mk/config.site): ixemul-vtcon has its own <inttypes.h>
+# now (the PRI macros file's apprentice.c prints with), where the shared
+# answer says the toolchain's newlib one is unusable.
+ac_cv_header_inttypes_h=yes
+ac_cv_func_fork=yes
+# file guards its decompression code with HAVE_FORK. Its only fork() is in
+# writechild (patch 0001 takes it out); the decompressors it starts go through
+# posix_spawnp and the built-in ones need no process.

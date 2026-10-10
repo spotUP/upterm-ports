@@ -1,0 +1,34 @@
+version	file --version | sed -n 1p
+text	file a.txt
+brief	file -b a.txt
+csrc	file prog.c
+shell	file script.sh
+python	file script.py
+empty	file empty
+gzip	file a.txt.gz
+bzip2	file a.txt.bz2
+xz	file a.txt.xz
+utf8	file utf8.txt
+latin1	file latin1.txt
+crlf	file crlf.txt
+png	file pic.png
+gif	file pic.gif
+jpeg	file pic.jpg
+wav	file snd.wav
+zip	file arch.zip
+tar	file arch.tar
+pdf	file doc.pdf
+hunk	file prog.hunk
+iff	file pic.iff
+lha	file arch.lha
+adf	file boot.adf
+elf	file elf.bin
+mime	file -i a.txt prog.c pic.png
+mimetype	file --mime-type -b a.txt.gz
+mimeenc	file --mime-encoding utf8.txt latin1.txt
+compressed	file -z a.txt.gz
+dir	file dir
+missing	file nosuchfile
+list	cd . && printf 'a.txt\nprog.c\n' > names.txt && file -f names.txt
+sep	file -F @ a.txt
+compressed-bz2	file -z a.txt.bz2
