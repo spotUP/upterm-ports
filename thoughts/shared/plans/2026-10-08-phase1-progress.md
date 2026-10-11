@@ -14,7 +14,7 @@ kit installs it). Rig: rig 3 only (`UPTERM_RIG=3`, build/rig3, port 7848, `--max
 `build/rig3/ixemul.library.0836`).
 
 Done per tool (caller): in the kit's `UP-Term:bin`, reached through vsh's `$PATH`, rig check
-passes, man page, licence met. The kit step is 1.10; tools are ticked when it lands.
+passes, man page, licence met. The kit step is 1.10; tools are ticked when it lands (ticked 2026-10-11: 1.2-1.10, 2.1-2.5).
 
 ## Items
 
@@ -33,7 +33,7 @@ passes, man page, licence met. The kit step is 1.10; tools are ticked when it la
 | 2.3 xz 5.8.4 | rig 8/8, staged | ports afddeaf |
 | 2.4 libarchive 3.8.9 (tar, cpio, bsdunzip, bsdcat) | rig 11/11, staged | ports afddeaf; ixemul 6279020 fstatfs, 610cf88, 3804757 ... |
 | 2.5 zip 3.0 | rig 6/6, staged | ports 8d13faf |
-| 1.10 kit | ports side done (kit-stage 76c4f8b); vtcon side held back | `thoughts/shared/handoffs/2026-10-08_vtcon-kit-userland.patch` |
+| 1.10 kit | done, ticked 2026-10-11 in the vtcon plan: kit-stage 76c4f8b; vtcon side landed as vtcon 85a76db; install_rig PORTS 16/16 through vsh's $PATH in pass 2 (99/99) and pass 3 (38/38), 2026-10-10 | vtcon `tools/rig/install_rig.py` ports() |
 
 ## Next steps (ordered)
 
