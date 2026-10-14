@@ -9,7 +9,7 @@ progress is ledgered in `thoughts/shared/plans/2026-10-04-phase0-progress.md`.
    `pkgs/<pkg>/patches/` as `git format-patch` files (`make <pkg>-patches`
    writes them from `build/src/<pkg>`, which is a git tree tagged `upstream`).
 2. **Runtime: ixemul-vtcon.** Everything links `libixcompat.a` from the sibling
-   checkout `~/Code/ixemul-vtcon` (`make ixcompat` overlays its SDK headers and
+   checkout `~/Code/UP-Term/ixemul-vtcon` (`make ixcompat` overlays its SDK headers and
    library into `build/sysroot`; the toolchain's own SDK is never modified).
    A libc gap is fixed in ixemul-vtcon (`compat/` or `include/`), never in a
    recipe. A header configure takes from the toolchain's newlib sys-include
@@ -36,8 +36,8 @@ progress is ledgered in `thoughts/shared/plans/2026-10-04-phase0-progress.md`.
 | Refresh a package's patches after editing `build/src/<pkg>` | `make <pkg>-patches` |
 | Forget one package | `make clean-<pkg>` |
 | Everything | `make clean` |
-| libixcompat host tests (in ixemul-vtcon) | `make -C ~/Code/ixemul-vtcon/compat test` |
-| posix_spawn rig probe binary (in ixemul-vtcon) | `make -C ~/Code/ixemul-vtcon/compat spawnprobe CPPFLAGS=-I$PWD/build/sysroot/UP-Term/include` |
+| libixcompat host tests (in ixemul-vtcon) | `make -C ~/Code/UP-Term/ixemul-vtcon/compat test` |
+| posix_spawn rig probe binary (in ixemul-vtcon) | `make -C ~/Code/UP-Term/ixemul-vtcon/compat spawnprobe CPPFLAGS=-I$PWD/build/sysroot/UP-Term/include` |
 
 There is no lint or type-check step: the packages are upstream C built by their
 own build systems; `check_bin` is the gate.
