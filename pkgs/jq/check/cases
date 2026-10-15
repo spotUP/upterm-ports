@@ -1,0 +1,19 @@
+version	jq --version
+identity	jq . a.json
+compact	jq -c . a.json
+field	jq .name a.json
+raw	jq -r .name a.json
+index	jq ".tags[1]" a.json
+keys	jq -c keys a.json
+map	jq -c "map(.id * 10)" b.json
+select	jq -c ".[] | select(.id > 1)" b.json
+arith	jq -n "[1,2,3] | add / length"
+string	jq -r ".tags | join(\"+\")" a.json
+sort	jq -c "sort_by(-.id) | map(.n)" b.json
+program-file	jq -f prog.jq a.json
+args	jq -n --arg x hello --argjson y 41 "{x: \$x, y: (\$y + 1)}" -c
+slurp	jq -s -c "length" a.json b.json
+tojson	jq -c "tojson | fromjson" a.json
+floor	jq -n "[3.7, -3.2] | map(floor)" -c
+error-exit	echo "{" | jq . ; echo rc=$?
+exit-status	jq -e ".missing" a.json; echo rc=$?
