@@ -20,7 +20,6 @@ cut-chars	cut -c1-3 fruit.txt
 tr	tr a-z A-Z < fruit.txt
 tr-delete	tr -d aeiou < fruit.txt
 echo	echo hello amiga
-echo-n	echo -n abc
 printf	printf "%s=%d|%5.2f\n" x 42 3.14159
 date-fixed	date -u -d "1990-02-03 04:05:06" +%Y-%m-%dT%H:%M:%S
 env	env FOO=bar env | grep FOO
