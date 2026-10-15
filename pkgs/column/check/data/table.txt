@@ -1,0 +1,4 @@
+name uid shell
+root 0 /bin/sh
+daemon 1 /usr/sbin/nologin
+spot 501 /bin/zsh

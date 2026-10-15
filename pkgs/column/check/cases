@@ -1,0 +1,10 @@
+bad-option	column -z < table.txt 2>&1; echo rc=$?
+table	column -t < table.txt
+table-sep	column -t -s: < colon.txt
+table-tabs	column -t -s"$(printf \t)" < tabs.txt
+fill-80	column -c 80 < words.txt
+fill-40	column -c 40 < words.txt
+fill-x	column -x -c 40 < words.txt
+file-arg	column -t table.txt colon.txt
+stdin-dash	cat table.txt | column -t
+empty	column -t < /dev/null; echo rc=$?
