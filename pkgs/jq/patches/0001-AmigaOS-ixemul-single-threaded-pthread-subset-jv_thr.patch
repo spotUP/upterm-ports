@@ -1,0 +1,135 @@
+From 83592a0d08ac88cf93b1d6043a1d04f3a2e040a1 Mon Sep 17 00:00:00 2001
+From: spotUP <noreply@example.invalid>
+Date: Thu, 15 Oct 2026 19:34:23 +0200
+Subject: [PATCH] AmigaOS (ixemul): single-threaded pthread subset
+ (jv_thread.h, jv.c); isnormal() by hand; strptime/1 reports it is unsupported
+ (ixemul has neither)
+
+---
+ src/builtin.c   | 10 ++++++++++
+ src/jv.c        |  4 ++++
+ src/jv_alloc.c  |  2 +-
+ src/jv_thread.h | 41 +++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 56 insertions(+), 1 deletion(-)
+
+diff --git a/src/builtin.c b/src/builtin.c
+index 902490d..9b04993 100644
+--- a/src/builtin.c
++++ b/src/builtin.c
+@@ -27,6 +27,7 @@ void *alloca (size_t);
+ #include <ctype.h>
+ #include <limits.h>
+ #include <math.h>
++#include <float.h>
+ #ifdef HAVE_LIBONIG
+ #include <oniguruma.h>
+ #endif
+@@ -1130,7 +1131,12 @@ static jv f_isnormal(jq_state *jq, jv input) {
+   }
+   double n = jv_number_value(input);
+   jv_free(input);
++#ifdef __amigaos__
++  /* ixemul's math.h has no isnormal() */
++  return (!isnan(n) && !isinf(n) && n != 0 && fabs(n) >= DBL_MIN) ? jv_true() : jv_false();
++#else
+   return isnormal(n) ? jv_true() : jv_false();
++#endif
+ }
+ 
+ static jv f_infinite(jq_state *jq, jv input) {
+@@ -1434,6 +1440,10 @@ static jv f_strptime(jq_state *jq, jv a, jv b) {
+   const char *input = jv_string_value(a);
+   const char *fmt = jv_string_value(b);
+ 
++#ifdef __amigaos__
++  /* ixemul has no strptime() */
++  return ret_error2(a, b, jv_string("strptime/1 is not supported on this platform"));
++#endif
+ #ifndef HAVE_STRPTIME
+   if (strcmp(fmt, "%Y-%m-%dT%H:%M:%SZ")) {
+     return ret_error2(a, b, jv_string("strptime/1 only supports ISO 8601 on this platform"));
+diff --git a/src/jv.c b/src/jv.c
+index e23d8ec..53373a4 100644
+--- a/src/jv.c
++++ b/src/jv.c
+@@ -485,8 +485,12 @@ pthread_getspecific(pthread_key_t key)
+ #include <pthread.h>
+ #endif
+ #else
++#ifdef __amigaos__
++/* the pthread subset of jv_thread.h */
++#else
+ #include <pthread.h>
+ #endif
++#endif
+ 
+ static pthread_key_t dec_ctx_key;
+ static pthread_once_t dec_ctx_once = PTHREAD_ONCE_INIT;
+diff --git a/src/jv_alloc.c b/src/jv_alloc.c
+index 40c244c..4ca6d8c 100644
+--- a/src/jv_alloc.c
++++ b/src/jv_alloc.c
+@@ -43,7 +43,7 @@ static void memory_exhausted() {
+ #else /* USE_TLS */
+ 
+ #ifdef HAVE_PTHREAD_KEY_CREATE
+-#include <pthread.h>
++#include "jv_thread.h"
+ 
+ static pthread_key_t nomem_handler_key;
+ static pthread_once_t mem_once = PTHREAD_ONCE_INIT;
+diff --git a/src/jv_thread.h b/src/jv_thread.h
+index c6718ab..f5c06e1 100644
+--- a/src/jv_thread.h
++++ b/src/jv_thread.h
+@@ -70,6 +70,47 @@ void *pthread_getspecific(pthread_key_t);
+ #else
+ #include <pthread.h>
+ #endif
++#elif defined(__amigaos__)
++/* AmigaOS with ixemul: one thread, no <pthread.h> (the toolchain's header
++ * clashes with ixemul's sys/types.h). The pthread subset jq uses, single
++ * threaded: a once flag, a few key slots, mutexes that never block. */
++#include <errno.h>
++typedef int pthread_once_t;
++#define PTHREAD_ONCE_INIT 0
++typedef int pthread_mutex_t;
++#define PTHREAD_MUTEX_INITIALIZER 0
++typedef unsigned int pthread_key_t;
++#define JV_AMIGA_KEYS 16
++static inline int pthread_once(pthread_once_t *o, void (*f)(void))
++{
++    if (!*o) { *o = 1; f(); }
++    return 0;
++}
++static inline int pthread_mutex_lock(pthread_mutex_t *m) { (void)m; return 0; }
++static inline int pthread_mutex_unlock(pthread_mutex_t *m) { (void)m; return 0; }
++static inline void **jv_amiga_slots(void)
++{
++    static void *slots[JV_AMIGA_KEYS];
++    return slots;
++}
++static inline int pthread_key_create(pthread_key_t *key, void (*dtor)(void *))
++{
++    static unsigned int used;
++    (void)dtor;
++    if (used >= JV_AMIGA_KEYS) return EAGAIN;
++    *key = used++;
++    return 0;
++}
++static inline int pthread_setspecific(pthread_key_t key, void *v)
++{
++    if (key >= JV_AMIGA_KEYS) return EINVAL;
++    jv_amiga_slots()[key] = v;
++    return 0;
++}
++static inline void *pthread_getspecific(pthread_key_t key)
++{
++    return key >= JV_AMIGA_KEYS ? 0 : jv_amiga_slots()[key];
++}
+ #else
+ #include <pthread.h>
+ #endif
+-- 
+2.50.1 (Apple Git-155)
+
