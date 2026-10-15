@@ -1,0 +1,4 @@
+usage	nc -h 2>&1 | head -2
+bad-option	nc -Q 2>&1 | head -1; echo rc=$?
+closed-port	nc -z -w 2 127.0.0.1 1; echo rc=$?
+tls-refused	nc -c 127.0.0.1 1 2>&1; echo rc=$?
