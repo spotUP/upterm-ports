@@ -1,0 +1,9 @@
+version	ctags --version | sed -n 1p
+tags-c	ctags -f - a.c | sed "s/^\([^	]*\)	[^	]*	/\1 /"
+tags-python	ctags -f - b.py | sed "s/^\([^	]*\)	[^	]*	/\1 /"
+kinds-c	ctags -f - --c-kinds=f a.c | sed "s/^\([^	]*\)	[^	]*	/\1 /"
+list-languages	ctags --list-languages | sed -n 1,3p
+list-kinds	ctags --list-kinds=c
+tagfile	ctags -f t.tags a.c b.py; sed "/^!_/d; s/^\([^	]*\)	[^	]*	/\1 /" t.tags
+xref	ctags -x a.c b.py
+sorted	ctags --sort=yes -f - a.c b.py | sed -n 1p | sed "s/	.*//"
