@@ -8,3 +8,4 @@ stdin	echo "print(6*7)" | lua -
 expr	lua -e "print(#arg, arg[0])"
 error	lua -e "error(\"boom\")"
 luac	luac -l -p basic.lua | sed -n 2p | sed "s/0x[0-9a-f]*//"
+log2	lua -e "print(math.log(8, 2), math.log(1024, 2))"

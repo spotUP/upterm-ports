@@ -15,16 +15,16 @@ lua_BINS      := bin/lua bin/luac
 lua_STACK     := 262144
 lua_STACK_VAR := 1
 # ixemul libc gaps (to move to ixemul-vtcon): flockfile, funlockfile, getc_unlocked (no
-# stdio locking: one thread) and log2 (log / ln 2, math.log(x, 2) may differ in the last bit).
-LUA_GAPS := -D'flockfile(f)=((void)0)' -D'funlockfile(f)=((void)0)' -D'getc_unlocked(f)=getc(f)' -D'log2(x)=(log(x)/0.693147180559945309417232121458)'
+# stdio locking: one thread).
+LUA_GAPS := -D'flockfile(f)=((void)0)' -D'funlockfile(f)=((void)0)' -D'getc_unlocked(f)=getc(f)'
 LUA_CORE := lapi lcode lctype ldebug ldo ldump lfunc lgc llex lmem lobject lopcodes lparser lstate lstring ltable ltm lundump lvm lzio \
 	lauxlib lbaselib lcorolib ldblib liolib lmathlib loadlib loslib lstrlib ltablib lutf8lib linit
 lua_CONFIGURE_CMD = rsync -a --exclude .git $(lua_SRC)/ $(lua_OBJ)/
 lua_BUILD_CMD = cd $(lua_OBJ)/src && for f in $(LUA_CORE) lua luac; do \
 	$(ROOT)/tools/m68k-cc $(CPU) -O2 -DLUA_USE_POSIX $(LUA_GAPS) -I$(SYSINC) -c $$f.c -o $$f.o || exit 1; done && \
-	$(ROOT)/tools/m68k-cc $(CPU) -o lua $(addsuffix .o,$(LUA_CORE)) lua.o -Wl,$(OBJ)/lua.stack.o $(SYSLIB)/libixcompat.a && \
+	$(ROOT)/tools/m68k-cc $(CPU) -o lua $(addsuffix .o,$(LUA_CORE)) lua.o -Wl,$(OBJ)/lua.stack.o $(SYSLIB)/libixcompat.a -lm && \
 	$(ROOT)/tools/m68k-cc $(CPU) -o luac $(addsuffix .o,$(filter-out lbaselib lcorolib ldblib liolib lmathlib loadlib loslib lstrlib ltablib lutf8lib linit,$(LUA_CORE))) luac.o \
-	$(addsuffix .o,lbaselib lcorolib ldblib liolib lmathlib loadlib loslib lstrlib ltablib lutf8lib) -Wl,$(OBJ)/lua.stack.o $(SYSLIB)/libixcompat.a
+	$(addsuffix .o,lbaselib lcorolib ldblib liolib lmathlib loadlib loslib lstrlib ltablib lutf8lib) -Wl,$(OBJ)/lua.stack.o $(SYSLIB)/libixcompat.a -lm
 lua_INSTALL_CMD = install -d $(SYSROOT)$(PREFIX)/bin $(SYSROOT)$(PREFIX)/share/man/man1 && \
 	install -m 755 $(lua_OBJ)/src/lua $(lua_OBJ)/src/luac $(SYSROOT)$(PREFIX)/bin/ && \
 	install -m 644 $(lua_SRC)/doc/lua.1 $(lua_SRC)/doc/luac.1 $(SYSROOT)$(PREFIX)/share/man/man1/
