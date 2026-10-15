@@ -1,0 +1,6 @@
+version	bc --version | sed -n 1p
+dcversion	dc --version | sed -n 1p
+integer	bc -q calc.bc
+bigpower	bc -q big.bc
+scale	bc -q -l sqrt.bc
+dcstack	dc -e "2 100 ^ p 7 3 / p"
