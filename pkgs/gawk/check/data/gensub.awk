@@ -1,0 +1,1 @@
+BEGIN { print gensub(/(a+)(b+)/, "<\\2\\1>", "g", "aabb ab bbaa"); print toupper("gawk"), length("héllo"); n = split("c b a", arr); asorti(arr, idx); print n, idx[1], idx[2], idx[3]; print 2 ** 10, strtonum("0x1F") }

@@ -1,0 +1,7 @@
+local p = io.popen("echo hi")
+print(p:read())
+print(p:close())
+local w = io.popen("cat", "w")
+w:write("to cat\n")
+w:close()
+print(os.execute("echo from system"))

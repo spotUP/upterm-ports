@@ -1,0 +1,37 @@
+From 6e71d40258148820bb0422ae210658394511d92c Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Thu, 15 Oct 2026 23:05:13 +0200
+Subject: [PATCH 1/5] missing_d/getaddrinfo: gai_strerror returns char * as
+ ixemul netdb.h declares it
+
+---
+ missing_d/getaddrinfo.c | 2 +-
+ missing_d/getaddrinfo.h | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/missing_d/getaddrinfo.c b/missing_d/getaddrinfo.c
+index 5233cf5..5dbb0a9 100644
+--- a/missing_d/getaddrinfo.c
++++ b/missing_d/getaddrinfo.c
+@@ -111,7 +111,7 @@ getaddrinfo(const char *hostname, const char *portname,
+ 	return 0;
+ }
+ 
+-const char *
++char *
+ gai_strerror(int errcode)
+ {
+ 	return strerror(errcode);
+diff --git a/missing_d/getaddrinfo.h b/missing_d/getaddrinfo.h
+index 873d67d..bd9a330 100644
+--- a/missing_d/getaddrinfo.h
++++ b/missing_d/getaddrinfo.h
+@@ -30,4 +30,4 @@ void freeaddrinfo(struct xaddrinfo * res);
+ int getaddrinfo(const char * hostname, const char * portname,
+ 	struct xaddrinfo * hints, struct xaddrinfo ** res);
+ 
+-const char *gai_strerror(int errcode);
++char *gai_strerror(int errcode);
+-- 
+2.50.1 (Apple Git-155)
+

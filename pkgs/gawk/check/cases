@@ -1,0 +1,21 @@
+sum	gawk "{ s += \$2 } END { print s }" fruit.txt
+printf	gawk -f printf.awk fruit.txt
+fs	gawk -F: "{ print \$1, \$3 }" colon.txt
+nr	gawk "NR == 2 { print NR, NF, \$0 }" fruit.txt
+pattern	gawk "/an/ { print \$1 }" fruit.txt
+var	gawk -v x=10 "BEGIN { print x + 2 }"
+math	gawk -f math.awk
+string	gawk -f string.awk
+system	gawk -f system.awk
+pipe-out	gawk -f prog.awk fruit.txt
+getline	gawk -f getline.awk
+stdin	gawk "{ print \$1 }" < fruit.txt
+missing	gawk 1 nosuchfile
+syntax	gawk "BEGIN { print ( }"
+quote-arg	gawk "BEGIN { print \"quoted\", 2 * 3 }"
+system-quote	gawk -f sysquote.awk
+version	gawk --version | sed 1q
+gensub	gawk -f gensub.awk
+asort	gawk -f asort.awk fruit.txt
+switch	gawk -f switch.awk
+fpat	gawk -f fpat.awk

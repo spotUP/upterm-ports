@@ -1,0 +1,12 @@
+version	make -v | sed 1q
+default	make --no-print-directory
+target	make --no-print-directory hello
+override	make --no-print-directory hello NAME=amiga
+vars	make --no-print-directory vars
+pattern	make --no-print-directory x.out
+shell-lines	make --no-print-directory multi
+dryrun	make --no-print-directory -n hello
+altfile	make --no-print-directory -f alt.mk V=1
+env-var	NAME=env make --no-print-directory hello
+fail	make --no-print-directory fail
+nosuch	make --no-print-directory nosuchtarget

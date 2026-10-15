@@ -1,0 +1,25 @@
+From db45e3864e0efcd3bba13049f54176d812ffdad5 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Thu, 15 Oct 2026 23:21:28 +0200
+Subject: [PATCH 4/5] builtin.c: system() uses libc system, no fork in ixemul
+
+---
+ builtin.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/builtin.c b/builtin.c
+index 1f4f46c..236fcc8 100644
+--- a/builtin.c
++++ b/builtin.c
+@@ -3332,7 +3332,7 @@ do_mkbool(int nargs)
+ int
+ gawk_system(const char *command)
+ {
+-#if defined(VMS) || defined(__MINGW32__)
++#if 1 /* ixemul: no fork, system() is vfork + /bin/sh */
+ 	return system(command);
+ #else /* ! (defined(VMS) || defined(__MINGW32__)) */
+ 	pid_t childpid;
+-- 
+2.50.1 (Apple Git-155)
+

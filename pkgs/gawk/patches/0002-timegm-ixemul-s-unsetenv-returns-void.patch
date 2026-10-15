@@ -1,0 +1,26 @@
+From 31ad3662abd3d961d0970d510ccee38dfde30feb Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Thu, 15 Oct 2026 23:06:51 +0200
+Subject: [PATCH 2/5] timegm: ixemul's unsetenv returns void
+
+---
+ missing_d/timegm.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/missing_d/timegm.c b/missing_d/timegm.c
+index faf377e..23acc2c 100644
+--- a/missing_d/timegm.c
++++ b/missing_d/timegm.c
+@@ -23,8 +23,7 @@ timegm(struct tm *tm)
+ 			fatal(_("setenv(TZ, %s) restoration failed (%s)"), tz, strerror(errno));
+ 		free(tz);
+ 	} else {
+-		if (unsetenv("TZ") < 0)
+-			fatal(_("unsetenv(TZ) failed (%s)"), strerror(errno));
++		unsetenv("TZ");	/* ixemul's unsetenv returns void */
+ 	}
+ 	tzset();
+ 	return ret;
+-- 
+2.50.1 (Apple Git-155)
+

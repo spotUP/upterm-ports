@@ -1,0 +1,4 @@
+apple 3 1.50
+banana 12 0.25
+cherry 7 4.00
+apple 2 1.50
