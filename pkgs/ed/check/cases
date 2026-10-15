@@ -1,0 +1,11 @@
+version	ed --version | sed -n 1p
+print	ed -s a.txt < print.ed
+subst	ed -s a.txt < subst.ed
+global	ed -s a.txt < global.ed
+delete	ed -s a.txt < delete.ed
+append	ed -s a.txt < append.ed
+gcmd	ed -s a.txt < gcmd.ed
+join	ed -s a.txt < join.ed
+count	ed -s a.txt < count.ed
+write	ed -s a.txt < write.ed; cat b.txt
+shell	ed -s a.txt < shell.ed
