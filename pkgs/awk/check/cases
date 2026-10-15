@@ -15,3 +15,4 @@ missing	awk 1 nosuchfile
 syntax	awk "BEGIN { print ( }"
 quote-arg	awk "BEGIN { print \"quoted\", 2 * 3 }"
 system-quote	awk -f sysquote.awk
+log2	awk "BEGIN { printf \"%.6f\\n\", log(8) / log(2) }"
