@@ -1,0 +1,10 @@
+print	lua basic.lua
+strtab	lua strtab.lua
+io	lua io.lua
+popen	lua popen.lua
+env	LUA_TEST_VAR=ok lua env.lua
+require	lua req.lua
+stdin	echo "print(6*7)" | lua -
+expr	lua -e "print(#arg, arg[0])"
+error	lua -e "error(\"boom\")"
+luac	luac -l -p basic.lua | sed -n 2p | sed "s/0x[0-9a-f]*//"
