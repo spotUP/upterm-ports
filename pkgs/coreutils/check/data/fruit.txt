@@ -1,0 +1,5 @@
+pear 3
+apple 10
+banana 2
+apple 10
+cherry 7
