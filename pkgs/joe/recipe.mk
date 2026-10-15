@@ -10,11 +10,7 @@ joe_LICENSE_FILES := COPYING
 joe_DEPS      := ixcompat ncurses
 # setpgrp: ixemul declares setpgrp(pid_t, pid_t) (sysroot include/unistd.h:183); a cross
 # configure cannot run joe's test and guesses the void form, which does not compile.
-# asinh, cbrt, erf, erfc: found in newlib's libm by configure, absent from
-# ixemul's libc (link: undefined reference, 2026-10-15); joe's calculator
-# guards each with HAVE_<name>, so those four functions are left out. The gap
-# is ixemul-vtcon's (libm), not this recipe's.
-joe_ENV       := joe_cv_setpgrp_void=no ac_cv_search_asinh=no ac_cv_search_cbrt=no ac_cv_search_erf=no ac_cv_search_erfc=no
+joe_ENV       := joe_cv_setpgrp_void=no
 joe_CONFIGURE := --disable-nls
 joe_LIBS      := -lncursesw
 # macOS declares openpty and login_tty in <util.h>, which joe does not include
@@ -28,10 +24,7 @@ joe_STACK     := 262144
 # need a host compiler and are not used by the build (builtins.c, termcap.c and
 # the unicode tables ship pre-generated), so only joe/, rc/, syntax/ and
 # colors/ are built and installed.
-# configure puts -lm on the link, which with -mcrt=ixemul finds newlib's libm
-# (undefined _impure_ptr); ixemul's libc has the math functions itself (as for
-# awk), so the link line is given without it.
-joe_BUILD_CMD = $(MAKE) -C $(joe_OBJ)/joe joe LIBS="-lncursesw $(SYSLIB)/libixcompat.a" && $(MAKE) -C $(joe_OBJ)/rc && $(MAKE) -C $(joe_OBJ)/syntax && $(MAKE) -C $(joe_OBJ)/colors
+joe_BUILD_CMD = $(MAKE) -C $(joe_OBJ)/joe joe LIBS="-lncursesw $(SYSLIB)/libixcompat.a -lm" && $(MAKE) -C $(joe_OBJ)/rc && $(MAKE) -C $(joe_OBJ)/syntax && $(MAKE) -C $(joe_OBJ)/colors
 joe_INSTALL_CMD = for d in joe rc syntax colors; do $(MAKE) -C $(joe_OBJ)/$$d install SUBDIRS= DESTDIR=$(SYSROOT) || exit 1; done
 joe_HOST_BUILD_CMD = for d in joe rc syntax colors; do $(MAKE) -C $(joe_HOBJ)/$$d install SUBDIRS= || exit 1; done
 joe_DATA := etc/joe share/joe
