@@ -1,0 +1,34 @@
+From 41e4c013e05e73d54dedb93fa6984132c353a137 Mon Sep 17 00:00:00 2001
+From: spotUP <noreply@example.invalid>
+Date: Thu, 15 Oct 2026 18:48:32 +0200
+Subject: [PATCH] src/Makefile.in: define LIBS and link iconv_no_i18n with it
+ (libixcompat), which the rule left out
+
+---
+ src/Makefile.in | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/Makefile.in b/src/Makefile.in
+index 7035316..137bc78 100644
+--- a/src/Makefile.in
++++ b/src/Makefile.in
+@@ -21,6 +21,7 @@ CC = @CC@
+ CFLAGS = @CFLAGS@
+ CPPFLAGS = @CPPFLAGS@
+ LDFLAGS = @LDFLAGS@
++LIBS = @LIBS@
+ INCLUDES = -I. -I$(srcdir) -I.. -I../include -I$(srcdir)/../include -I../srclib -I$(srcdir)/../srclib
+ LIBTOOL = @LIBTOOL@
+ LIBTOOL_COMPILE = $(LIBTOOL) --mode=compile
+@@ -75,7 +76,7 @@ all : iconv_no_i18n$(EXEEXT) iconv.@OBJEXT@ $(OBJECTS_RES_@WOE32@)
+ 
+ # This is the temporary iconv executable, without internationalization.
+ iconv_no_i18n$(EXEEXT) : iconv_no_i18n.@OBJEXT@ ../lib/libiconv.la $(OBJECTS_RES_@WOE32@)
+-	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) iconv_no_i18n.@OBJEXT@ ../srclib/libicrt.a ../lib/libiconv.la $(OBJECTS_RES_@WOE32@) -o $@
++	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) iconv_no_i18n.@OBJEXT@ ../srclib/libicrt.a ../lib/libiconv.la $(OBJECTS_RES_@WOE32@) $(LIBS) -o $@
+ 
+ iconv_no_i18n.@OBJEXT@ : $(srcdir)/iconv_no_i18n.c $(srcdir)/iconv.c
+ 	$(CC) -c $(INCLUDES) -I../lib $(CFLAGS) $(CPPFLAGS) -DINSTALLDIR=\"$(bindir)\" -DLOCALEDIR=\"$(localedir)\" $(srcdir)/iconv_no_i18n.c
+-- 
+2.50.1 (Apple Git-155)
+
