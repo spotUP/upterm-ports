@@ -69,7 +69,9 @@ def disasm(start=None, stop=None):
     return insns, syms
 
 
-BOUND = re.compile(r"^#(-?\d+),%?d[0-7]$")
+# the destination is a data register or, when gcc compares the selector in
+# memory (coreutils 9.12 chown_files: "cmpiw #10,%a1@(56)"), any operand
+BOUND = re.compile(r"^#(-?\d+),")
 
 
 def switch_targets(T, recent, mem, end):

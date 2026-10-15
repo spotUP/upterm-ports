@@ -23,5 +23,24 @@ for name, base, ops, want in CASES:
     if got != want:
         failed += 1
         print("[FAIL] %s: %s %s -> %r, want %r" % (name, base, ops, got, want))
+# gcc switch table whose range check compares the selector in memory:
+#   cmpiw #2,%a1@(56); bhiw default; clrl d1; movew %a1@(56),d1
+#   movew %pc@(T,d1:l:2),d1; jmp %pc@(T,d1:w)
+# T: three word offsets, then code. Read as offsets the code's words land
+# mid-instruction (coreutils 9.12 chown_files: a "cpushl" at 0x33fc).
+T = 0x100
+TABLE_BYTES = bytes([0x00, 0x08, 0x00, 0x0a, 0x00, 0x0c,
+                     0x66, 0x00, 0xf4, 0xea, 0x4e, 0x75, 0x4e, 0x75, 0x4e, 0x75])
+mem = {T + i: b for i, b in enumerate(TABLE_BYTES)}
+recent = [("cmpiw", "#2,%a1@(56)"), ("bhiw", "200 <_f+0x10>"), ("clrl", "%d1"),
+          ("movew", "%a1@(56),%d1"), ("movew", "%pc@(100 <_f+0x20>,%d1:l:2),%d1")]
+got = m68k_scan.switch_targets(T, recent, mem, T + len(TABLE_BYTES))
+want = [T + 8, T + 10, T + 12]
+if got != want:
+    failed += 1
+    CASES.append(None)
+    print("[FAIL] switch table bounded by a memory cmpi: %r, want %r" % (got, want))
+else:
+    CASES.append(None)
 print("test_m68k_scan: %d of %d passed" % (len(CASES) - failed, len(CASES)))
 sys.exit(1 if failed else 0)
