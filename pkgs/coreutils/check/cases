@@ -38,3 +38,6 @@ md5sum	md5sum fruit.txt
 expr	expr 6 \* 7
 test-exit	test -f fruit.txt; echo $?
 version	ls --version | sed 1q
+chown-reference	cp fruit.txt ch.own && chown --reference=fruit.txt ch.own && ls ch.own
+chgrp-reference	cp fruit.txt ch.grp && chgrp --reference=fruit.txt ch.grp && ls ch.grp
+chown-missing	chown 0 nosuchfile
