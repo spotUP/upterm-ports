@@ -1,4 +1,4 @@
-/* OpenBSD strtonum (ISC), as in lib/libc/stdlib/strtonum.c: libixcompat has none. */
+/* OpenBSD strtonum (ISC), as in lib/libc/stdlib/strtonum.c: host build only, libixcompat has it for Amiga. */
 #include <errno.h>
 #include <limits.h>
 #include <stdlib.h>

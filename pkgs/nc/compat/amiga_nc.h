@@ -51,14 +51,8 @@ static inline int nc_accept4(int s, struct sockaddr *a, socklen_t *l, int flags)
 
 static inline int setrtable(int id) { (void)id; errno = ENOSYS; return -1; }
 
-#ifndef strtonum
-long long strtonum(const char *, long long, long long, const char **);
-#endif
-
 /* netinet/ip.h and friends here lack these */
 typedef u_int16_t in_port_t;
-struct sockaddr_in6 { u_int8_t sin6_len; u_int8_t sin6_family; u_int16_t sin6_port;
-	u_int32_t sin6_flowinfo; u_int8_t sin6_addr[16]; u_int32_t sin6_scope_id; };
 #define IP_MINTTL 32
 #define IPTOS_DSCP_AF11 0x28
 #define IPTOS_DSCP_AF12 0x30
@@ -87,7 +81,6 @@ struct sockaddr_in6 { u_int8_t sin6_len; u_int8_t sin6_family; u_int16_t sin6_po
 #define IPTOS_PREC_NETCONTROL 0xe0
 
 #include <stddef.h>
-size_t strlcpy(char *, const char *, size_t);
 unsigned int arc4random_uniform(unsigned int);
 void explicit_bzero(void *, size_t);
 int b64_ntop(const unsigned char *, size_t, char *, size_t);
