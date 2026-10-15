@@ -11,7 +11,9 @@ make_DEPS      := ixcompat
 # then sees no load average (measured 2026-10-15, make 4.4.1).
 # -O (output sync) needs record locks: ixemul has F_WRLCK only under RECORD_LOCKING_NOT_IMPLEMENTED,
 # so NO_OUTPUT_SYNC; make -O then does nothing.
-make_CONFIGURE := --disable-nls --without-guile --disable-load
+# posix_spawn off: make then starts the shell with vfork + execve, which ixemul resolves for /bin/sh;
+# libixcompat's posix_spawn cannot start /bin/sh (rig 3: "make: /bin/sh: No such file or directory").
+make_CONFIGURE := --disable-nls --without-guile --disable-load ac_cv_func_posix_spawn=no
 make_ENV       := CPPFLAGS="-I$(SYSINC) -DLDAV_DONE -DNO_OUTPUT_SYNC"
 make_HOST_CONFIGURE := --disable-nls --without-guile --disable-load
 make_BINS      := bin/make
