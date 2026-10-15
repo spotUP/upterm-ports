@@ -1,0 +1,29 @@
+From 90c92769471171b2c9b12b9e2aeaabbdaf8c8fae Mon Sep 17 00:00:00 2001
+From: spotUP <noreply@example.invalid>
+Date: Thu, 15 Oct 2026 20:59:13 +0200
+Subject: [PATCH 2/2] exec_stack.h: ALIGNMENT at least 8 (m68k aligns int,
+ double and pointers to 2; the 4-byte block header overran its 2 bytes)
+
+---
+ src/exec_stack.h | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/exec_stack.h b/src/exec_stack.h
+index 2a063e8..f4dd8ac 100644
+--- a/src/exec_stack.h
++++ b/src/exec_stack.h
+@@ -37,7 +37,10 @@
+ 
+ struct determine_alignment {
+   char x;
+-  union { int i; double d; uint64_t u64; size_t sz; void* ptr; } u;
++  /* stack_ptr is an int and the block header stores one: ALIGNMENT must be at
++   * least sizeof(stack_ptr). On m68k gcc aligns every type to 2, the 2-byte
++   * header overlapped the data and the RET assert failed (execute.c). */
++  union { int i; double d; uint64_t u64; size_t sz; void* ptr; } u __attribute__((aligned(8)));
+ };
+ enum {ALIGNMENT = offsetof(struct determine_alignment, u)};
+ 
+-- 
+2.50.1 (Apple Git-155)
+

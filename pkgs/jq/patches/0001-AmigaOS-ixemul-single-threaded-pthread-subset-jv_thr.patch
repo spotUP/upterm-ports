@@ -1,7 +1,7 @@
-From 83592a0d08ac88cf93b1d6043a1d04f3a2e040a1 Mon Sep 17 00:00:00 2001
+From 33dffabdb9c3464cf2622ccaa769315ccd3ec97c Mon Sep 17 00:00:00 2001
 From: spotUP <noreply@example.invalid>
 Date: Thu, 15 Oct 2026 19:34:23 +0200
-Subject: [PATCH] AmigaOS (ixemul): single-threaded pthread subset
+Subject: [PATCH 1/2] AmigaOS (ixemul): single-threaded pthread subset
  (jv_thread.h, jv.c); isnormal() by hand; strptime/1 reports it is unsupported
  (ixemul has neither)
 
