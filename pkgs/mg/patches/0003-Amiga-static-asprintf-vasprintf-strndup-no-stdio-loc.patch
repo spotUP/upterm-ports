@@ -1,0 +1,146 @@
+From 34906f1c3a15f1d54f9044620c8fb216cbbf8eb4 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Thu, 15 Oct 2026 20:54:30 +0200
+Subject: [PATCH 3/6] Amiga: static asprintf, vasprintf, strndup; no stdio
+ locks; futimens a no-op
+
+---
+ lib/fparseln.c | 13 +++++++++---
+ lib/futimens.c |  6 ++++++
+ src/def.h      | 54 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 70 insertions(+), 3 deletions(-)
+
+diff --git a/lib/fparseln.c b/lib/fparseln.c
+index 151887d..03a877e 100644
+--- a/lib/fparseln.c
++++ b/lib/fparseln.c
+@@ -24,6 +24,13 @@
+  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+ 
++#ifdef __amigaos__
++#define MG_FLOCKFILE(fp) ((void)0)
++#define MG_FUNLOCKFILE(fp) ((void)0)
++#else
++#define MG_FLOCKFILE(fp) flockfile(fp)
++#define MG_FUNLOCKFILE(fp) funlockfile(fp)
++#endif
+ #include <assert.h>
+ #include <errno.h>
+ #include <stdio.h>
+@@ -100,7 +107,7 @@ fparseln(FILE *fp, size_t *size, size_t *lineno, const char str[3], int flags)
+ 	 */
+ 	nl  = '\n';
+ 
+-	flockfile(fp);
++	MG_FLOCKFILE(fp);
+ 
+ 	while (cnt) {
+ 		cnt = 0;
+@@ -147,7 +154,7 @@ fparseln(FILE *fp, size_t *size, size_t *lineno, const char str[3], int flags)
+ 		}
+ 
+ 		if ((cp = realloc(buf, len + s + 1)) == NULL) {
+-			funlockfile(fp);
++			MG_FUNLOCKFILE(fp);
+ 			free(buf);
+ 			free(ptr);
+ 			return NULL;
+@@ -159,7 +166,7 @@ fparseln(FILE *fp, size_t *size, size_t *lineno, const char str[3], int flags)
+ 		buf[len] = '\0';
+ 	}
+ 
+-	funlockfile(fp);
++	MG_FUNLOCKFILE(fp);
+ 	free(ptr);
+ 
+ 	if ((flags & FPARSELN_UNESCALL) != 0 && esc && buf != NULL &&
+diff --git a/lib/futimens.c b/lib/futimens.c
+index 10d7f48..d9b4338 100644
+--- a/lib/futimens.c
++++ b/lib/futimens.c
+@@ -5,10 +5,16 @@
+ int
+ futimens(int fd, const struct timespec times[2])
+ {
++#ifdef __amigaos__
++	/* ixemul has no futimes: the times of a copied backup stay as written */
++	(void)fd; (void)times;
++	return 0;
++#else
+ 	struct timeval timevals[2];
+ 
+ 	TIMESPEC_TO_TIMEVAL(&timevals[0], &times[0]);
+ 	TIMESPEC_TO_TIMEVAL(&timevals[1], &times[1]);
+ 
+ 	return futimes(fd, timevals);
++#endif
+ }
+diff --git a/src/def.h b/src/def.h
+index 70f3b40..b41f682 100644
+--- a/src/def.h
++++ b/src/def.h
+@@ -121,6 +121,60 @@ int     futimens(int, const struct timespec[2]);
+ #endif
+ #endif
+ 
++#ifdef __amigaos__
++/*
++ * ixemul declares asprintf, vasprintf and strndup but its library has no
++ * code for them: static copies, renamed so they cannot clash.
++ */
++#include <stdarg.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#define vasprintf mg_vasprintf
++#define asprintf mg_asprintf
++#define strndup mg_strndup
++static int
++mg_vasprintf(char **ret, const char *fmt, va_list ap)
++{
++	va_list	 ap2;
++	int	 n;
++
++	va_copy(ap2, ap);
++	n = vsnprintf(NULL, 0, fmt, ap2);
++	va_end(ap2);
++	if (n < 0 || (*ret = malloc((size_t)n + 1)) == NULL) {
++		*ret = NULL;
++		return (-1);
++	}
++	return (vsnprintf(*ret, (size_t)n + 1, fmt, ap));
++}
++
++static int
++mg_asprintf(char **ret, const char *fmt, ...)
++{
++	va_list	 ap;
++	int	 n;
++
++	va_start(ap, fmt);
++	n = mg_vasprintf(ret, fmt, ap);
++	va_end(ap);
++	return (n);
++}
++
++static char *
++mg_strndup(const char *s, size_t max)
++{
++	size_t	 n = strnlen(s, max);
++	char	*p = malloc(n + 1);
++
++	if (p != NULL) {
++		memcpy(p, s, n);
++		p[n] = '\0';
++	}
++	return (p);
++}
++#endif
++
+ #include	"chrdef.h"
+ 
+ typedef int	(*PF)(int, int);	/* generally useful type */
+-- 
+2.50.1 (Apple Git-155)
+

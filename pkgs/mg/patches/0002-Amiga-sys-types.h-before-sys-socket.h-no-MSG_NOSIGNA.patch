@@ -1,0 +1,61 @@
+From 4022d03ad628ffa7c064dd6e00024d110808e6e7 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Thu, 15 Oct 2026 20:50:54 +0200
+Subject: [PATCH 2/6] Amiga: sys/types.h before sys/socket.h, no MSG_NOSIGNAL
+
+---
+ src/def.h    | 4 ++++
+ src/region.c | 2 +-
+ src/ttyio.c  | 2 +-
+ 3 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/def.h b/src/def.h
+index 44543b7..70f3b40 100644
+--- a/src/def.h
++++ b/src/def.h
+@@ -114,8 +114,12 @@ int     futimens(int, const struct timespec[2]);
+ #endif
+ 
+ #ifndef MSG_NOSIGNAL
++#ifdef __amigaos__
++#define MSG_NOSIGNAL	0
++#else
+ #define MSG_NOSIGNAL	SO_NOSIGPIPE
+ #endif
++#endif
+ 
+ #include	"chrdef.h"
+ 
+diff --git a/src/region.c b/src/region.c
+index 103ba1c..8d2738d 100644
+--- a/src/region.c
++++ b/src/region.c
+@@ -9,8 +9,8 @@
+  * internal use.
+  */
+ 
+-#include <sys/socket.h>
+ #include <sys/types.h>
++#include <sys/socket.h>
+ #include <sys/wait.h>
+ #include <ctype.h>
+ #include <errno.h>
+diff --git a/src/ttyio.c b/src/ttyio.c
+index e378ce8..148e2be 100644
+--- a/src/ttyio.c
++++ b/src/ttyio.c
+@@ -10,10 +10,10 @@
+  * buffered fashion.
+  */
+ 
++#include <sys/types.h>
+ #include <sys/ioctl.h>
+ #include <sys/socket.h>
+ #include <sys/time.h>
+-#include <sys/types.h>
+ #include <errno.h>
+ #include <fcntl.h>
+ #include <poll.h>
+-- 
+2.50.1 (Apple Git-155)
+

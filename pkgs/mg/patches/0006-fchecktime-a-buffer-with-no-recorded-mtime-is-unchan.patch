@@ -1,0 +1,28 @@
+From b66ffa90c59a0a23a3b0df00cbfadbe42ecc79e4 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Thu, 15 Oct 2026 21:06:38 +0200
+Subject: [PATCH 6/6] fchecktime: a buffer with no recorded mtime is unchanged
+ on disk
+
+---
+ src/fileio.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/fileio.c b/src/fileio.c
+index 9ba2ae2..c4f1e6d 100644
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -713,6 +713,10 @@ fchecktime(struct buffer *bp)
+ 	if (stat(bp->b_fname, &sb) == -1)
+ 		return (TRUE);
+ 
++	/* no mtime recorded: buffer was never read from or written to disk */
++	if (bp->b_fi.fi_mtime.tv_sec == 0 && bp->b_fi.fi_mtime.tv_nsec == 0)
++		return (TRUE);
++
+ 	if (bp->b_fi.fi_mtime.tv_sec != ST_MTIM(sb).tv_sec ||
+ 	    bp->b_fi.fi_mtime.tv_nsec != ST_MTIM(sb).tv_nsec)
+ 		return (FALSE);
+-- 
+2.50.1 (Apple Git-155)
+

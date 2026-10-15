@@ -1,0 +1,35 @@
+From 73b4683a0f8047bf0704a291535720dd26283971 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Thu, 15 Oct 2026 20:57:53 +0200
+Subject: [PATCH 4/6] configure: the ncurses library here is libncursesw (tgoto
+ check and LIBS)
+
+---
+ configure | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/configure b/configure
+index 70db650..d419887 100755
+--- a/configure
++++ b/configure
+@@ -5007,7 +5007,7 @@ then :
+   printf %s "(cached) " >&6
+ else $as_nop
+   ac_check_lib_save_LIBS=$LIBS
+-LIBS="-lncurses  $LIBS"
++LIBS="-lncursesw  $LIBS"
+ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+ /* end confdefs.h.  */
+ 
+@@ -5039,7 +5039,7 @@ if test "x$ac_cv_lib_ncurses_tgoto" = xyes
+ then :
+   printf "%s\n" "#define HAVE_LIBNCURSES 1" >>confdefs.h
+ 
+-  LIBS="-lncurses $LIBS"
++  LIBS="-lncursesw $LIBS"
+ 
+ else $as_nop
+ 
+-- 
+2.50.1 (Apple Git-155)
+

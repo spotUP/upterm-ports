@@ -1,0 +1,107 @@
+From 2df7f703e9d6136b3766a348966af7266e16820e Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Thu, 15 Oct 2026 20:50:23 +0200
+Subject: [PATCH 1/6] Amiga: whole-second stat times via ST_ATIM/ST_MTIM,
+ sys/types.h before regex.h
+
+---
+ src/autorevert.c  |  6 +++---
+ src/def.h         |  9 +++++++++
+ src/fileio.c      | 10 +++++-----
+ src/interpreter.c |  1 +
+ 4 files changed, 18 insertions(+), 8 deletions(-)
+
+diff --git a/src/autorevert.c b/src/autorevert.c
+index f2b75f3..ad3bf11 100644
+--- a/src/autorevert.c
++++ b/src/autorevert.c
+@@ -85,8 +85,8 @@ autorevert_check(void)
+ 			continue;
+ 		if (stat(bp->b_fname, &sb) == -1 ||
+ 		    (sb.st_size == bp->b_fi.fi_size &&
+-		    sb.st_mtim.tv_sec == bp->b_fi.fi_mtime.tv_sec &&
+-		    sb.st_mtim.tv_nsec == bp->b_fi.fi_mtime.tv_nsec) ||
++		    ST_MTIM(sb).tv_sec == bp->b_fi.fi_mtime.tv_sec &&
++		    ST_MTIM(sb).tv_nsec == bp->b_fi.fi_mtime.tv_nsec) ||
+ 		    access(bp->b_fname, R_OK) != 0)
+ 			continue;
+ 		if (tail && sb.st_dev == bp->b_fi.fi_dev &&
+@@ -186,7 +186,7 @@ ftail(struct buffer *bp)
+ 		goto fail;
+ 
+ 	bp->b_fi.fi_size = ftello(ffp);
+-	bp->b_fi.fi_mtime = sb.st_mtim;
++	bp->b_fi.fi_mtime = ST_MTIM(sb);
+ 	(void)fclose(ffp);
+ 
+ 	for (wp = wheadp; wp != NULL; wp = wp->w_wndp) {
+diff --git a/src/def.h b/src/def.h
+index f38b2b6..44543b7 100644
+--- a/src/def.h
++++ b/src/def.h
+@@ -96,6 +96,15 @@ int     futimens(int, const struct timespec[2]);
+ #define st_mtim st_mtimespec
+ #endif
+ 
++#if defined(__amigaos__)
++/* ixemul's struct stat has whole-second times only */
++#define ST_ATIM(sb) ((struct timespec){ (sb).st_atime, 0 })
++#define ST_MTIM(sb) ((struct timespec){ (sb).st_mtime, 0 })
++#else
++#define ST_ATIM(sb) ((sb).st_atim)
++#define ST_MTIM(sb) ((sb).st_mtim)
++#endif
++
+ #ifndef LOGIN_NAME_MAX
+ # ifdef _POSIX_LOGIN_NAME_MAX
+ #  define LOGIN_NAME_MAX _POSIX_LOGIN_NAME_MAX
+diff --git a/src/fileio.c b/src/fileio.c
+index 4315c40..9ba2ae2 100644
+--- a/src/fileio.c
++++ b/src/fileio.c
+@@ -167,7 +167,7 @@ ffstat(FILE *ffp, struct buffer *bp)
+ 		bp->b_fi.fi_mode = sb.st_mode | 0x8000;
+ 		bp->b_fi.fi_uid = sb.st_uid;
+ 		bp->b_fi.fi_gid = sb.st_gid;
+-		bp->b_fi.fi_mtime = sb.st_mtim;
++		bp->b_fi.fi_mtime = ST_MTIM(sb);
+ 		bp->b_fi.fi_size = sb.st_size;
+ 		bp->b_fi.fi_dev = sb.st_dev;
+ 		bp->b_fi.fi_ino = sb.st_ino;
+@@ -378,8 +378,8 @@ fbackupfile(const char *fn)
+ 	 * have futimens().  This is detected by the configure script
+ 	 * which replaces it with a futimes() wrapper.
+ 	 */
+-	new_times[0] = sb.st_atim;
+-	new_times[1] = sb.st_mtim;
++	new_times[0] = ST_ATIM(sb);
++	new_times[1] = ST_MTIM(sb);
+ 	futimens(to, new_times);
+ 
+ 	close(from);
+@@ -713,8 +713,8 @@ fchecktime(struct buffer *bp)
+ 	if (stat(bp->b_fname, &sb) == -1)
+ 		return (TRUE);
+ 
+-	if (bp->b_fi.fi_mtime.tv_sec != sb.st_mtim.tv_sec ||
+-	    bp->b_fi.fi_mtime.tv_nsec != sb.st_mtim.tv_nsec)
++	if (bp->b_fi.fi_mtime.tv_sec != ST_MTIM(sb).tv_sec ||
++	    bp->b_fi.fi_mtime.tv_nsec != ST_MTIM(sb).tv_nsec)
+ 		return (FALSE);
+ 
+ 	return (TRUE);
+diff --git a/src/interpreter.c b/src/interpreter.c
+index 122307e..adb674e 100644
+--- a/src/interpreter.c
++++ b/src/interpreter.c
+@@ -55,6 +55,7 @@
+ 
+ #include <ctype.h>
+ #include <limits.h>
++#include <sys/types.h>
+ #include <regex.h>
+ #include <signal.h>
+ #include <stdio.h>
+-- 
+2.50.1 (Apple Git-155)
+
