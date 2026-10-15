@@ -68,6 +68,8 @@ CHECK_PATH = $($(1)_HOBJ)/inst/bin$(foreach d,$($(1)_CHECK_DEPS),:$(HOSTB)/$(d)/
 #                   through less): on PATH for the cases, Mac and rig alike
 #   <p>_BINS        installed programs to check, relative to $(SYSROOT)$(PREFIX)
 #   <p>_STACK       the $STACK: cookie the programs must carry (empty: none)
+#   <p>_STACK_VAR   also define __stack (ixemul extends the stack at the start; for
+#                   programs a vfork + exec parent starts, which ignore the cookie)
 #   <p>_LIBS        extra libraries before -lixcompat
 #   <p>_LICENSE     for SOURCES.txt
 #   <p>_POST_INSTALL  shell run after make install (optional)
@@ -107,7 +109,7 @@ $(STATE)/$(1).unpacked: $(STATE)/$(1).fetched $$(wildcard pkgs/$(1)/patches/*.pa
 $(STATE)/$(1).configured: $(STATE)/$(1).unpacked pkgs/$(1)/recipe.mk mk/config.site \
 		$$(foreach d,$$($(1)_DEPS),$(STATE)/$$(d).installed)
 	rm -rf $$($(1)_OBJ) && mkdir -p $$($(1)_OBJ)
-	$$(if $$($(1)_STACK),$(ROOT)/tools/m68k-cc $(CPU) -O2 -DSTACK=$$($(1)_STACK) -c \
+	$$(if $$($(1)_STACK),$(ROOT)/tools/m68k-cc $(CPU) -O2 -DSTACK=$$($(1)_STACK) $$(if $$($(1)_STACK_VAR),-DSTACK_VAR) -c \
 		-o $(OBJ)/$(1).stack.o $(ROOT)/tools/stack-cookie.c)
 	( $$($(1)_CONFIGURE_CMD) ) > $$($(1)_OBJ)/configure.log 2>&1 || \
 		{ tail -25 $$($(1)_OBJ)/configure.log; exit 1; }

@@ -1,0 +1,2 @@
+edit	joe -nobackups -nolocks --joe_state a.txt	a.txt
+new	joe -nobackups -nolocks --joe_state new.txt	new.txt

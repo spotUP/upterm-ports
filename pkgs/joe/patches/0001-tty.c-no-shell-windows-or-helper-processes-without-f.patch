@@ -1,0 +1,58 @@
+From 8774b98c8373084c7bd6980f128fc82d800be1a6 Mon Sep 17 00:00:00 2001
+From: spotUP <x@y>
+Date: Thu, 15 Oct 2026 20:09:46 +0200
+Subject: [PATCH] tty.c: no shell windows or helper processes without fork
+ (ixemul has only vfork)
+
+---
+ joe/tty.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/joe/tty.c b/joe/tty.c
+index 316f6ec..0864ef3 100644
+--- a/joe/tty.c
++++ b/joe/tty.c
+@@ -824,6 +824,7 @@ int ttshell(char *cmd)
+ 
+ /* Create keyboard task */
+ 
++#ifdef HAVE_FORK
+ static int mpxresume(void)
+ {
+ 	int fds[2];
+@@ -864,6 +865,11 @@ static void mpxsusp(void)
+ 		close(ackkbd);
+ 	}
+ }
++#else
++/* No fork() (ixemul has only vfork): no keyboard and shell helper processes. */
++#define mpxresume() (-1)
++#define mpxsusp() ((void)0)
++#endif
+ 
+ /* We used to leave the keyboard copy task around during suspend, but
+    Cygwin gets confused when two processes are waiting for input and you
+@@ -1091,6 +1097,7 @@ static const char **newenv(const char * const *old, const char *s)
+ 
+ /* If out_only is set, leave program's stdin attached to JOE's stdin */
+ 
++#ifdef HAVE_FORK
+ MPX *mpxmk(int *ptyfd, const char *cmd, char **args, void (*func)(void *object, char *data, ptrdiff_t len), void *object, void (*die) (void *object), void *dieobj, int out_only,
+            ptrdiff_t w, ptrdiff_t h)
+ {
+@@ -1329,6 +1336,12 @@ MPX *mpxmk(int *ptyfd, const char *cmd, char **args, void (*func)(void *object,
+ 	close(fds[0]);
+ 	return m;
+ }
++#else
++MPX *mpxmk(int *ptyfd, const char *cmd, char **args, void (*func)(void *object, char *data, ptrdiff_t len), void *object, void (*die) (void *object), void *dieobj, int out_only, ptrdiff_t w, ptrdiff_t h)
++{
++	return NULL;	/* shell windows need a pty and fork() */
++}
++#endif
+ 
+ void mpxdied(MPX *m)
+ {
+-- 
+2.50.1 (Apple Git-155)
+
