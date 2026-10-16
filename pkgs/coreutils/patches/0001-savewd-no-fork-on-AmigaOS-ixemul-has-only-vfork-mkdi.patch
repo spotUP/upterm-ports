@@ -1,0 +1,36 @@
+From 705a94d81f0c595b8c965961014969e4678fc002 Mon Sep 17 00:00:00 2001
+From: upterm-ports <upterm-ports@localhost>
+Date: Fri, 16 Oct 2026 00:22:44 +0200
+Subject: [PATCH] savewd: no fork() on AmigaOS, ixemul has only vfork; mkdir -p
+ and install -d need none when open(.) works
+
+---
+ lib/savewd.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/lib/savewd.c b/lib/savewd.c
+index 576c6ab..7f23859 100644
+--- a/lib/savewd.c
++++ b/lib/savewd.c
+@@ -37,7 +37,8 @@
+ # include "fcntl--.h"
+ #endif
+ 
+-#if defined _WIN32 && !defined __CYGWIN__
++#if (defined _WIN32 && !defined __CYGWIN__) || defined __amigaos__
++/* ixemul has vfork only; no point forking to save the working directory */
+ # define fork() (assure (false), -1)
+ #endif
+ 
+@@ -64,7 +65,7 @@ savewd_save (struct savewd *wd)
+            Although there is also no point on systems that support O_SEARCH,
+            macOS 12.6 APFS open (".", O_SEARCH) incorrectly fails if "." is
+            mode 311, so do not attempt to optimize for O_SEARCH != O_RDONLY.  */
+-# if defined _WIN32 && !defined __CYGWIN__
++# if (defined _WIN32 && !defined __CYGWIN__) || defined __amigaos__
+         bool try_fork = false;
+ # else
+         bool try_fork = errno == EACCES || errno == ESTALE;
+-- 
+2.50.1 (Apple Git-155)
+

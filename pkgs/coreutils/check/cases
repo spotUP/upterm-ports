@@ -1,0 +1,43 @@
+ls-sorted	ls dirdata
+ls-one	ls -1 dirdata
+cat	cat fruit.txt
+cat-stdin	cat < colon.txt
+cp	cp fruit.txt cp.out && cat cp.out
+mv	cp fruit.txt mv.in && mv mv.in mv.out && cat mv.out && ls mv.in
+rm	cp fruit.txt rm.tmp && rm rm.tmp && ls rm.tmp
+rm-missing	rm nosuchfile
+mkdir	mkdir mk.d && ls -d mk.d
+mkdir-p	mkdir -p pa/pb/pc && ls -d pa/pb/pc
+wc	wc fruit.txt
+wc-l	wc -l < fruit.txt
+sort	sort fruit.txt
+sort-num	sort -k2 -n -r fruit.txt
+sort-u	sort -u fruit.txt
+head	head -n 2 fruit.txt
+tail	tail -n 2 fruit.txt
+cut	cut -d: -f2 colon.txt
+cut-chars	cut -c1-3 fruit.txt
+tr	tr a-z A-Z < fruit.txt
+tr-delete	tr -d aeiou < fruit.txt
+echo	echo hello amiga
+printf	printf "%s=%d|%5.2f\n" x 42 3.14159
+date-fixed	date -u -d "1990-02-03 04:05:06" +%Y-%m-%dT%H:%M:%S
+env	env FOO=bar env | grep FOO
+env-run	env FOO=1 printenv FOO
+seq	seq 3
+seq-step	seq 2 3 11
+uniq	sort fruit.txt | uniq
+uniq-c	sort fruit.txt | uniq -c
+basename	basename /usr/local/bin/prog.txt .txt
+dirname	dirname /usr/local/bin/prog.txt
+true	true; echo $?
+false	false; echo $?
+tee	echo teed | tee tee.out && cat tee.out
+od	printf "ab" | od -An -tx1
+md5sum	md5sum fruit.txt
+expr	expr 6 \* 7
+test-exit	test -f fruit.txt; echo $?
+version	ls --version | sed 1q
+chown-reference	cp fruit.txt ch.own && chown --reference=fruit.txt ch.own && ls ch.own
+chgrp-reference	cp fruit.txt ch.grp && chgrp --reference=fruit.txt ch.grp && ls ch.grp
+chown-missing	chown 0 nosuchfile
