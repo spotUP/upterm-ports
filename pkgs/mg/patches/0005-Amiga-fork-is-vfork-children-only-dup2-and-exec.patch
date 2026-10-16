@@ -4,23 +4,25 @@ Date: Thu, 15 Oct 2026 20:58:55 +0200
 Subject: [PATCH 5/6] Amiga: fork is vfork (children only dup2 and exec)
 
 ---
- src/def.h | 3 +++
- 1 file changed, 3 insertions(+)
+ src/def.h | 6 ++++++
+ 1 file changed, 6 insertions(+)
 
 diff --git a/src/def.h b/src/def.h
-index b41f682..3ce272a 100644
 --- a/src/def.h
 +++ b/src/def.h
-@@ -130,6 +130,9 @@ int     futimens(int, const struct timespec[2]);
- #include <stdio.h>
- #include <stdlib.h>
- #include <string.h>
+@@ -121,6 +121,12 @@ int     futimens(int, const struct timespec[2]);
+ #endif
+ #endif
+ 
++#ifdef __amigaos__
 +/* ixemul has only vfork; every child here only sets up descriptors and execs */
 +#include <unistd.h>
 +#define fork vfork
- #define vasprintf mg_vasprintf
- #define asprintf mg_asprintf
- #define strndup mg_strndup
++#endif
++
+ #include	"chrdef.h"
+ 
+ typedef int	(*PF)(int, int);	/* generally useful type */
 -- 
 2.50.1 (Apple Git-155)
 
