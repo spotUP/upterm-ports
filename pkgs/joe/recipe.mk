@@ -24,9 +24,9 @@ joe_STACK     := 262144
 # need a host compiler and are not used by the build (builtins.c, termcap.c and
 # the unicode tables ship pre-generated), so only joe/, rc/, syntax/ and
 # colors/ are built and installed.
-joe_BUILD_CMD = $(MAKE) -C $(joe_OBJ)/joe joe LIBS="-lncursesw $(SYSLIB)/libixcompat.a -lm" && $(MAKE) -C $(joe_OBJ)/rc && $(MAKE) -C $(joe_OBJ)/syntax && $(MAKE) -C $(joe_OBJ)/colors
-joe_INSTALL_CMD = for d in joe rc syntax colors; do $(MAKE) -C $(joe_OBJ)/$$d install SUBDIRS= DESTDIR=$(SYSROOT) || exit 1; done
-joe_HOST_BUILD_CMD = for d in joe rc syntax colors; do $(MAKE) -C $(joe_HOBJ)/$$d install SUBDIRS= || exit 1; done
+joe_BUILD_CMD = $(MAKE) -C $(joe_OBJ)/joe joe LIBS="-lncursesw $(SYSLIB)/libixcompat.a -lm" && $(MAKE) -C $(joe_OBJ)/rc && $(MAKE) -C $(joe_OBJ)/syntax && $(MAKE) -C $(joe_OBJ)/colors && $(MAKE) -C $(joe_OBJ)/man
+joe_INSTALL_CMD = for d in joe rc syntax colors man; do $(MAKE) -C $(joe_OBJ)/$$d install SUBDIRS= DESTDIR=$(SYSROOT) || exit 1; done
+joe_HOST_BUILD_CMD = for d in joe rc syntax colors man; do $(MAKE) -C $(joe_HOBJ)/$$d install SUBDIRS= || exit 1; done
 joe_DATA := etc/joe share/joe
 # the rig's terminal cases read the system joerc and ftyperc from UP-Term:etc/joe
 joe_RIG_DATA := etc/joe/joerc etc/joe/ftyperc
