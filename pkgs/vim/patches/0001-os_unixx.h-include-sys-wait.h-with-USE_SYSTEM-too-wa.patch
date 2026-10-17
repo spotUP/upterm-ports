@@ -1,0 +1,34 @@
+From 215454909142e54156dbbac3ecb7915367cdf800 Mon Sep 17 00:00:00 2001
+From: spotUP <x@y>
+Date: Sat, 17 Oct 2026 09:14:40 +0200
+Subject: [PATCH] os_unixx.h: include sys/wait.h with USE_SYSTEM too (wait4pid
+ needs waitpid and WNOHANG)
+
+---
+ src/os_unixx.h | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/os_unixx.h b/src/os_unixx.h
+index 73a2193..7ae4a1c 100644
+--- a/src/os_unixx.h
++++ b/src/os_unixx.h
+@@ -15,11 +15,12 @@
+ # include <sys/ioctl.h>
+ #endif
+ 
+-#ifndef USE_SYSTEM	// use fork/exec to start the shell
++// wait4pid() is compiled with USE_SYSTEM too and needs waitpid() and WNOHANG
++#if defined(HAVE_SYS_WAIT_H)
++# include <sys/wait.h>
++#endif
+ 
+-# if defined(HAVE_SYS_WAIT_H)
+-#  include <sys/wait.h>
+-# endif
++#ifndef USE_SYSTEM	// use fork/exec to start the shell
+ 
+ # ifndef WEXITSTATUS
+ #  define WEXITSTATUS(stat_val) (((stat_val) >> 8) & 0377)
+-- 
+2.50.1 (Apple Git-155)
+

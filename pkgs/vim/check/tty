@@ -1,0 +1,2 @@
+edit	vim -u NONE -i NONE -n -N a.txt	a.txt
+new	vim -u NONE -i NONE -n -N new.txt	new.txt
