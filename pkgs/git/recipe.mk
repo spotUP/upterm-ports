@@ -25,7 +25,7 @@ git_BUILD_CMD = $(MAKE) -C $(git_OBJ) -j$(JOBS) $(git_FLAGS) uname_S=AmigaOS una
 git_INSTALL_CMD = mkdir -p $(SYSROOT)$(PREFIX)/bin && cp $(git_OBJ)/git $(SYSROOT)$(PREFIX)/bin/git
 git_HOST_CONFIGURE_CMD = (cd $(git_SRC) && tar cf - --exclude=.git .) | tar xf - -C $(git_HOBJ) && chmod -R u+w $(git_HOBJ)
 git_HOST_BUILD_CMD = $(MAKE) -C $(git_HOBJ) -j$(JOBS) NO_OPENSSL=1 NO_CURL=1 NO_EXPAT=1 NO_GETTEXT=1 NO_TCLTK=1 NO_PERL=1 NO_PYTHON=1 \
-	NO_RUST=1 NO_ICONV=1 GIT_VERSION=$(git_VERSION) prefix=$(git_HOBJ)/inst install
+	NO_RUST=1 GIT_VERSION=$(git_VERSION) prefix=$(git_HOBJ)/inst install
 git_BINS      := bin/git
 git_STACK     := 262144
 git_STACK_VAR := 1
