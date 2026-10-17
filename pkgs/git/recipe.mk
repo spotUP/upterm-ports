@@ -22,10 +22,21 @@ git_BUILD_CMD = $(MAKE) -C $(git_OBJ) -j$(JOBS) $(git_FLAGS) uname_S=AmigaOS una
 	CC="$(ROOT)/tools/m68k-cc" AR=$(CROSS)ar RANLIB=$(CROSS)ranlib \
 	CFLAGS="$(CPU) -O2 -I$(SYSINC) -DUSE_VFORK -DNO_STATVFS" LDFLAGS="-L$(SYSLIB)$(if $(git_STACK), -Wl$(comma)$(OBJ)/git.stack.o)" \
 	EXTLIBS="$(SYSLIB)/libz.a $(SYSLIB)/libixcompat.a" ZLIB_PATH=$(SYSROOT)$(PREFIX) prefix=$(PREFIX) git
-git_INSTALL_CMD = mkdir -p $(SYSROOT)$(PREFIX)/bin && cp $(git_OBJ)/git $(SYSROOT)$(PREFIX)/bin/git
+# SKIP_DASHED_BUILT_INS drops the dashed names of the built-ins, but upstream's Makefile
+# still installs git-upload-pack, git-receive-pack and git-upload-archive in bin/ (the
+# `ALL_COMMANDS_TO_INSTALL` else-branch): a clone/fetch/push over file:// or ssh runs
+# `sh -c "git-upload-pack <dir>"` on the remote side, so they must be on PATH. git.c
+# dispatches on argv[0], so each is a copy of git (the AmigaOS volume has no hard links;
+# NO_INSTALL_HARDLINKS is set). The templates are what `git init` copies into .git.
+git_INSTALL_CMD = mkdir -p $(SYSROOT)$(PREFIX)/bin && cp $(git_OBJ)/git $(SYSROOT)$(PREFIX)/bin/git && \
+	for h in $(git_HELPERS); do cp $(git_OBJ)/git $(SYSROOT)$(PREFIX)/bin/$$h; done && \
+	$(MAKE) -C $(git_OBJ)/templates install DESTDIR=$(SYSROOT) prefix=$(PREFIX) NO_GETTEXT=1 SHELL_PATH=/bin/sh
 git_HOST_CONFIGURE_CMD = (cd $(git_SRC) && tar cf - --exclude=.git .) | tar xf - -C $(git_HOBJ) && chmod -R u+w $(git_HOBJ)
 git_HOST_BUILD_CMD = $(MAKE) -C $(git_HOBJ) -j$(JOBS) NO_OPENSSL=1 NO_CURL=1 NO_EXPAT=1 NO_GETTEXT=1 NO_TCLTK=1 NO_PERL=1 NO_PYTHON=1 \
 	NO_RUST=1 GIT_VERSION=$(git_VERSION) prefix=$(git_HOBJ)/inst install
-git_BINS      := bin/git
+git_HELPERS   := git-upload-pack git-receive-pack git-upload-archive
+git_CHECK_DEPS := coreutils
+git_BINS      := bin/git bin/git-upload-pack bin/git-receive-pack bin/git-upload-archive
+git_DATA      := share/git-core/templates
 git_STACK     := 262144
 git_STACK_VAR := 1
