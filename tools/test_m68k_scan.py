@@ -42,5 +42,14 @@ if got != want:
     print("[FAIL] switch table bounded by a memory cmpi: %r, want %r" % (got, want))
 else:
     CASES.append(None)
+# masked selector, no compare (perl sdbm _delpair, 8 cases):
+#   moveq #1,d4; andl d4,d3; movew %pc@(T,d3:l:2),d3; jmp %pc@(T,d3:w)
+# T: two offsets, then code; unbounded, the code word 0xf44b lands as a "case".
+recent = [("moveq", "#1,%d4"), ("andl", "%d4,%d3"), ("movew", "%pc@(100 <_f+0x20>,%d3:l:2),%d3")]
+got = m68k_scan.switch_targets(T, recent, mem, T + len(TABLE_BYTES))
+CASES.append(None)
+if got != [T + 8, T + 10]:
+    failed += 1
+    print("[FAIL] switch table bounded by a register mask: %r" % got)
 print("test_m68k_scan: %d of %d passed" % (len(CASES) - failed, len(CASES)))
 sys.exit(1 if failed else 0)

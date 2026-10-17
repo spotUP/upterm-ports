@@ -79,7 +79,7 @@ def switch_targets(T, recent, mem, end):
     range check before it ("cmpi #N,dX; bhi default": N + 1 entries); where
     the bound is in a register, the entries run to the first case after
     the table, and a target inside the table or odd is not taken."""
-    count = None
+    count = masked = None
     rev = list(reversed(recent))
     for i, (base, ops) in enumerate(rev):
         if base.startswith("cmpi"):
@@ -87,6 +87,22 @@ def switch_targets(T, recent, mem, end):
             if m:
                 count = int(m.group(1)) + 1
             break
+        if base.startswith("and"):
+            # the index masked to N bits: "andl #7,dX" or "moveq #7,dK; andl dK,dX"
+            # (perl's sdbm _delpair: a Duff's device with 8 cases, no compare)
+            # only a fallback: a compare before it ("cmpi #29; ...; andil #255"
+            # zero-extends the selector) is the real bound
+            m = BOUND.match(ops)
+            if m:
+                masked = int(m.group(1)) + 1
+            else:
+                src = ops.split(",")[0].strip().lstrip("%")
+                for b2, o2 in rev[i + 1:]:
+                    m = BOUND.match(o2)
+                    if b2.startswith("moveq") and m and o2.split(",")[-1].strip().lstrip("%") == src:
+                        masked = int(m.group(1)) + 1
+                        break
+            continue
         if base.startswith("cmp"):
             # the bound loaded into a register first: "moveq #N,dK; cmpl X,dK"
             # (nano 9.2's vasnprintf: without it the table ran on into the
@@ -98,6 +114,8 @@ def switch_targets(T, recent, mem, end):
                     count = int(m.group(1)) + 1
                     break
             break
+    if count is None:
+        count = masked
     out, first, p = [], end, T
     while p + 1 in mem:
         if count is not None and (p - T) // 2 >= count:
