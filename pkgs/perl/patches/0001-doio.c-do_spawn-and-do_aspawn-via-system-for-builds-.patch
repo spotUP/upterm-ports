@@ -1,0 +1,59 @@
+From 553d40e60405f6a2e6c1ddaf0c8d90ebd2da9bd8 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Sat, 17 Oct 2026 10:25:48 +0200
+Subject: [PATCH] doio.c: do_spawn and do_aspawn via system() for builds
+ without fork
+
+---
+ doio.c | 38 ++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 38 insertions(+)
+
+diff --git a/doio.c b/doio.c
+index d0681ad..81614b6 100644
+--- a/doio.c
++++ b/doio.c
+@@ -3517,3 +3517,41 @@ Perl_vms_start_glob
+ /*
+  * ex: set ts=8 sts=4 sw=4 et:
+  */
++
++#ifndef HAS_FORK
++/* No fork on AmigaOS: pp_system takes the spawn path.  Both entry points
++ * run the command through the C library system(), which does not need fork.
++ * Called without aTHX: the macros in embed.h only exist for WIN32/VMS. */
++#include <stdlib.h>
++#include <string.h>
++
++int
++do_spawn(char *cmd)
++{
++    PerlIO_flush((PerlIO *)NULL);
++    return system(cmd);
++}
++
++int
++do_aspawn(SV *really, void **mark, void **sp)
++{
++    dTHX;
++    SV *cmd = sv_2mortal(newSVpvs(""));
++    SV **p;
++    PERL_UNUSED_ARG(really);
++    for (p = (SV **)mark + 1; p <= (SV **)sp; p++) {
++        STRLEN len, i;
++        const char *s = SvPV(*p, len);
++        if (p > (SV **)mark + 1)
++            sv_catpvs(cmd, " ");
++        sv_catpvs(cmd, "\"");
++        for (i = 0; i < len; i++) {
++            if (s[i] == '"' || s[i] == '\\' || s[i] == '*')
++                sv_catpvs(cmd, "*");
++            sv_catpvn(cmd, s + i, 1);
++        }
++        sv_catpvs(cmd, "\"");
++    }
++    return do_spawn(SvPV_nolen(cmd));
++}
++#endif
+-- 
+2.50.1 (Apple Git-155)
+
