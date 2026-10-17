@@ -1,7 +1,7 @@
-From 1edc05fcc6a9bea0db42baa13bc8fed3ad3b9f38 Mon Sep 17 00:00:00 2001
+From c7ebbe76d60e68dc5fa3af2dcfa322affdb9bc88 Mon Sep 17 00:00:00 2001
 From: upterm-ports <upterm-ports@localhost>
 Date: Sat, 17 Oct 2026 11:18:57 +0200
-Subject: [PATCH 2/2] compat/disk.h: NO_STATVFS for libcs without statvfs()
+Subject: [PATCH 2/3] compat/disk.h: NO_STATVFS for libcs without statvfs()
 
 ixemul ships sys/statvfs.h (newlib) but no statvfs(); git diagnose then fails
 with an error instead of failing to link.

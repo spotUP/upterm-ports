@@ -9,7 +9,7 @@ zlib_LICENSE   := Zlib
 zlib_DEPS      := ixcompat
 zlib_BINS      :=
 zlib_CONFIGURE_CMD = rsync -a --exclude .git $(zlib_SRC)/ $(zlib_OBJ)/ && cd $(zlib_OBJ) && \
-	CHOST=m68k-amigaos CC="$(ROOT)/tools/m68k-cc" CFLAGS="$(CPU) -O2 -I$(SYSINC)" \
+	CHOST=m68k-amigaos CC="$(ROOT)/tools/m68k-cc" CFLAGS="$(CPU) -O0 -I$(SYSINC)" \
 	AR=$(CROSS)ar RANLIB=$(CROSS)ranlib ./configure --static --prefix=$(PREFIX)
 zlib_BUILD_CMD = $(MAKE) -C $(zlib_OBJ) libz.a
 zlib_INSTALL_CMD = $(MAKE) -C $(zlib_OBJ) install-libs install-headers DESTDIR=$(SYSROOT) \

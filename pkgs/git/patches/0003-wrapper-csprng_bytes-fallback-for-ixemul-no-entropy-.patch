@@ -1,0 +1,45 @@
+From 63d5b25713021627b668db52cf43ced35f11bd34 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Sat, 17 Oct 2026 11:26:49 +0200
+Subject: [PATCH 3/3] wrapper: csprng_bytes fallback for ixemul (no entropy
+ source)
+
+---
+ wrapper.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/wrapper.c b/wrapper.c
+index 561f9ee..41cb110 100644
+--- a/wrapper.c
++++ b/wrapper.c
+@@ -907,6 +907,27 @@ int csprng_bytes(void *buf, size_t len, MAYBE_UNUSED unsigned flags)
+ 		errno = ENOTSUP;
+ 		return -1;
+ 	}
++#elif defined(USE_VFORK)
++	/*
++	 * AmigaOS/ixemul has no arc4random, getrandom, getentropy or
++	 * /dev/urandom. git only needs unpredictable names for temporary
++	 * files, so mix clock, process id and a counter. The proper fix is a
++	 * getentropy in libixcompat.
++	 */
++	static unsigned long counter;
++	unsigned char *p = buf;
++	size_t i;
++	struct timeval tv;
++	unsigned long x;
++
++	gettimeofday(&tv, NULL);
++	x = (unsigned long)tv.tv_sec * 1000003UL + (unsigned long)tv.tv_usec +
++	    (unsigned long)getpid() * 2654435761UL + ++counter * 40503UL;
++	for (i = 0; i < len; i++) {
++		x = x * 1103515245UL + 12345UL;
++		p[i] = (unsigned char)(x >> 16);
++	}
++	return 0;
+ #else
+ 	ssize_t res;
+ 	char *p = buf;
+-- 
+2.50.1 (Apple Git-155)
+
