@@ -1,15 +1,16 @@
-From ff622f75725afb740af8034c0df0007fbbd9a8ee Mon Sep 17 00:00:00 2001
+From 1f6c6bcc678dfef30d98172e3e16148764ee9f35 Mon Sep 17 00:00:00 2001
 From: spotUP <x@x>
 Date: Sat, 17 Oct 2026 18:51:08 +0200
 Subject: [PATCH 4/4] run-command: start_async via ix_vfork + ix_vfork_resume
  under USE_VFORK
 
 ---
- run-command.c | 49 ++++++++++++++++++++++++++++++++++++++++++++-----
- 1 file changed, 44 insertions(+), 5 deletions(-)
+ run-command.c | 103 +++++++++++++++++++++++++++++++++++++++++++++++---
+ run-command.h |   5 +++
+ 2 files changed, 103 insertions(+), 5 deletions(-)
 
 diff --git a/run-command.c b/run-command.c
-index 052b8d4..f21e543 100644
+index 052b8d4..55836a3 100644
 --- a/run-command.c
 +++ b/run-command.c
 @@ -17,6 +17,9 @@
@@ -22,7 +23,62 @@ index 052b8d4..f21e543 100644
  
  void child_process_init(struct child_process *child)
  {
-@@ -1237,11 +1240,47 @@ int start_async(struct async *async)
+@@ -1168,11 +1171,25 @@ int git_atexit(void (*handler)(void))
+ }
+ #define atexit git_atexit
+ 
++#if defined(NO_PTHREADS) && defined(USE_VFORK)
++/*
++ * An ix_vfork child shares all globals with its parent, so a flag set
++ * in the child would be set in the parent too. The process that started
++ * the first async is the main one; every other process running this
++ * image is an async child.
++ */
++static pid_t async_main_pid;
++int in_async(void)
++{
++	return async_main_pid && getpid() != async_main_pid;
++}
++#else
+ static int process_is_async;
+ int in_async(void)
+ {
+ 	return process_is_async;
+ }
++#endif
+ 
+ static void NORETURN async_exit(int code)
+ {
+@@ -1194,6 +1211,28 @@ void check_pipe(int err)
+ 	}
+ }
+ 
++#if defined(NO_PTHREADS) && defined(USE_VFORK)
++/*
++ * The ix_vfork child after ix_vfork_resume(): on its own stack, with its
++ * own fd table and malloc pool, everything it needs read from *async,
++ * which the caller keeps until finish_async() (as with the pthread
++ * start_async).
++ */
++static void NORETURN __attribute__((used, noinline))
++async_child_main(struct async *async)
++{
++	const char *sentinel = getenv("GIT_ASYNC_SENTINEL");
++	FILE *sf = sentinel ? fopen(sentinel, "a") : NULL;
++
++	if (sf) {
++		fprintf(sf, "async: ix_vfork_resume child ran (pid %d)\n",
++			(int)getpid());
++		fclose(sf);
++	}
++	_exit(!!async->proc(async->proc_in, async->proc_out, async->data));
++}
++#endif
++
+ int start_async(struct async *async)
+ {
+ 	int need_in, need_out;
+@@ -1237,11 +1276,65 @@ int start_async(struct async *async)
  		proc_out = -1;
  
  #if defined(NO_PTHREADS) && defined(USE_VFORK)
@@ -40,25 +96,43 @@ index 052b8d4..f21e543 100644
 +	 */
 +	fflush(NULL);
 +
++	async->proc_in = proc_in;
++	async->proc_out = proc_out;
++	if (!async_main_pid)
++		async_main_pid = getpid();
++
 +	async->pid = ix_vfork();
 +	if (async->pid < 0) {
 +		error_errno("fork (async) failed");
 +		goto error;
 +	}
 +	if (!async->pid) {
-+		int ret;
++		/*
++		 * The child runs on the parent's stack until ix_vfork_resume(),
++		 * with the parent suspended: this frame is valid here and the
++		 * child's own fd table is already set up, so the unused pipe
++		 * ends are closed now. ix_vfork_resume() moves the child onto
++		 * its own stack and lets the parent run on; from then on this
++		 * frame belongs to the parent (it returns and reuses the
++		 * stack), so the child must not read a local any more, only
++		 * a callee-saved register: async goes to async_child_main()
++		 * in a2, through the asm below.
++		 */
++		register struct async *child_async __asm__("a2") = async;
++		register void (*child_main)(struct async *) __asm__("a3") =
++			async_child_main;
 +
-+		ix_vfork_resume();
-+		if (getenv("GIT_ASYNC_SENTINEL"))
-+			fprintf(stderr, "async: ix_vfork_resume child ran (pid %d)\n",
-+				(int)getpid());
 +		if (need_in)
 +			close(fdin[1]);
 +		if (need_out)
 +			close(fdout[0]);
-+		process_is_async = 1;
-+		ret = async->proc(proc_in, proc_out, async->data);
-+		_exit(!!ret);
++		__asm__ __volatile__(
++			"jsr _ix_vfork_resume\n\t"
++			"move.l %0,-(sp)\n\t"
++			"jsr (%1)"
++			: : "a" (child_async), "a" (child_main)
++			: "d0", "d1", "a0", "a1", "cc", "memory");
++		__builtin_unreachable();
 +	}
 +
 +	mark_child_for_cleanup(async->pid, NULL);
@@ -75,6 +149,22 @@ index 052b8d4..f21e543 100644
  #elif defined(NO_PTHREADS)
  	/* Flush stdio before fork() to avoid cloning buffers */
  	fflush(NULL);
+diff --git a/run-command.h b/run-command.h
+index c2fad4f..e8e3662 100644
+--- a/run-command.h
++++ b/run-command.h
+@@ -365,6 +365,11 @@ struct async {
+ 	int out;	/* caller reads from here and closes it */
+ #ifdef NO_PTHREADS
+ 	pid_t pid;
++#ifdef USE_VFORK
++	/* read by the ix_vfork child after ix_vfork_resume(), see start_async() */
++	int proc_in;
++	int proc_out;
++#endif
+ #else
+ 	pthread_t tid;
+ 	int proc_in;
 -- 
 2.50.1 (Apple Git-155)
 
