@@ -1,0 +1,80 @@
+From ff622f75725afb740af8034c0df0007fbbd9a8ee Mon Sep 17 00:00:00 2001
+From: spotUP <x@x>
+Date: Sat, 17 Oct 2026 18:51:08 +0200
+Subject: [PATCH 4/4] run-command: start_async via ix_vfork + ix_vfork_resume
+ under USE_VFORK
+
+---
+ run-command.c | 49 ++++++++++++++++++++++++++++++++++++++++++++-----
+ 1 file changed, 44 insertions(+), 5 deletions(-)
+
+diff --git a/run-command.c b/run-command.c
+index 052b8d4..f21e543 100644
+--- a/run-command.c
++++ b/run-command.c
+@@ -17,6 +17,9 @@
+ #include "config.h"
+ #include "packfile.h"
+ #include "compat/nonblock.h"
++#ifdef USE_VFORK
++#include <ix.h>
++#endif
+ 
+ void child_process_init(struct child_process *child)
+ {
+@@ -1237,11 +1240,47 @@ int start_async(struct async *async)
+ 		proc_out = -1;
+ 
+ #if defined(NO_PTHREADS) && defined(USE_VFORK)
+-	/* The async body keeps running next to the parent: it needs fork(). */
+-	error("git: asynchronous processes (sideband demultiplexing, "
+-	      "clean/smudge filters) not supported on AmigaOS");
+-	errno = ENOSYS;
+-	goto error;
++	/*
++	 * ixemul has no fork(). ix_vfork() makes a real child process with
++	 * its own fd table and malloc pool; ix_vfork_resume() then lets the
++	 * parent run on as well, so the two run side by side and share code
++	 * and globals. The async bodies (sideband demux, filters) only pump
++	 * between file descriptors, never free parent memory.
++	 */
++	fflush(NULL);
++
++	async->pid = ix_vfork();
++	if (async->pid < 0) {
++		error_errno("fork (async) failed");
++		goto error;
++	}
++	if (!async->pid) {
++		int ret;
++
++		ix_vfork_resume();
++		if (getenv("GIT_ASYNC_SENTINEL"))
++			fprintf(stderr, "async: ix_vfork_resume child ran (pid %d)\n",
++				(int)getpid());
++		if (need_in)
++			close(fdin[1]);
++		if (need_out)
++			close(fdout[0]);
++		process_is_async = 1;
++		ret = async->proc(proc_in, proc_out, async->data);
++		_exit(!!ret);
++	}
++
++	mark_child_for_cleanup(async->pid, NULL);
++
++	if (need_in)
++		close(fdin[0]);
++	else if (async->in)
++		close(async->in);
++
++	if (need_out)
++		close(fdout[1]);
++	else if (async->out)
++		close(async->out);
+ #elif defined(NO_PTHREADS)
+ 	/* Flush stdio before fork() to avoid cloning buffers */
+ 	fflush(NULL);
+-- 
+2.50.1 (Apple Git-155)
+
