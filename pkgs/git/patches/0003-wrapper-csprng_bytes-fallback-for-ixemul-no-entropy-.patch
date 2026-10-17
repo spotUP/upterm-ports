@@ -1,7 +1,7 @@
-From 63d5b25713021627b668db52cf43ced35f11bd34 Mon Sep 17 00:00:00 2001
+From 82eacf96042e93c4fb17ef52afc7b3a18c7b920a Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Sat, 17 Oct 2026 11:26:49 +0200
-Subject: [PATCH 3/3] wrapper: csprng_bytes fallback for ixemul (no entropy
+Subject: [PATCH 3/4] wrapper: csprng_bytes fallback for ixemul (no entropy
  source)
 
 ---
