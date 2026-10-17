@@ -34,6 +34,6 @@ case prints `clone: ok` for success or the "not supported on AmigaOS" message an
 - Patch 0003: csprng_bytes fallback (clock, pid, counter) under USE_VFORK. ixemul has no arc4random/getrandom/getentropy//dev/urandom. Proper fix: getentropy in libixcompat.
 - RUNTIME_PREFIX removed (exec-cmd.c assertion on executable_dirname).
 - NO_TRUSTABLE_FILEMODE=1: ixemul stat reports the exec bit on every file, so git recorded 100755.
-- zlib recipe now builds with -O0: gcc -O2 miscompiles deflate on this toolchain (loose object had a stray 0x00 byte before the adler32 trailer, "inflate: data stream error"). -O0 gives byte-identical output to the Mac zlib. Root cause (which -O2 pass) not isolated; try -O1 or per-file flags.
+- zlib recipe builds at -O2 again. The -O0 workaround is gone: the cause was a gcc m68k peephole2 bug ("combine clr if possible" merged clr.w + clr.l into one clr.l), fixed in gcc commit aee333a76 and installed in cc1. Details: thoughts/shared/zlib-o2-rootcause.md.
 - clone: a path like VTC:userland/work/git/r7 contains a colon, so git treats it as ssh host "VTC". Clone fails with "cannot run ssh ... fatal: unable to fork". The case accepts that or "not supported on AmigaOS".
 - Open: templates not shipped (stderr warning); fetch/push/pull unsupported (start_async); binary 3.7 MB.
