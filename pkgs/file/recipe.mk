@@ -45,3 +45,6 @@ file_HOST_BUILD_CMD = $(MAKE) -C $(file_HOBJ)/src magic.h && $(MAKE) -C $(file_H
 file_RIG_DATA := share/misc/magic.mgc
 file_CHECK_DEPS := sed
 file_DATA := share/misc/magic.mgc
+# the install compiles the trimmed magic with the Mac build: after a clean-file
+# it must be built again first
+$(STATE)/file.installed: $(STATE)/host-file.built
