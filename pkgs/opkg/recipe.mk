@@ -19,6 +19,7 @@ opkg_CONFIGURE := -DWITH_CURL=OFF -DWITH_SSLCURL=OFF -DWITH_GPGME=OFF -DUSE_SOLV
 	-DSYSCONFDIR=/UP-Term/etc -DVARDIR=/UP-Term/pkg/upkg
 opkg_LIBS      := -llzma -lbz2 -lz
 opkg_NO_KIT    := 1
+opkg_CHECK_SH_BIN := bin/upkg
 opkg_BINS      := bin/upkg
 opkg_STACK     := 131072
 opkg_HOST_DEPS := xz libarchive

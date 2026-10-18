@@ -1,0 +1,28 @@
+From 6e16329fa516d6ea4c6260ef15f9e88edab37d27 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 00:22:47 +0200
+Subject: [PATCH 2/2] config.h.in: define WITH_SHA256 so the sha256 checks
+ compile in
+
+The CMake option WITH_SHA256 was never written into config.h, so every
+#if WITH_SHA256 in libopkg was false: pkg_verify found no usable checksum
+and refused every install. The autotools build defined it in config.h.
+---
+ config.h.in | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/config.h.in b/config.h.in
+index 4fa9842..af29881 100644
+--- a/config.h.in
++++ b/config.h.in
+@@ -9,6 +9,7 @@
+ #cmakedefine01 WITH_XATTR
+ #cmakedefine01 USE_SOLVER_LIBSOLV
+ #cmakedefine01 USE_SOLVER_INTERNAL
++#cmakedefine01 WITH_SHA256
+ #cmakedefine01 WITH_GPGME
+ 
+ #cmakedefine DATADIR "@DATADIR@"
+-- 
+2.50.1 (Apple Git-155)
+

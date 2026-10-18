@@ -83,6 +83,7 @@ CHECK_PATH = $($(1)_HOBJ)/inst/bin$(foreach d,$($(1)_CHECK_DEPS),:$(HOSTB)/$(d)/
 #                   programs a vfork + exec parent starts, which ignore the cookie)
 #   <p>_LIBS        extra libraries before -lixcompat
 #   <p>_LICENSE     for SOURCES.txt
+#   <p>_CHECK_SH_BIN  host program (relative to the host install) handed to every pkgs/<p>/check/*.sh
 #   <p>_NO_KIT      non-empty: kit-stage leaves the package out (built and checked only)
 #   <p>_POST_INSTALL  shell run after make install (optional)
 #   <p>_OWN         our own program: the source is pkgs/<p>/src (no download, no
@@ -161,6 +162,7 @@ $(STATE)/host-$(1).expected: $(STATE)/host-$(1).built $$(wildcard pkgs/$(1)/chec
 		$$(foreach d,$$($(1)_CHECK_DEPS),$(STATE)/host-$$(d).built)
 	$(ROOT)/tools/run-cases.sh "$$(call CHECK_PATH,$(1))" pkgs/$(1)/check $(EXPECT)/$(1)
 	$(ROOT)/tools/run-tty.sh "$$(call CHECK_PATH,$(1))" pkgs/$(1)/check $(EXPECT)/$(1)
+	$$(if $$($(1)_CHECK_SH_BIN),for s in pkgs/$(1)/check/*.sh; do sh $$$$s $$($(1)_HOBJ)/inst/$$($(1)_CHECK_SH_BIN) || exit 1; done)
 	@touch $$@
 
 $(1)-patches:
