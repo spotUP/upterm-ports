@@ -1,0 +1,72 @@
+From 9d24d0a0a60ce3bffb36fd75e1f900ab0dd7b040 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 01:54:08 +0200
+Subject: [PATCH 3/3] libopkg: name cache files with 30 hex digits of the URI
+ md5 so AmigaDOS keeps the whole name
+
+AmigaDOS FFS truncates file names to 30 characters silently. The stock cache
+name <md5hex32>_<basename> came back from the disk under another name and
+opkg removed the package as corrupt. Nothing in libopkg reads the basename
+or suffix of a cache path back. Active on __amigaos__ and with
+-DUPKG_SHORT_NAMES (the host build, so the host check sees the same names).
+---
+ libopkg/opkg_download.c | 20 +++++++++++++++++++-
+ 1 file changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/libopkg/opkg_download.c b/libopkg/opkg_download.c
+index 4086f83..bac1aea 100644
+--- a/libopkg/opkg_download.c
++++ b/libopkg/opkg_download.c
+@@ -6,6 +6,8 @@
+    Copyright (C) 2001 University of Southern California
+    Copyright (C) 2008 OpenMoko Inc
+ 
++   Modified 2026-10-19 for upkg (UP-Term): cache file names fit the 30 characters of AmigaDOS.
++
+    SPDX-License-Identifier: GPL-2.0-or-later
+ 
+    This program is free software; you can redistribute it and/or
+@@ -44,6 +46,8 @@
+  * differs between plaforms but 128 characters should be reasonable.
+  */
+ #define MAX_SHORT_FILE_NAME_LENGTH 90
++/* upkg: longest file name AmigaDOS FFS keeps */
++#define UPKG_CACHE_NAME_LENGTH 30
+ 
+ static int opkg_download_set_env()
+ {
+@@ -158,16 +162,30 @@ static char *get_cache_location(const char *src)
+     char *md5sum_hex;
+     char *cache_location;
+     char *short_file_name;
+-    char *tmp = xstrdup(src);
++    char *tmp;
+ 
+     md5_buffer(src, strlen(src), md5sum_bin);
+     md5sum_hex = md5_to_string(md5sum_bin);
+ 
++#if defined(__amigaos__) || defined(UPKG_SHORT_NAMES)
++    /* AmigaDOS FFS keeps 30 characters of a file name and truncates the rest
++     * silently, so "<md5>_<basename>" came back from the disk under another
++     * name and the package was reported corrupt. The cache file is named by
++     * the first 30 hex digits of the md5 of the full src URI, nothing else
++     * (nothing in libopkg reads the basename or suffix back).
++     */
++    md5sum_hex[UPKG_CACHE_NAME_LENGTH] = '\0';
++    sprintf_alloc(&cache_location, "%s/%s", opkg_config->cache_dir, md5sum_hex);
++    free(md5sum_hex);
++    return cache_location;
++#endif
++
+     /* Generate a short file name which will be used along with an md5sum of the
+      * full src URI in the cache file name. This short file name is limited to
+      * MAX_SHORT_FILE_NAME_LENGTH to ensure that the total cache file name
+      * length is reasonable.
+      */
++    tmp = xstrdup(src);
+     short_file_name = basename(tmp);
+     if (strlen(short_file_name) > MAX_SHORT_FILE_NAME_LENGTH)
+         short_file_name[MAX_SHORT_FILE_NAME_LENGTH] = '\0';
+-- 
+2.50.1 (Apple Git-155)
+

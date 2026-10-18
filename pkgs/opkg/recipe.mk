@@ -7,6 +7,8 @@
 # Not staged into the kit: vtcon's vsh script UP-Term:bin/upkg owns that name.
 # No libcurl (downloads exec the curl of the base), no gpgme, no libsolv (internal solver), sha256 on.
 # libarchive and liblzma come from the sysroot, static.
+# patches/0003: cache files are named by 30 md5 hex digits (AmigaDOS keeps 30 characters of a name);
+# the host build gets the same names from -DUPKG_SHORT_NAMES so check/cache_name.sh can see them.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
@@ -25,6 +27,6 @@ opkg_HOST_DEPS := xz libarchive
 opkg_HOST_CONFIGURE := -DWITH_CURL=OFF -DWITH_SSLCURL=OFF -DWITH_GPGME=OFF -DUSE_SOLVER_LIBSOLV=OFF \
 	-DWITH_SHA256=ON -DWITH_XZ=ON -DUSE_ACL=OFF -DUSE_XATTR=OFF -DWITH_LIBOPKG_API=OFF \
 	-DCMAKE_PREFIX_PATH="$(HOSTB)/libarchive/inst;$(HOSTB)/xz/inst" \
-	"-DCMAKE_C_FLAGS=-I$(HOSTB)/libarchive/inst/include -I$(HOSTB)/xz/inst/include" \
+	"-DCMAKE_C_FLAGS=-I$(HOSTB)/libarchive/inst/include -I$(HOSTB)/xz/inst/include -DUPKG_SHORT_NAMES" \
 	-DSYSCONFDIR=/UP-Term/etc -DVARDIR=/UP-Term/pkg/upkg \
 	-DSTATIC_LIBOPKG=ON "-DCMAKE_EXE_LINKER_FLAGS=-lz -lbz2 -liconv $(HOSTB)/xz/inst/lib/liblzma.a"
