@@ -9,3 +9,4 @@ unzip	bsdunzip -l known.zip | sed -n "/b.txt/s/.* //p"
 unzip-x	bsdunzip -o -d z known.zip && sed -n 1p z/sub/b.txt
 cat	bsdcat known.tar.gz | tar tf -
 evil	tar xf evil.tar
+lha	tar xf known.lha && cat lha/run.txt
