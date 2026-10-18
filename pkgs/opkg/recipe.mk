@@ -1,7 +1,11 @@
 # opkg 0.9.0 (vtcon plan P10.2): the Yocto package manager, the base of upkg.
 # First CMake package in the framework (opkg_CMAKE: mk/amiga-ixemul.cmake).
-# No libcurl (downloads go through the wget backend until P10.3 replaces it
-# with a curl exec backend), no gpgme, no libsolv (internal solver), sha256 on.
+# P10.3 (patches/0001): the wget download backend runs `curl -fsSL -o`, the
+# binary is `upkg` (GPL-2.0 rebrand: notices kept, changed files marked, the
+# version line says "based on opkg"), the config is /UP-Term/etc/upkg.conf and
+# state lives under /UP-Term/pkg/upkg (ixemul maps /UP-Term to UP-Term:).
+# Not staged into the kit: vtcon's vsh script UP-Term:bin/upkg owns that name.
+# No libcurl (downloads exec the curl of the base), no gpgme, no libsolv (internal solver), sha256 on.
 # libarchive and liblzma come from the sysroot, static.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
@@ -11,13 +15,16 @@ opkg_CMAKE     := 1
 opkg_DEPS      := ixcompat zlib bzip2 xz libarchive
 opkg_CONFIGURE := -DWITH_CURL=OFF -DWITH_SSLCURL=OFF -DWITH_GPGME=OFF -DUSE_SOLVER_LIBSOLV=OFF \
 	-DWITH_SHA256=ON -DWITH_XZ=ON -DWITH_BZIP2=ON -DUSE_ACL=OFF -DUSE_XATTR=OFF \
-	-DSTATIC_LIBOPKG=ON -DWITH_LIBOPKG_API=OFF
+	-DSTATIC_LIBOPKG=ON -DWITH_LIBOPKG_API=OFF \
+	-DSYSCONFDIR=/UP-Term/etc -DVARDIR=/UP-Term/pkg/upkg
 opkg_LIBS      := -llzma -lbz2 -lz
-opkg_BINS      := bin/opkg
+opkg_NO_KIT    := 1
+opkg_BINS      := bin/upkg
 opkg_STACK     := 131072
 opkg_HOST_DEPS := xz libarchive
 opkg_HOST_CONFIGURE := -DWITH_CURL=OFF -DWITH_SSLCURL=OFF -DWITH_GPGME=OFF -DUSE_SOLVER_LIBSOLV=OFF \
 	-DWITH_SHA256=ON -DWITH_XZ=ON -DUSE_ACL=OFF -DUSE_XATTR=OFF -DWITH_LIBOPKG_API=OFF \
 	-DCMAKE_PREFIX_PATH="$(HOSTB)/libarchive/inst;$(HOSTB)/xz/inst" \
 	"-DCMAKE_C_FLAGS=-I$(HOSTB)/libarchive/inst/include -I$(HOSTB)/xz/inst/include" \
+	-DSYSCONFDIR=/UP-Term/etc -DVARDIR=/UP-Term/pkg/upkg \
 	-DSTATIC_LIBOPKG=ON "-DCMAKE_EXE_LINKER_FLAGS=-lz -lbz2 -liconv $(HOSTB)/xz/inst/lib/liblzma.a"

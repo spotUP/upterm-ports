@@ -1,0 +1,192 @@
+From 567d966b6d4b0fd3edc63fd978a71ce22096db35 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 00:10:04 +0200
+Subject: [PATCH] upkg: curl download backend, UP-Term paths, upkg name and
+ version text
+
+---
+ libopkg/opkg_conf.c          |  6 ++++--
+ libopkg/opkg_conf.h          | 18 +++++++++++-------
+ libopkg/opkg_download_wget.c | 18 ++++++++++--------
+ src/CMakeLists.txt           |  8 ++++----
+ src/opkg.c                   | 10 ++++++----
+ 5 files changed, 35 insertions(+), 25 deletions(-)
+
+diff --git a/libopkg/opkg_conf.c b/libopkg/opkg_conf.c
+index f1417e8..3197e8a 100644
+--- a/libopkg/opkg_conf.c
++++ b/libopkg/opkg_conf.c
+@@ -6,6 +6,8 @@
+    Carl D. Worth
+    Copyright (C) 2001 University of Southern California
+ 
++   Modified 2026-10-19 for upkg (UP-Term): UP-Term paths, upkg name and version text.
++
+    SPDX-License-Identifier: GPL-2.0-or-later
+ 
+    This program is free software; you can redistribute it and/or
+@@ -758,11 +760,11 @@ int opkg_conf_read(void)
+         if (conf_file_dir == NULL)
+             conf_file_dir=OPKG_CONF_DEFAULT_CONF_FILE_DIR;
+         if (opkg_config->offline_root) {
+-            sprintf_alloc(&etc_opkg_conf_pattern, "%s/%s/*.conf",
++            sprintf_alloc(&etc_opkg_conf_pattern, "%s/%s/" OPKG_CONF_DEFAULT_CONF_FILE_NAME,
+                         opkg_config->offline_root,
+                         conf_file_dir);
+         } else {
+-            sprintf_alloc(&etc_opkg_conf_pattern, "%s/*.conf", conf_file_dir);
++            sprintf_alloc(&etc_opkg_conf_pattern, "%s/" OPKG_CONF_DEFAULT_CONF_FILE_NAME, conf_file_dir);
+         }
+ 
+         memset(&globbuf, 0, sizeof(globbuf));
+diff --git a/libopkg/opkg_conf.h b/libopkg/opkg_conf.h
+index eec4e81..ebe5f81 100644
+--- a/libopkg/opkg_conf.h
++++ b/libopkg/opkg_conf.h
+@@ -5,6 +5,8 @@
+ 
+    Copyright (C) 2001 University of Southern California
+ 
++   Modified 2026-10-19 for upkg (UP-Term): UP-Term paths, upkg name and version text.
++
+    SPDX-License-Identifier: GPL-2.0-or-later
+ 
+    This program is free software; you can redistribute it and/or
+@@ -34,19 +36,21 @@ extern "C" {
+ #include "str_list.h"
+ 
+ #define OPKG_CONF_DEFAULT_TMP_DIR_BASE "/tmp"
++/* The one configuration file upkg reads by default, in OPKG_CONF_DEFAULT_CONF_FILE_DIR. */
++#define OPKG_CONF_DEFAULT_CONF_FILE_NAME "upkg.conf"
+ #define OPKG_CONF_TMP_DIR_SUFFIX "opkg-XXXXXX"
+ #define OPKG_BACKUP_SUFFIX "-opkg.backup"
+ 
+-#define OPKG_CONF_DEFAULT_LISTS_DIR     VARDIR "/lib/opkg/lists"
+-#define OPKG_CONF_DEFAULT_INFO_DIR      VARDIR "/lib/opkg/info"
+-#define OPKG_CONF_DEFAULT_STATUS_FILE   VARDIR "/lib/opkg/status"
+-#define OPKG_CONF_DEFAULT_CACHE_DIR     VARDIR "/cache/opkg"
+-#define OPKG_CONF_DEFAULT_CONF_FILE_DIR SYSCONFDIR "/opkg"
+-#define OPKG_CONF_DEFAULT_LOCK_FILE     VARDIR "/run/opkg.lock"
++#define OPKG_CONF_DEFAULT_LISTS_DIR     VARDIR "/lists"
++#define OPKG_CONF_DEFAULT_INFO_DIR      VARDIR "/info"
++#define OPKG_CONF_DEFAULT_STATUS_FILE   VARDIR "/status"
++#define OPKG_CONF_DEFAULT_CACHE_DIR     VARDIR "/cache"
++#define OPKG_CONF_DEFAULT_CONF_FILE_DIR SYSCONFDIR
++#define OPKG_CONF_DEFAULT_LOCK_FILE     VARDIR "/lock"
+ 
+ /* In case the config file defines no dest */
+ #define OPKG_CONF_DEFAULT_DEST_NAME "root"
+-#define OPKG_CONF_DEFAULT_DEST_ROOT_DIR "/"
++#define OPKG_CONF_DEFAULT_DEST_ROOT_DIR "/UP-Term"
+ 
+ #define OPKG_CONF_DEFAULT_HASH_LEN 1024
+ 
+diff --git a/libopkg/opkg_download_wget.c b/libopkg/opkg_download_wget.c
+index 3dec766..8718dc3 100644
+--- a/libopkg/opkg_download_wget.c
++++ b/libopkg/opkg_download_wget.c
+@@ -5,6 +5,8 @@
+    Copyright (C) 2008 OpenMoko Inc
+    Copyright (C) 2014 Paul Barker
+ 
++   Modified 2026-10-19 for upkg (UP-Term): the backend runs curl instead of wget.
++
+    SPDX-License-Identifier: GPL-2.0-or-later
+ 
+    This program is free software; you can redistribute it and/or
+@@ -50,20 +52,20 @@ int opkg_download_backend(const char *src, const char *dest,
+ 
+     unlink(dest);
+ 
+-    argv[i++] = "wget";
+-    argv[i++] = "-q";
+-    if (opkg_config->http_proxy || opkg_config->ftp_proxy) {
+-        argv[i++] = "-Y";
+-        argv[i++] = "on";
+-    }
+-    argv[i++] = "-O";
++    /* upkg: curl, not wget. -f turns an HTTP error into a non-zero exit, -sS
++     * is silent but keeps the error text, -L follows redirects (GitHub
++     * release assets redirect). The proxy options of the wget backend have
++     * no equivalent here: curl reads http_proxy/https_proxy itself. */
++    argv[i++] = "curl";
++    argv[i++] = "-fsSL";
++    argv[i++] = "-o";
+     argv[i++] = dest;
+     argv[i++] = src;
+     argv[i++] = NULL;
+     res = xsystem(argv);
+ 
+     if (res) {
+-        opkg_msg(ERROR, "Failed to download %s, wget returned %d.\n", src, res);
++        opkg_msg(ERROR, "Failed to download %s, curl returned %d (is curl installed and in PATH?).\n", src, res);
+         return -1;
+     }
+ 
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 4c1ca5f..add2cb4 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -1,11 +1,11 @@
+-add_executable(opkg
++add_executable(upkg
+   opkg.c
+ )
+ 
+-target_link_libraries(opkg PUBLIC libopkg)
+-install(TARGETS opkg)
++target_link_libraries(upkg PUBLIC libopkg)
++install(TARGETS upkg)
+ # Necessary for default install path /usr/local/bin and /usr/local/lib
+-set_target_properties(opkg
++set_target_properties(upkg
+     PROPERTIES
+         INSTALL_RPATH "\$ORIGIN/../lib"
+ )
+diff --git a/src/opkg.c b/src/opkg.c
+index bfb9986..ebf135d 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -7,6 +7,8 @@
+    Carl D. Worth
+    Copyright 2001 University of Southern California
+ 
++   Modified 2026-10-19 for upkg (UP-Term): UP-Term paths, upkg name and version text.
++
+    SPDX-License-Identifier: GPL-2.0-or-later
+ 
+    This program is free software; you can redistribute it and/or
+@@ -171,10 +173,10 @@ static int args_parse_stage1(int argc, char *argv[])
+         case 'v':
+             solver_version = opkg_solver_version_alloc();
+             if (solver_version) {
+-                printf("opkg version " VERSION " (%s)\n", solver_version);
++                printf("upkg version " VERSION " (%s), based on opkg " VERSION "\n", solver_version);
+                 free(solver_version);
+             } else {
+-                printf("opkg version " VERSION "\n");
++                printf("upkg version " VERSION ", based on opkg " VERSION "\n");
+             }
+             exit(0);
+         case 'V':
+@@ -347,7 +349,7 @@ static int args_parse_stage2(int argc, char *argv[])
+ 
+ static void usage()
+ {
+-    printf("usage: opkg [options...] sub-command [arguments...]\n");
++    printf("usage: upkg [options...] sub-command [arguments...]\n");
+     printf("where sub-command is one of:\n");
+ 
+     printf("\nPackage Manipulation:\n");
+@@ -473,7 +475,7 @@ int main(int argc, char *argv[])
+ 
+     opts = args_parse_stage1(argc, argv);
+     if (opts == argc || opts < 0) {
+-        fprintf(stderr, "opkg must have one sub-command argument\n");
++        fprintf(stderr, "upkg must have one sub-command argument\n");
+         usage();
+     }
+ 
+-- 
+2.50.1 (Apple Git-155)
+

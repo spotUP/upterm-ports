@@ -83,6 +83,7 @@ CHECK_PATH = $($(1)_HOBJ)/inst/bin$(foreach d,$($(1)_CHECK_DEPS),:$(HOSTB)/$(d)/
 #                   programs a vfork + exec parent starts, which ignore the cookie)
 #   <p>_LIBS        extra libraries before -lixcompat
 #   <p>_LICENSE     for SOURCES.txt
+#   <p>_NO_KIT      non-empty: kit-stage leaves the package out (built and checked only)
 #   <p>_POST_INSTALL  shell run after make install (optional)
 #   <p>_OWN         our own program: the source is pkgs/<p>/src (no download, no
 #                   <p>_URL/SHA256), copied to build/src/<p> as the unpack step

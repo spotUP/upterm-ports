@@ -28,6 +28,8 @@ mkdir -p "$KIT/bin" "$KIT/licenses" "$KSRC/ports"
 var() { make -s -C "$ROOT" "print-$1-$2"; }
 
 for p in $PKGS; do
+	# <p>_NO_KIT: built and checked, not shipped yet (opkg: its upkg clashes with vtcon's vsh script)
+	[ -z "$(var "$p" NO_KIT)" ] || { echo "kit-stage: $p skipped (NO_KIT)"; continue; }
 	if [ "$p" = ixcompat ]; then
 		[ -f "$STATE/ixcompat.installed" ] || continue
 		mkdir -p "$KSRC/ixcompat" "$KIT/licenses/ixcompat"
