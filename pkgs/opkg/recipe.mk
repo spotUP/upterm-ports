@@ -4,7 +4,7 @@
 # binary is `upkg` (GPL-2.0 rebrand: notices kept, changed files marked, the
 # version line says "based on opkg"), the config is /UP-Term/etc/upkg.conf and
 # state lives under /UP-Term/pkg/upkg (ixemul maps /UP-Term to UP-Term:).
-# Not staged into the kit: vtcon's vsh script UP-Term:bin/upkg owns that name.
+# Staged into the kit as UP-Term/bin/upkg (P10.5-1); it replaced the vsh script of that name.
 # No libcurl (downloads exec the curl of the base), no gpgme, no libsolv (internal solver), sha256 on.
 # libarchive and liblzma come from the sysroot, static.
 # patches/0003: cache files are named by 30 md5 hex digits (AmigaDOS keeps 30 characters of a name);
