@@ -51,6 +51,14 @@ M68K_ENV = CONFIG_SITE=$(ROOT)/mk/config.site \
 	CFLAGS="$(CPU) -O2" CPPFLAGS="-I$(SYSINC)" \
 	LDFLAGS="-L$(SYSLIB)$(if $($(1)_STACK), -Wl$(comma)$(OBJ)/$(1).stack.o)" \
 	LIBS="$($(1)_LIBS) $(SYSLIB)/libixcompat.a" PKG_CONFIG=false
+# $(call CMAKE_M68K,<pkg>): cmake with the cross toolchain file, for a package
+# with <pkg>_CMAKE. The options configure would get (prefix, CPU, libraries)
+# arrive as cache variables the toolchain file reads.
+CMAKE_M68K = cmake -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=$(ROOT)/mk/amiga-ixemul.cmake \
+	-DUPTERM_ROOT=$(ROOT) -DUPTERM_CROSS=$(CROSS) -DUPTERM_SYSROOT=$(SYSROOT)$(PREFIX) \
+	-DUPTERM_CPU=$(CPU) "-DUPTERM_LIBS=$($(1)_LIBS) $(SYSLIB)/libixcompat.a" \
+	"-DUPTERM_STACK_OBJ=$(if $($(1)_STACK),$(OBJ)/$(1).stack.o)" \
+	-DCMAKE_INSTALL_PREFIX=$(PREFIX) -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS_RELEASE=-O2
 BUILD_TRIPLE := $(shell sh $(ROOT)/tools/build-triple.sh)
 
 # $(call CHECK_PATH,<p>): the Mac bin directories a package's checks run with
@@ -61,6 +69,9 @@ CHECK_PATH = $($(1)_HOBJ)/inst/bin$(foreach d,$($(1)_CHECK_DEPS),:$(HOSTB)/$(d)/
 #   <p>_VERSION, <p>_URL, <p>_SHA256   the upstream archive (sha256-verified)
 #   <p>_DEPS        packages whose install it builds against (stamps)
 #   <p>_CONFIGURE   extra configure arguments for the m68k build
+#   <p>_CMAKE       non-empty: a CMake package. <p>_CONFIGURE then holds -D options;
+#                   mk/amiga-ixemul.cmake is the toolchain file (CMAKE_M68K below),
+#                   the build is Unix Makefiles so the build/install steps are unchanged
 #   <p>_HOST_CONFIGURE  same for the macOS build (expected outputs)
 #   <p>_HOST_DEPS   packages whose macOS build it builds against (the same
 #                   library versions on both sides: ncurses for the screens)
@@ -85,12 +96,14 @@ $(1)_SRC  ?= $(SRC)/$(1)
 $(1)_OBJ  ?= $(OBJ)/$(1)
 $(1)_HOBJ ?= $(HOSTB)/$(1)
 $(1)_ARCHIVE ?= $(DL)/$$(notdir $$($(1)_URL))
-$(1)_CONFIGURE_CMD ?= cd $$($(1)_OBJ) && $$(call M68K_ENV,$(1)) $$($(1)_ENV) $$($(1)_SRC)/configure \
-	--build=$(BUILD_TRIPLE) --host=m68k-amigaos --prefix=$(PREFIX) $$($(1)_CONFIGURE)
+$(1)_CONFIGURE_CMD ?= $$(if $$($(1)_CMAKE),cd $$($(1)_OBJ) && $$(call CMAKE_M68K,$(1)) $$($(1)_CONFIGURE) $$($(1)_SRC),\
+	cd $$($(1)_OBJ) && $$(call M68K_ENV,$(1)) $$($(1)_ENV) $$($(1)_SRC)/configure \
+	--build=$(BUILD_TRIPLE) --host=m68k-amigaos --prefix=$(PREFIX) $$($(1)_CONFIGURE))
 $(1)_BUILD_CMD ?= $(MAKE) -C $$($(1)_OBJ) -j$(JOBS)
 $(1)_INSTALL_CMD ?= $(MAKE) -C $$($(1)_OBJ) install DESTDIR=$(SYSROOT)
-$(1)_HOST_CONFIGURE_CMD ?= cd $$($(1)_HOBJ) && $$($(1)_SRC)/configure --prefix=$$($(1)_HOBJ)/inst \
-	$$($(1)_HOST_CONFIGURE)
+$(1)_HOST_CONFIGURE_CMD ?= $$(if $$($(1)_CMAKE),cd $$($(1)_HOBJ) && cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=$$($(1)_HOBJ)/inst \
+	$$($(1)_HOST_CONFIGURE) $$($(1)_SRC),cd $$($(1)_HOBJ) && $$($(1)_SRC)/configure --prefix=$$($(1)_HOBJ)/inst \
+	$$($(1)_HOST_CONFIGURE))
 $(1)_HOST_BUILD_CMD ?= $(MAKE) -C $$($(1)_HOBJ) -j$(JOBS) install
 
 .PHONY: $(1) host-$(1) clean-$(1) $(1)-patches
