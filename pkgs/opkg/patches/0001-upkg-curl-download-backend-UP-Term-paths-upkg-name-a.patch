@@ -1,16 +1,16 @@
-From 567d966b6d4b0fd3edc63fd978a71ce22096db35 Mon Sep 17 00:00:00 2001
+From 690c79cb7df72502fb9157ca8e33dc31460c0c14 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Mon, 19 Oct 2026 00:10:04 +0200
 Subject: [PATCH] upkg: curl download backend, UP-Term paths, upkg name and
  version text
 
 ---
- libopkg/opkg_conf.c          |  6 ++++--
- libopkg/opkg_conf.h          | 18 +++++++++++-------
- libopkg/opkg_download_wget.c | 18 ++++++++++--------
- src/CMakeLists.txt           |  8 ++++----
- src/opkg.c                   | 10 ++++++----
- 5 files changed, 35 insertions(+), 25 deletions(-)
+ libopkg/opkg_conf.c          |  6 +++--
+ libopkg/opkg_conf.h          | 18 ++++++++------
+ libopkg/opkg_download_wget.c | 46 +++++++++++++++++++++++++++++-------
+ src/CMakeLists.txt           |  8 +++----
+ src/opkg.c                   | 10 ++++----
+ 5 files changed, 62 insertions(+), 26 deletions(-)
 
 diff --git a/libopkg/opkg_conf.c b/libopkg/opkg_conf.c
 index f1417e8..3197e8a 100644
@@ -82,7 +82,7 @@ index eec4e81..ebe5f81 100644
  #define OPKG_CONF_DEFAULT_HASH_LEN 1024
  
 diff --git a/libopkg/opkg_download_wget.c b/libopkg/opkg_download_wget.c
-index 3dec766..8718dc3 100644
+index 3dec766..d0337e9 100644
 --- a/libopkg/opkg_download_wget.c
 +++ b/libopkg/opkg_download_wget.c
 @@ -5,6 +5,8 @@
@@ -94,7 +94,54 @@ index 3dec766..8718dc3 100644
     SPDX-License-Identifier: GPL-2.0-or-later
  
     This program is free software; you can redistribute it and/or
-@@ -50,20 +52,20 @@ int opkg_download_backend(const char *src, const char *dest,
+@@ -20,10 +22,13 @@
+ 
+ #include "config.h"
+ 
++#include <stdlib.h>
++#include <string.h>
+ #include <unistd.h>
+ 
+ #include "opkg_download.h"
+ #include "opkg_message.h"
++#include "sprintf_alloc.h"
+ #include "xsystem.h"
+ 
+ /* Download using wget backend.
+@@ -36,10 +41,32 @@
+  * Both the gnu and busybox versions of wget must be supported by this backend,
+  * so we are precluded from using most features anyway.
+  */
++/* curl is a native AmigaDOS program without ixemul: it does not know that
++ * ixemul reads /UP-Term/x as UP-Term:x. Hand it the AmigaDOS spelling of an
++ * absolute destination: the first component is the volume or assign. */
++static const char *amiga_dest(const char *path, char **buf)
++{
++#ifdef __amigaos__
++    const char *slash;
++    size_t vol;
++
++    if (path[0] != '/' || path[1] == '\0')
++        return path;
++    slash = strchr(path + 1, '/');
++    vol = slash ? (size_t)(slash - path - 1) : strlen(path + 1);
++    sprintf_alloc(buf, "%.*s:%s", (int)vol, path + 1, slash ? slash + 1 : "");
++    return *buf;
++#else
++    (void)buf;
++    return path;
++#endif
++}
++
+ int opkg_download_backend(const char *src, const char *dest,
+                           curl_progress_func cb, void *data, int use_cache)
+ {
+     int res;
++    char *adest = NULL;
+     const char *argv[8];
+     int i = 0;
+ 
+@@ -50,20 +77,21 @@ int opkg_download_backend(const char *src, const char *dest,
  
      unlink(dest);
  
@@ -105,6 +152,7 @@ index 3dec766..8718dc3 100644
 -        argv[i++] = "on";
 -    }
 -    argv[i++] = "-O";
+-    argv[i++] = dest;
 +    /* upkg: curl, not wget. -f turns an HTTP error into a non-zero exit, -sS
 +     * is silent but keeps the error text, -L follows redirects (GitHub
 +     * release assets redirect). The proxy options of the wget backend have
@@ -112,10 +160,11 @@ index 3dec766..8718dc3 100644
 +    argv[i++] = "curl";
 +    argv[i++] = "-fsSL";
 +    argv[i++] = "-o";
-     argv[i++] = dest;
++    argv[i++] = amiga_dest(dest, &adest);
      argv[i++] = src;
      argv[i++] = NULL;
      res = xsystem(argv);
++    free(adest);
  
      if (res) {
 -        opkg_msg(ERROR, "Failed to download %s, wget returned %d.\n", src, res);
