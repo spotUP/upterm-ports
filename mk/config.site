@@ -15,7 +15,6 @@ ac_cv_func_vfork_works=yes
 # functions ixemul does not have (cpython-amiga amiga/config.site) ---------
 ac_cv_header_libintl_h=no
 ac_cv_header_sys_lock_h=no
-ac_cv_header_sys_statvfs_h=no
 # measured on grep 3.12: configure accepted these newlib headers from
 # sys-include; ixemul has none of them, and newlib's stdio_ext.h breaks the
 # build (_ELIDABLE_INLINE). gnulib supplies getopt.h and inttypes.h itself.
