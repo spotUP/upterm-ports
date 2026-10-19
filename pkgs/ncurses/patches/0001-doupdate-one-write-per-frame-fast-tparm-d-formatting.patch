@@ -1,0 +1,91 @@
+From 38c788fcacb71708909b4ef5a3490e09d8c959be Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 12:02:37 +0200
+Subject: [PATCH] doupdate: one write per frame, fast tparm %d formatting
+
+newterm leaves the screen in ewInitial and doupdate only moved it to
+ewRunning when resuming from endwin.  A program that never calls endwin
+stayed in ewInitial forever, so _nc_mvcur (lib_mvcur.c) flushed the
+output buffer after every cursor move inside doupdate: one write per
+screen line, visibly line-by-line drawing on the Amiga handler path.
+doupdate now marks the screen ewRunning on its first run.
+
+tparm formatted every %d through snprintf; on a 14 MHz 68020 that is a
+large share of each attribute change (setaf/setab/sgr).  Plain %d now
+uses a local integer-to-ASCII routine.
+---
+ ncurses/tinfo/lib_tparm.c | 34 ++++++++++++++++++++++++++++++----
+ ncurses/tty/tty_update.c  |  8 ++++++++
+ 2 files changed, 38 insertions(+), 4 deletions(-)
+
+diff --git a/ncurses/tinfo/lib_tparm.c b/ncurses/tinfo/lib_tparm.c
+index 22eb7f3..ba01473 100644
+--- a/ncurses/tinfo/lib_tparm.c
++++ b/ncurses/tinfo/lib_tparm.c
+@@ -250,14 +250,40 @@ static NCURSES_INLINE void
+ #undef save_text
+ #endif
+ 
++/*
++ * Plain "%d" is by far the most common number format in terminfo strings;
++ * format it without going through snprintf (slow on small targets).
++ */
++static size_t
++fast_itoa(char *dst, int number)
++{
++    char tmp[16];
++    size_t n = 0, out = 0;
++    unsigned v = (number < 0) ? (unsigned) (-(number + 1)) + 1u : (unsigned) number;
++    if (number < 0)
++	dst[out++] = '-';
++    do {
++	tmp[n++] = (char) ('0' + (v % 10));
++	v /= 10;
++    } while (v != 0);
++    while (n > 0)
++	dst[out++] = tmp[--n];
++    dst[out] = '\0';
++    return out;
++}
++
+ #define save_number(tps, fmt, number, len) \
+ { \
+     size_t s_len = (size_t) len + 30 + strlen(fmt); \
+     get_space(tps, s_len + 1); \
+-    _nc_SPRINTF(TPS(out_buff) + TPS(out_used), \
+-		_nc_SLIMIT(TPS(out_size) - TPS(out_used)) \
+-		fmt, number); \
+-    TPS(out_used) += strlen(TPS(out_buff) + TPS(out_used)); \
++    if (fmt[0] == '%' && fmt[1] == 'd' && fmt[2] == '\0') { \
++	TPS(out_used) += fast_itoa(TPS(out_buff) + TPS(out_used), number); \
++    } else { \
++	_nc_SPRINTF(TPS(out_buff) + TPS(out_used), \
++		    _nc_SLIMIT(TPS(out_size) - TPS(out_used)) \
++		    fmt, number); \
++	TPS(out_used) += strlen(TPS(out_buff) + TPS(out_used)); \
++    } \
+ }
+ 
+ #if NCURSES_EXPANDED
+diff --git a/ncurses/tty/tty_update.c b/ncurses/tty/tty_update.c
+index 93dd597..7c73ec6 100644
+--- a/ncurses/tty/tty_update.c
++++ b/ncurses/tty/tty_update.c
+@@ -828,6 +828,14 @@ TINFO_DOUPDATE(NCURSES_SP_DCL0)
+ 	SP_PARM->_mouse_resume(SP_PARM);
+ 
+ 	SP_PARM->_endwin = ewRunning;
++    } else if (SP_PARM->_endwin == ewInitial) {
++	/*
++	 * First update after newterm: the screen is initialized now, so
++	 * _nc_mvcur must stop flushing the output buffer after every cursor
++	 * move (lib_mvcur.c checks ewInitial).  Otherwise a program that never
++	 * calls endwin writes each screen line separately.
++	 */
++	SP_PARM->_endwin = ewRunning;
+     }
+ #if USE_TRACE_TIMES
+     /* zero the metering machinery */
+-- 
+2.50.1 (Apple Git-155)
+
