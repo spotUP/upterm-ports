@@ -1,0 +1,94 @@
+From ff8127fab401dfe42c93603575c572c0fdf2334d Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 08:00:56 +0200
+Subject: [PATCH] libopkg: a fresh install that fails before unpack returns to
+ not-installed
+
+Stock opkg 0.9.0 sends every failure between prerm and unpack to
+pkg_is_hosed, which writes the package to status as
+"install reinstreq half-installed". dpkg instead runs the new
+package's postrm abort-install and the package is not installed.
+upkg add-ons refuse an old UP-Term base from their preinst, so each
+refusal left a half-installed record behind.
+
+preinst_configure_unwind now runs postrm abort-install for a fresh
+install (abort-upgrade stays undone), and opkg_install_pkg restores the
+package's previous want state and returns without marking it hosed.
+Upgrades still end hosed as before.
+---
+ libopkg/opkg_install.c | 44 +++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 37 insertions(+), 7 deletions(-)
+
+diff --git a/libopkg/opkg_install.c b/libopkg/opkg_install.c
+index 354dc10..69a8211 100644
+--- a/libopkg/opkg_install.c
++++ b/libopkg/opkg_install.c
+@@ -5,6 +5,9 @@
+ 
+    Copyright (C) 2001 University of Southern California
+ 
++   Modified 2026-10-19 for upkg (UP-Term): a fresh install that fails before unpack returns to
++   not-installed (postrm abort-install, as dpkg) instead of leaving a half-installed record.
++
+    SPDX-License-Identifier: GPL-2.0-or-later
+ 
+    This program is free software; you can redistribute it and/or
+@@ -295,13 +298,27 @@ static int preinst_configure(pkg_t * pkg, pkg_t * old_pkg)
+ 
+ static int preinst_configure_unwind(pkg_t * pkg, pkg_t * old_pkg)
+ {
+-    /* DPKG_INCOMPATIBILITY:
+-     * dpkg does the following error unwind, should we?
+-     * pkg->postrm abort-upgrade old-version
+-     * OR pkg->postrm abort-install old-version
+-     * OR pkg->postrm abort-install
++    /* UP-Term (upkg): dpkg's unwind for a fresh install, which is the only case upkg
++     * returns to not-installed (opkg_install_pkg); an upgrade still ends hosed:
++     * pkg->postrm abort-install [config-files version]
++     * DPKG_INCOMPATIBILITY (upgrade, not done): pkg->postrm abort-upgrade old-version
+      */
+-    return 0;
++    int err;
++    char *postrm_args;
++
++    if (old_pkg)
++        return 0;
++    if (pkg->state_status == SS_CONFIG_FILES) {
++        char *pkg_version = pkg_version_str_alloc(pkg);
++        sprintf_alloc(&postrm_args, "abort-install %s", pkg_version);
++        free(pkg_version);
++    } else {
++        postrm_args = xstrdup("abort-install");
++    }
++
++    err = pkg_run_script(pkg, "postrm", postrm_args);
++    free(postrm_args);
++    return err;
+ }
+ 
+ static char *backup_filename_alloc(const char *file_name)
+@@ -1081,7 +1098,20 @@ int opkg_install_pkg(pkg_t * pkg, pkg_t * old_pkg)
+  UNWIND_BACKUP_MODIFIED_CONFFILES:
+     backup_modified_conffiles_unwind(pkg, old_pkg);
+  UNWIND_PREINST_CONFIGURE:
+-    preinst_configure_unwind(pkg, old_pkg);
++    err = preinst_configure_unwind(pkg, old_pkg);
++    /* UP-Term (upkg): a fresh install that fails before its data is unpacked (preinst refused,
++     * conffile backup, file clash) has changed nothing on disk once postrm abort-install ran.
++     * Like dpkg it goes back to what it was, so no half-installed record is left in status.
++     * The caller already asked for install (opkg_install_by_name); a package that stays
++     * not-installed with want install is still written to status, so the wish goes too:
++     * unknown for a package never installed, deinstall for one that kept only its conffiles. */
++    if (!old_pkg && !err) {
++        pkg->state_want = pkg->state_status == SS_CONFIG_FILES ? SW_DEINSTALL : SW_UNKNOWN;
++        pkg->state_flag &= ~(SF_REINSTREQ | SF_FILELIST_CHANGED | SF_USER);
++        opkg_msg(NOTICE, "%s was not installed.\n", pkg->name);
++        sigprocmask(SIG_UNBLOCK, &newset, &oldset);
++        return -1;
++    }
+  UNWIND_PRERM_UPGRADE_OLD_PKG:
+     prerm_upgrade_old_pkg_unwind(pkg, old_pkg);
+  pkg_is_hosed:
+-- 
+2.50.1 (Apple Git-155)
+
