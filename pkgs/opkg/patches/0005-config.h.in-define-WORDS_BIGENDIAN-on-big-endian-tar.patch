@@ -1,0 +1,44 @@
+From d6fd3d3ecb0437b404cc02cb0b2c912ca5a923f8 Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Mon, 19 Oct 2026 02:28:04 +0200
+Subject: [PATCH 5/5] config.h.in: define WORDS_BIGENDIAN on big-endian targets
+ so sha256.c does not byte-swap
+
+---
+ CMakeLists.txt | 7 +++++++
+ config.h.in    | 1 +
+ 2 files changed, 8 insertions(+)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d25f5dc..7c1135e 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -45,6 +45,13 @@ set(VARDIR "/var" CACHE STRING "vardir")
+ # This was ported from autoconf (it used to be "host_cpu"), but it should be target_cpu: https://bugzilla.yoctoproject.org/show_bug.cgi?id=15784
+ set(HOST_CPU_STR ${CMAKE_HOST_SYSTEM_PROCESSOR} CACHE STRING "Host CPU architecture")
+ 
++# libopkg/sha256.c switches on WORDS_BIGENDIAN, which autotools used to define. Ask CMake for the
++# byte order of the target (CMAKE_C_BYTE_ORDER comes from the compiler ABI detection, so it also
++# holds when cross compiling).
++if(CMAKE_C_BYTE_ORDER STREQUAL "BIG_ENDIAN")
++	set(WORDS_BIGENDIAN 1)
++endif()
++
+ configure_file(config.h.in config.h)
+ configure_file(libopkg.pc.in libopkg.pc @ONLY)
+ include(GNUInstallDirs)
+diff --git a/config.h.in b/config.h.in
+index af29881..856159b 100644
+--- a/config.h.in
++++ b/config.h.in
+@@ -11,6 +11,7 @@
+ #cmakedefine01 USE_SOLVER_INTERNAL
+ #cmakedefine01 WITH_SHA256
+ #cmakedefine01 WITH_GPGME
++#cmakedefine WORDS_BIGENDIAN 1
+ 
+ #cmakedefine DATADIR "@DATADIR@"
+ #cmakedefine SYSCONFDIR "@SYSCONFDIR@"
+-- 
+2.50.1 (Apple Git-155)
+

@@ -21,6 +21,8 @@ opkg_CONFIGURE := -DWITH_CURL=OFF -DWITH_SSLCURL=OFF -DWITH_GPGME=OFF -DUSE_SOLV
 	-DSYSCONFDIR=/UP-Term/etc -DVARDIR=/UP-Term/pkg/upkg
 opkg_LIBS      := -llzma -lbz2 -lz
 opkg_CHECK_SH_BIN := bin/upkg
+# check/byte_order.sh reads the m68k config.h, so the cross build must be configured first
+$(STATE)/host-opkg.expected: $(STATE)/opkg.configured
 opkg_BINS      := bin/upkg
 opkg_STACK     := 131072
 opkg_HOST_DEPS := xz libarchive
