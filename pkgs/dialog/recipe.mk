@@ -20,3 +20,5 @@ dialog_HOST_CONFIGURE := --with-ncursesw --disable-nls --disable-extras --disabl
 	LDFLAGS="-L$(HOST_NCURSES)/lib"
 dialog_BINS      := bin/dialog
 dialog_STACK     := 65536
+# upkg-ui (pkgs/upkg-ui) replaced dialog in upkg-ask: built and checked, no longer shipped
+dialog_NO_KIT    := 1
