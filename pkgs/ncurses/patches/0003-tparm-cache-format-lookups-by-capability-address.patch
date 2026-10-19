@@ -1,0 +1,80 @@
+From b6f2755f1198b0ba52a89a12ca705e80acd126f7 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 19:44:45 +0200
+Subject: [PATCH 3/6] tparm: cache format lookups by capability address
+
+Capability strings reach tparm_setup as the same pointers every time, but the
+format cache is a tree keyed by strcmp: about log2(formats) string compares per
+call on every colour and cursor move. A direct-mapped cache keyed by the string
+address skips the walk; a hit is confirmed with one strcmp against the cached
+format, so a freed and reused address still yields the right entry. Output
+bytes are unchanged.
+---
+ ncurses/tinfo/lib_tparm.c | 36 +++++++++++++++++++++++++++++++++++-
+ 1 file changed, 35 insertions(+), 1 deletion(-)
+
+diff --git a/ncurses/tinfo/lib_tparm.c b/ncurses/tinfo/lib_tparm.c
+index ff7c780..02b1168 100644
+--- a/ncurses/tinfo/lib_tparm.c
++++ b/ncurses/tinfo/lib_tparm.c
+@@ -198,6 +198,24 @@ static TPARM_DATA **delete_tparm;
+ 
+ static char dummy[] = "";	/* avoid const-cast */
+ 
++/*
++ * Capability strings reach tparm_setup as the same pointers every time (the
++ * terminfo entry owns them), but the format cache is a tree keyed by strcmp:
++ * ~log2(formats) string compares per call, on every colour and cursor move.
++ * A direct-mapped cache keyed by the string's address skips the walk.  A hit
++ * is confirmed with one strcmp against the cached format, so a freed and
++ * reused address still yields the right entry.
++ */
++#define TPARM_PTR_SIZE 64
++static struct {
++    const char *key;
++    void *entry;
++} tparm_ptr_cache[TPARM_PTR_SIZE];
++NCURSES_EXPORT_VAR(long) _nc_tparm_lookups = 0;	/* tparm_setup format lookups */
++NCURSES_EXPORT_VAR(long) _nc_tparm_walks = 0;	/* ... that walked the tree */
++/* capability strings sit a few bytes apart: mix the address before taking the slot */
++#define TPARM_PTR_SLOT(s) ((((unsigned long) (s) * 2654435761UL) >> 20) % TPARM_PTR_SIZE)
++
+ #if HAVE_TSEARCH
+ static int
+ cmp_format(const void *p, const void *q)
+@@ -225,6 +243,7 @@ _nc_free_tparm(TERMINAL *termp)
+ {
+     TPARM_STATE *tps = get_tparm_state(termp);
+ #if HAVE_TSEARCH
++    memset(tparm_ptr_cache, 0, sizeof(tparm_ptr_cache));
+     if (MyCount != 0) {
+ 	delete_tparm = typeCalloc(TPARM_DATA *, MyCount);
+ 	if (delete_tparm != NULL) {
+@@ -692,8 +711,23 @@ tparm_setup(TERMINAL *term, const char *string, TPARM_DATA *result)
+ 	TPARM_DATA *fs;
+ 	void *ft;
+ 
++	unsigned slot = (unsigned) TPARM_PTR_SLOT(string);
++
+ 	result->format = string;
+-	if ((ft = tfind(result, &MyCache, cmp_format)) != NULL) {
++	++_nc_tparm_lookups;
++	if (tparm_ptr_cache[slot].key == string
++	    && !strcmp(((TPARM_DATA *) tparm_ptr_cache[slot].entry)->format,
++		       string)) {
++	    ft = &tparm_ptr_cache[slot].entry;
++	} else {
++	    ++_nc_tparm_walks;
++	    ft = tfind(result, &MyCache, cmp_format);
++	    if (ft != NULL) {
++		tparm_ptr_cache[slot].key = string;
++		tparm_ptr_cache[slot].entry = *(TPARM_DATA **) ft;
++	    }
++	}
++	if (ft != NULL) {
+ 	    size_t len2;
+ 	    fs = *(TPARM_DATA **) ft;
+ 	    *result = *fs;
+-- 
+2.50.1 (Apple Git-155)
+
