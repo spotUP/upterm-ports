@@ -1,0 +1,150 @@
+From b7aa0629ef6d62b06a0c9062c49a63d37c6dfc72 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 20:56:08 +0200
+Subject: [PATCH 8/8] doupdate: bracket a frame that changes the screen with
+ the Sync capability (synchronized update)
+
+A terminal that declares the extended capability Sync (vtcon: ESC[?2026h/l)
+shows the bytes between Sync(1) and Sync(0) at once.  ncurses never emitted
+it, so a frame split across two writes by the application was drawn row by
+row.  The pair goes into the same output buffer around a frame that changes
+the screen: same number of writes, no bytes for a frame that draws nothing
+or on a terminal without Sync.
+---
+ ncurses/curses.priv.h    |  3 ++
+ ncurses/tty/tty_update.c | 79 ++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 82 insertions(+)
+
+diff --git a/ncurses/curses.priv.h b/ncurses/curses.priv.h
+index 9ebaf0c..1f30f0d 100644
+--- a/ncurses/curses.priv.h
++++ b/ncurses/curses.priv.h
+@@ -1130,6 +1130,9 @@ typedef struct screen {
+ 	chtype		_ok_attributes; /* valid attributes for terminal     */
+ 	chtype		_xmc_suppress;	/* attributes to suppress if xmc     */
+ 	chtype		_xmc_triggers;	/* attributes to process if xmc	     */
++	bool		_sync_known;	/* _sync_on/_sync_off looked up      */
++	char		_sync_on[24];	/* Sync(1): begin synchronized update */
++	char		_sync_off[24];	/* Sync(0): end synchronized update  */
+ 	chtype *	_acs_map;	/* the real alternate-charset map    */
+ 	bool *		_screen_acs_map;
+ 
+diff --git a/ncurses/tty/tty_update.c b/ncurses/tty/tty_update.c
+index 0019271..e1c3436 100644
+--- a/ncurses/tty/tty_update.c
++++ b/ncurses/tty/tty_update.c
+@@ -743,11 +743,75 @@ PutRange(NCURSES_SP_DCLx
+ 		win->_line[row].lastchar = _NOCHANGE; \
+ 		if_USE_SCROLL_HINTS(win->_line[row].oldindex = row)
+ 
++/*
++ * Synchronized updates: a terminal that declares the extended capability
++ * Sync (vtcon: ESC[?2026h / ESC[?2026l) shows everything between the two
++ * strings in one go.  doupdate brackets a frame that changes the screen with
++ * Sync(1) before the first byte and Sync(0) after the last, inside the same
++ * output buffer, so the frame is still one write and the terminal never shows
++ * half of it.  A terminal without Sync gets no bytes at all.
++ */
++static bool
++sync_strings(SCREEN *sp)
++{
++    if (!sp->_sync_known) {
++	NCURSES_CONST char *cap = tigetstr("Sync");
++	char *on, *off;
++
++	sp->_sync_known = TRUE;
++	sp->_sync_on[0] = sp->_sync_off[0] = '\0';
++	if (cap != NULL && cap != (char *) (-1)) {	/* present, not cancelled */
++	    on = TIPARM_1(cap, 1);
++	    if (on != NULL && strlen(on) < sizeof(sp->_sync_on)) {
++		strcpy(sp->_sync_on, on);
++		off = TIPARM_1(cap, 0);
++		if (off != NULL && strlen(off) < sizeof(sp->_sync_off))
++		    strcpy(sp->_sync_off, off);
++		else
++		    sp->_sync_on[0] = '\0';
++	    }
++	}
++    }
++    return sp->_sync_on[0] != '\0';
++}
++
++static bool
++screen_has_changes(SCREEN *sp)
++{
++    int i;
++    int n = screen_lines(sp);
++
++    if (CurScreen(sp)->_clear || NewScreen(sp)->_clear)
++	return TRUE;
++    for (i = 0; i < n; i++) {
++	if ((i <= NewScreen(sp)->_maxy && NewScreen(sp)->_line[i].firstchar != _NOCHANGE)
++	    || (i <= CurScreen(sp)->_maxy && CurScreen(sp)->_line[i].firstchar != _NOCHANGE))
++	    return TRUE;
++    }
++    return FALSE;
++}
++
++static bool
++sync_begin(NCURSES_SP_DCLx size_t *mark)
++/* start a synchronized update when the terminal has Sync and the frame draws */
++{
++    if (SP_PARM->out_buffer == NULL
++	|| !sync_strings(SP_PARM)
++	|| !screen_has_changes(SP_PARM))
++	return FALSE;
++    *mark = SP_PARM->out_inuse;
++    NCURSES_SP_NAME(tputs) (NCURSES_SP_ARGx SP_PARM->_sync_on, 1,
++			    NCURSES_SP_NAME(_nc_outch));
++    return TRUE;
++}
++
+ NCURSES_EXPORT(int)
+ TINFO_DOUPDATE(NCURSES_SP_DCL0)
+ {
+     int i;
+     int nonempty;
++    size_t sync_mark = 0;
++    bool synced = FALSE;
+ #if USE_TRACE_TIMES
+     struct tms before, after;
+ #endif /* USE_TRACE_TIMES */
+@@ -1015,6 +1079,7 @@ TINFO_DOUPDATE(NCURSES_SP_DCL0)
+ 
+     nonempty = 0;
+     if (CurScreen(SP_PARM)->_clear || NewScreen(SP_PARM)->_clear) {	/* force refresh ? */
++	synced = sync_begin(NCURSES_SP_ARGx &sync_mark);
+ 	ClrUpdate(NCURSES_SP_ARG);
+ 	CurScreen(SP_PARM)->_clear = FALSE;	/* reset flag */
+ 	NewScreen(SP_PARM)->_clear = FALSE;	/* reset flag */
+@@ -1029,6 +1094,8 @@ TINFO_DOUPDATE(NCURSES_SP_DCL0)
+ 
+ 	if (check_pending(NCURSES_SP_ARG))
+ 	    goto cleanup;
++	/* after the typeahead check: it flushes the buffer when input is pending */
++	synced = sync_begin(NCURSES_SP_ARGx &sync_mark);
+ 
+ 	nonempty = Min(screen_lines(SP_PARM), NewScreen(SP_PARM)->_maxy + 1);
+ 
+@@ -1098,6 +1165,18 @@ TINFO_DOUPDATE(NCURSES_SP_DCL0)
+ #endif
+ 	UpdateAttrs(SP_PARM, normal);
+ 
++    if (synced) {
++	size_t on_len = strlen(SP_PARM->_sync_on);
++
++	if (SP_PARM->out_inuse == sync_mark + on_len
++	    && memcmp(SP_PARM->out_buffer + sync_mark, SP_PARM->_sync_on, on_len) == 0) {
++	    SP_PARM->out_inuse = sync_mark;	/* nothing was drawn: no Sync */
++	} else {
++	    NCURSES_SP_NAME(tputs) (NCURSES_SP_ARGx SP_PARM->_sync_off, 1,
++				    NCURSES_SP_NAME(_nc_outch));
++	}
++    }
++
+     NCURSES_SP_NAME(_nc_flush) (NCURSES_SP_ARG);
+     WINDOW_ATTRS(CurScreen(SP_PARM)) = WINDOW_ATTRS(NewScreen(SP_PARM));
+ 
+-- 
+2.50.1 (Apple Git-155)
+
