@@ -25,11 +25,14 @@ git_BUILD_CMD = $(MAKE) -C $(git_OBJ) -j$(JOBS) $(git_FLAGS) uname_S=AmigaOS una
 # SKIP_DASHED_BUILT_INS drops the dashed names of the built-ins, but upstream's Makefile
 # still installs git-upload-pack, git-receive-pack and git-upload-archive in bin/ (the
 # `ALL_COMMANDS_TO_INSTALL` else-branch): a clone/fetch/push over file:// or ssh runs
-# `sh -c "git-upload-pack <dir>"` on the remote side, so they must be on PATH. git.c
-# dispatches on argv[0], so each is a copy of git (the AmigaOS volume has no hard links;
-# NO_INSTALL_HARDLINKS is set). The templates are what `git init` copies into .git.
+# `sh -c "git-upload-pack <dir>"` on the remote side, so they must be on PATH. The AmigaOS
+# volume has no hard links (NO_INSTALL_HARDLINKS is set), and a full copy of git per name
+# costs 3.7 MB each, so each name is a two-line #!/bin/sh script that runs `git <command>`
+# (ixemul's __load_seg runs #! scripts through shell_path_alias). The templates are what
+# `git init` copies into .git.
 git_INSTALL_CMD = mkdir -p $(SYSROOT)$(PREFIX)/bin && cp $(git_OBJ)/git $(SYSROOT)$(PREFIX)/bin/git && \
-	for h in $(git_HELPERS); do cp $(git_OBJ)/git $(SYSROOT)$(PREFIX)/bin/$$h; done && \
+	for h in $(git_HELPERS); do printf '#!/bin/sh\nexec git %s "$$@"\n' $${h#git-} > $(SYSROOT)$(PREFIX)/bin/$$h && \
+	chmod 755 $(SYSROOT)$(PREFIX)/bin/$$h || exit 1; done && \
 	$(MAKE) -C $(git_OBJ)/templates install DESTDIR=$(SYSROOT) prefix=$(PREFIX) NO_GETTEXT=1 SHELL_PATH=/bin/sh
 git_HOST_CONFIGURE_CMD = (cd $(git_SRC) && tar cf - --exclude=.git .) | tar xf - -C $(git_HOBJ) && chmod -R u+w $(git_HOBJ)
 git_HOST_BUILD_CMD = $(MAKE) -C $(git_HOBJ) -j$(JOBS) NO_OPENSSL=1 NO_CURL=1 NO_EXPAT=1 NO_GETTEXT=1 NO_TCLTK=1 NO_PERL=1 NO_PYTHON=1 \
