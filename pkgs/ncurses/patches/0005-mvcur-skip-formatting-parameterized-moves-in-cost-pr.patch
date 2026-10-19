@@ -1,0 +1,110 @@
+From ff8803b7eaac145c26bfb62e7d011d829de1d7b3 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 19:45:11 +0200
+Subject: [PATCH 5/6] mvcur: skip formatting parameterized moves in cost probes
+
+Cost probes in relative_move (target from _nc_str_null) get their costs from
+the _xxx_cost fields set by _nc_mvcur_init; a format that cannot expand already
+costs infinity there, and expansion does not depend on the parameter values.
+Output bytes are unchanged.
+---
+ ncurses/tty/lib_mvcur.c | 34 +++++++++++++++++++++++-----------
+ 1 file changed, 23 insertions(+), 11 deletions(-)
+
+diff --git a/ncurses/tty/lib_mvcur.c b/ncurses/tty/lib_mvcur.c
+index bddccc5..91dfeef 100644
+--- a/ncurses/tty/lib_mvcur.c
++++ b/ncurses/tty/lib_mvcur.c
+@@ -562,6 +562,8 @@ repeated_append(string_desc * target, int total, int num, int repeat, const char
+  */
+ #define LASTTAB(fr)	((fr > 0) ? ((fr - 1) / init_tabs) * init_tabs : -1)
+ 
++NCURSES_EXPORT_VAR(long) _nc_mvcur_probe_skips = 0;	/* parameterized strings not formatted in cost probes */
++
+ static int
+ relative_move(NCURSES_SP_DCLx
+ 	      string_desc * target,
+@@ -574,6 +576,16 @@ relative_move(NCURSES_SP_DCLx
+ {
+     string_desc save;
+     int n, vcost = 0, hcost = 0;
++    /*
++     * A cost probe (target made by _nc_str_null) only needs the costs, which
++     * come from the _xxx_cost fields set by _nc_mvcur_init.  Formatting a
++     * parameterized string there is wasted work: a format that cannot be
++     * expanded already has an infinite cost, and whether it expands does not
++     * depend on the parameter values.
++     */
++    bool probe = (target->s_head == NULL);
++
++#define ParmCat(dst, cap) (probe ? (++_nc_mvcur_probe_skips, 1) : _nc_safe_strcat(dst, cap))
+ 
+     (void) _nc_str_copy(&save, target);
+ 
+@@ -581,7 +593,7 @@ relative_move(NCURSES_SP_DCLx
+ 	vcost = NC_INFINITY;
+ 
+ 	if (row_address != NULL
+-	    && _nc_safe_strcat(target, TIPARM_1(row_address, to_y))) {
++	    && ParmCat(target, TIPARM_1(row_address, to_y))) {
+ 	    vcost = SP_PARM->_vpa_cost;
+ 	}
+ 
+@@ -590,8 +602,8 @@ relative_move(NCURSES_SP_DCLx
+ 
+ 	    if (parm_down_cursor
+ 		&& SP_PARM->_cud_cost < vcost
+-		&& _nc_safe_strcat(_nc_str_copy(target, &save),
+-				   TIPARM_1(parm_down_cursor, n))) {
++		&& ParmCat(_nc_str_copy(target, &save),
++			   TIPARM_1(parm_down_cursor, n))) {
+ 		vcost = SP_PARM->_cud_cost;
+ 	    }
+ 
+@@ -606,8 +618,8 @@ relative_move(NCURSES_SP_DCLx
+ 
+ 	    if (parm_up_cursor
+ 		&& SP_PARM->_cuu_cost < vcost
+-		&& _nc_safe_strcat(_nc_str_copy(target, &save),
+-				   TIPARM_1(parm_up_cursor, n))) {
++		&& ParmCat(_nc_str_copy(target, &save),
++			   TIPARM_1(parm_up_cursor, n))) {
+ 		vcost = SP_PARM->_cuu_cost;
+ 	    }
+ 
+@@ -630,8 +642,8 @@ relative_move(NCURSES_SP_DCLx
+ 	hcost = NC_INFINITY;
+ 
+ 	if (column_address
+-	    && _nc_safe_strcat(_nc_str_copy(target, &save),
+-			       TIPARM_1(column_address, to_x))) {
++	    && ParmCat(_nc_str_copy(target, &save),
++		       TIPARM_1(column_address, to_x))) {
+ 	    hcost = SP_PARM->_hpa_cost;
+ 	}
+ 
+@@ -640,8 +652,8 @@ relative_move(NCURSES_SP_DCLx
+ 
+ 	    if (parm_right_cursor
+ 		&& SP_PARM->_cuf_cost < hcost
+-		&& _nc_safe_strcat(_nc_str_copy(target, &save),
+-				   TIPARM_1(parm_right_cursor, n))) {
++		&& ParmCat(_nc_str_copy(target, &save),
++			   TIPARM_1(parm_right_cursor, n))) {
+ 		hcost = SP_PARM->_cuf_cost;
+ 	    }
+ 
+@@ -733,8 +745,8 @@ relative_move(NCURSES_SP_DCLx
+ 
+ 	    if (parm_left_cursor
+ 		&& SP_PARM->_cub_cost < hcost
+-		&& _nc_safe_strcat(_nc_str_copy(target, &save),
+-				   TIPARM_1(parm_left_cursor, n))) {
++		&& ParmCat(_nc_str_copy(target, &save),
++			   TIPARM_1(parm_left_cursor, n))) {
+ 		hcost = SP_PARM->_cub_cost;
+ 	    }
+ 
+-- 
+2.50.1 (Apple Git-155)
+
