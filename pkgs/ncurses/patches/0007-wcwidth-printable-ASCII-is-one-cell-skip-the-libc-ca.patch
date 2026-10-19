@@ -1,0 +1,30 @@
+From bef77274a3f7ad48556922ad61181edb30a665ca Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 20:41:15 +0200
+Subject: [PATCH] wcwidth: printable ASCII is one cell, skip the libc call per
+ cell
+
+doupdate calls wcwidth once per painted cell through _nc_wacs_width. Printable
+ASCII is one cell in every locale, so answer it inline. Output bytes are
+unchanged; other characters still go to wcwidth.
+---
+ ncurses/curses.priv.h | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/ncurses/curses.priv.h b/ncurses/curses.priv.h
+index a8bc0fc..9ebaf0c 100644
+--- a/ncurses/curses.priv.h
++++ b/ncurses/curses.priv.h
+@@ -2013,7 +2013,8 @@ extern NCURSES_EXPORT(void) _nc_expanded (void);
+ #if !NCURSES_WCWIDTH_GRAPHICS
+ extern NCURSES_EXPORT(int) _nc_wacs_width(wchar_t);
+ #else
+-#define _nc_wacs_width(ch) wcwidth(ch)
++/* printable ASCII is one cell in every locale: skip the libc wcwidth call doupdate makes per cell (~70 us on a 68020) */
++#define _nc_wacs_width(ch) (((ch) >= 0x20 && (ch) < 0x7f) ? 1 : wcwidth(ch))
+ #endif
+ 
+ /* charable.c */
+-- 
+2.50.1 (Apple Git-155)
+
