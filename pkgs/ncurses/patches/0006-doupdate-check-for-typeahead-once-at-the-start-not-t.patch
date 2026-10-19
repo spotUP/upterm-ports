@@ -1,0 +1,52 @@
+From d43013a61504b5fcfac314b0dda2f06ed9c717b4 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 19:45:11 +0200
+Subject: [PATCH 6/6] doupdate: check for typeahead once at the start, not
+ twice
+
+The line-breakout check ran twice back to back because the counter started at
+CHECK_INTERVAL; nothing is written between the two. Each check is a select()
+round trip. Output bytes are unchanged.
+---
+ ncurses/tty/tty_update.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/ncurses/tty/tty_update.c b/ncurses/tty/tty_update.c
+index 7c73ec6..0019271 100644
+--- a/ncurses/tty/tty_update.c
++++ b/ncurses/tty/tty_update.c
+@@ -372,6 +372,8 @@ PutAttrChar(NCURSES_SP_DCLx CARG_CH_T ch)
+     }
+ }
+ 
++NCURSES_EXPORT_VAR(long) _nc_typeahead_checks = 0;	/* line-breakout checks run */
++
+ static bool
+ check_pending(NCURSES_SP_DCL0)
+ /* check for pending input */
+@@ -386,6 +388,7 @@ check_pending(NCURSES_SP_DCL0)
+     if (SP_PARM->_fifohold != 0)
+ 	return FALSE;
+ 
++    ++_nc_typeahead_checks;
+     if (SP_PARM->_checkfd >= 0) {
+ #if USE_FUNC_POLL
+ 	struct pollfd fds[1];
+@@ -1016,7 +1019,13 @@ TINFO_DOUPDATE(NCURSES_SP_DCL0)
+ 	CurScreen(SP_PARM)->_clear = FALSE;	/* reset flag */
+ 	NewScreen(SP_PARM)->_clear = FALSE;	/* reset flag */
+     } else {
+-	int changedlines = CHECK_INTERVAL;
++	/*
++	 * The check below is the first of the line-breakout checks, so the
++	 * counter starts at zero: starting it at CHECK_INTERVAL repeated the
++	 * check at line 0 with nothing written in between.  A check is a
++	 * console round trip (select/WaitForChar), not free.
++	 */
++	int changedlines = 0;
+ 
+ 	if (check_pending(NCURSES_SP_ARG))
+ 	    goto cleanup;
+-- 
+2.50.1 (Apple Git-155)
+
