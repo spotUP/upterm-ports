@@ -1,0 +1,117 @@
+From 8e05c40b26c2f9d59a67351e6376964429c987d3 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 09:12:36 +0200
+Subject: [PATCH] No fork on AmigaOS: dlg_popen by posix_spawnp, background
+ mode runs in the foreground
+
+ixemul has only vfork, so fork() fails at run time (check_bin: links fork).
+dlg_popen spawns sh through libixcompat's posix_spawnp with the child's
+descriptor work as spawn actions. dlg_killall_bg cannot detach a copy, so
+the remaining callbacks run to their end in this process.
+---
+ prgbox.c  | 44 ++++++++++++++++++++++++++++++++++++++++++++
+ ui_getc.c | 11 +++++++++++
+ 2 files changed, 55 insertions(+)
+
+diff --git a/prgbox.c b/prgbox.c
+index 382533b..00a09cf 100644
+--- a/prgbox.c
++++ b/prgbox.c
+@@ -23,6 +23,11 @@
+ 
+ #include <dlg_internals.h>
+ 
++#ifdef __amigaos__
++#include <spawn.h>
++extern char **environ;
++#endif
++
+ static void
+ reapchild(int sig)
+ {
+@@ -40,7 +45,45 @@ dlg_popen(const char *command, const char *type)
+ 
+     if ((*type == 'r' || *type == 'w') && pipe(fd) == 0) {
+ 	char *blob;
++#ifdef __amigaos__
++	/* ixemul has no fork: posix_spawnp (libixcompat, over vfork) with the
++	   forked child's descriptor work as spawn actions. */
++	posix_spawn_file_actions_t fa;
++	pid_t pid;
++	int err = -1;
+ 
++	posix_spawn_file_actions_init(&fa);
++	if (*type == 'r') {
++	    posix_spawn_file_actions_adddup2(&fa, fd[1], STDOUT_FILENO);
++	    posix_spawn_file_actions_adddup2(&fa, STDOUT_FILENO, STDERR_FILENO);
++	    posix_spawn_file_actions_addclose(&fa, fd[0]);
++	    if (fd[1] != STDOUT_FILENO)
++		posix_spawn_file_actions_addclose(&fa, fd[1]);
++	} else {
++	    posix_spawn_file_actions_adddup2(&fa, fd[0], STDIN_FILENO);
++	    posix_spawn_file_actions_addclose(&fa, fd[1]);
++	    if (fd[0] != STDIN_FILENO)
++		posix_spawn_file_actions_addclose(&fa, fd[0]);
++	    posix_spawn_file_actions_addclose(&fa, STDERR_FILENO);
++	}
++	if ((blob = malloc(10 + strlen(command))) != NULL) {
++	    char **argv;
++	    sprintf(blob, "sh -c \"%s\"", command);
++	    if ((argv = dlg_string_to_argv(blob)) != NULL)
++		err = posix_spawnp(&pid, "sh", &fa, NULL, argv, environ);
++	}
++	posix_spawn_file_actions_destroy(&fa);
++	if (err != 0) {
++	    (void) close(fd[0]);
++	    (void) close(fd[1]);
++	} else if (*type == 'r') {
++	    result = fdopen(fd[0], type);
++	    (void) close(fd[1]);
++	} else {
++	    result = fdopen(fd[1], type);
++	    (void) close(fd[0]);
++	}
++#else
+ 	switch (fork()) {
+ 	case -1:		/* Error. */
+ 	    (void) close(fd[0]);
+@@ -85,6 +128,7 @@ dlg_popen(const char *command, const char *type)
+ 	    }
+ 	    break;
+ 	}
++#endif
+     }
+ 
+     return result;
+diff --git a/ui_getc.c b/ui_getc.c
+index c2a69a2..fafb21b 100644
+--- a/ui_getc.c
++++ b/ui_getc.c
+@@ -609,6 +609,16 @@ dlg_killall_bg(int *retval)
+ 	    }
+ 	}
+ 	if (dialog_state.getc_callbacks != NULL) {
++#ifdef __amigaos__
++	    /* ixemul has no fork, so no detached copy: the callbacks run to
++	       their end in this process, the caller waits for them, and no
++	       process id is printed for a script to kill. */
++	    while (dialog_state.getc_callbacks != NULL) {
++		int fkey = 0;
++		dlg_getc_callbacks(ERR, fkey, retval);
++		napms(1000);
++	    }
++#else
+ 	    int pid;
+ 
+ 	    refresh();
+@@ -660,6 +670,7 @@ dlg_killall_bg(int *retval)
+ 		    }
+ 		}
+ 	    }
++#endif
+ 	}
+     }
+ }
+-- 
+2.50.1 (Apple Git-155)
+
