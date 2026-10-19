@@ -25,6 +25,7 @@ sysroot: ixcompat ncurses
 test:
 	python3 tools/test_m68k_scan.py
 	sh tools/test_recipe_var.sh
+	sh tools/test_check_bin.sh
 	cc -Wall -Wextra -o build/test_chrome pkgs/upkg-ui/src/test_chrome.c pkgs/upkg-ui/src/chrome.c && build/test_chrome
 
 sizes:

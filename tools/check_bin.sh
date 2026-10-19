@@ -27,6 +27,13 @@ mkdir -p "$(dirname "$TSV")"
 for bin; do
 	name=$(basename "$bin")
 	if [ ! -f "$bin" ]; then bad "missing: $bin"; continue; fi
+	# a #!/bin/sh script (git's dashed helpers run `git <command>`) has no
+	# code to check: it must be executable and name /bin/sh
+	if [ "$(head -c 2 "$bin")" = '#!' ]; then
+		if [ "$(head -n 1 "$bin")" = '#!/bin/sh' ] && [ -x "$bin" ]; then ok "#!/bin/sh script"
+		else bad "script without an executable #!/bin/sh line"; fi
+		continue
+	fi
 	if [ "$(od -An -tx1 -N4 "$bin" | tr -d ' \n')" = 000003f3 ]; then ok hunk
 	else bad "not a hunk executable"; continue; fi
 	if strings -a "$bin" | grep -q 'ixemul\.library$'; then ok ixemul
