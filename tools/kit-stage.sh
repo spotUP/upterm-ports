@@ -25,7 +25,7 @@ KIT=$B/kit/userland
 KSRC=$B/kit/userland-src
 rm -rf "$KIT" "$KSRC"
 mkdir -p "$KIT/bin" "$KIT/licenses" "$KSRC/ports"
-var() { make -s -C "$ROOT" "print-$1-$2"; }
+. "$ROOT/tools/recipe-var.sh"
 
 for p in $PKGS; do
 	# <p>_NO_KIT: built and checked, not shipped

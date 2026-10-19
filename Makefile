@@ -24,6 +24,7 @@ sysroot: ixcompat ncurses
 # host tests of the build tools (m68k_scan.py's flow rules)
 test:
 	python3 tools/test_m68k_scan.py
+	sh tools/test_recipe_var.sh
 	cc -Wall -Wextra -o build/test_chrome pkgs/upkg-ui/src/test_chrome.c pkgs/upkg-ui/src/chrome.c && build/test_chrome
 
 sizes:
@@ -34,8 +35,10 @@ sizes:
 kit-stage:
 	ROOT=$(ROOT) B=$(B) STATE=$(STATE) SYSROOT=$(SYSROOT) PREFIX=$(PREFIX) SRC=$(SRC) \
 	IXEMUL=$(IXEMUL) PKGS="$(PKGS)" sh tools/kit-stage.sh
+# print-<variable>: the value of exactly that variable (print-upkg-ui_OWN), as
+# tools/recipe-var.sh reads it; a package name may hold a "-"
 print-%:
-	@printf '%s\n' '$($(subst -,_,$(patsubst print-%,%,$@)))'
+	@printf '%s\n' '$($*)'
 
 clean:
 	rm -rf $(OBJ) $(HOSTB) $(STATE) $(EXPECT) $(SYSROOT) $(SRC) $(B)/kit
