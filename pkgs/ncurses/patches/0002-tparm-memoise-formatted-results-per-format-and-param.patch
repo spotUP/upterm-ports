@@ -1,0 +1,165 @@
+From b7ac7c537f0e9449f7b67a4a129db752a272497a Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 12:24:02 +0200
+Subject: [PATCH 2/2] tparm: memoise formatted results per format and parameter
+ tuple
+
+tparam_internal interprets the whole format program on every call. On a
+68020 that costs about 0.7 ms per call for set_a_foreground, set_a_background
+and set_attributes, and a full-screen redraw with syntax colouring makes
+three to four such calls per colour change, so the terminal output phase of
+a page scroll spent most of its time formatting the same few sequences.
+
+Formatting is a pure function of (format, parameters) unless the format
+reads static or dynamic variables (%P, %g). Each entry of the per-format
+analysis cache now carries a small direct-mapped memo of results, filled on
+a miss and returned on a hit. Formats with string parameters or variable
+access are never memoised; results longer than the memo text are not kept.
+---
+ ncurses/tinfo/lib_tparm.c | 79 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 79 insertions(+)
+
+diff --git a/ncurses/tinfo/lib_tparm.c b/ncurses/tinfo/lib_tparm.c
+index ba01473..ff7c780 100644
+--- a/ncurses/tinfo/lib_tparm.c
++++ b/ncurses/tinfo/lib_tparm.c
+@@ -129,6 +129,23 @@ NCURSES_EXPORT_VAR(int) _nc_tparm_err = 0;
+ #define isLOWER(c) ((c) >= 'a' && (c) <= 'z')
+ #define tc_BUMP()  if (level < 0 && number < 2) number++
+ 
++/*
++ * Formatting a capability is a pure function of the format and its numeric
++ * parameters unless the format reads static or dynamic variables (%P, %g).
++ * Each cached format keeps a small direct-mapped memo of results, so that a
++ * parameter tuple seen before (set_a_foreground for the same color,
++ * set_attributes for the same flags, cursor_address for the same cell) costs a
++ * lookup instead of a full interpretation of the format string.
++ */
++#define TPARM_MEMO_SIZE 16
++#define TPARM_MEMO_TEXT 48
++
++typedef struct {
++    int used;
++    TPARM_ARG param[NUM_PARM];
++    char text[TPARM_MEMO_TEXT];
++} TPARM_MEMO;
++
+ typedef struct {
+     const char *format;		/* format-string can be used as cache-key */
+     int tparm_type;		/* bit-set for each string-parameter */
+@@ -137,8 +154,41 @@ typedef struct {
+     int num_popped;
+     TPARM_ARG param[NUM_PARM];
+     char *p_is_s[NUM_PARM];
++    TPARM_MEMO *memo;		/* shared by all copies of this entry */
+ } TPARM_DATA;
+ 
++static bool
++tparm_memoable(const TPARM_DATA *data)
++{
++    const char *cp;
++    bool result = (data->tparm_type == 0);
++
++    for (cp = data->format; result && *cp != '\0'; ++cp) {
++	if (*cp == '%' && cp[1] != '\0') {
++	    ++cp;
++	    if (*cp == 'P' || *cp == 'g')
++		result = FALSE;
++	}
++    }
++    return result;
++}
++
++static TPARM_MEMO *
++tparm_memo_slot(const TPARM_DATA *data)
++{
++    TPARM_MEMO *result = NULL;
++
++    if (data->memo != NULL) {
++	unsigned hash = 0;
++	int n;
++
++	for (n = 0; n < data->num_actual; ++n)
++	    hash = hash * 31u + (unsigned) data->param[n];
++	result = data->memo + (hash % TPARM_MEMO_SIZE);
++    }
++    return result;
++}
++
+ #if HAVE_TSEARCH
+ #define MyCache _nc_globals.cached_tparm
+ #define MyCount _nc_globals.count_tparm
+@@ -185,6 +235,7 @@ _nc_free_tparm(TERMINAL *termp)
+ 		if (ptr != NULL) {
+ 		    tdelete(ptr, &MyCache, cmp_format);
+ 		    free((char *) ptr->format);
++		    free(ptr->memo);
+ 		    free(ptr);
+ 		}
+ 	    }
+@@ -680,6 +731,8 @@ tparm_setup(TERMINAL *term, const char *string, TPARM_DATA *result)
+ 			result->tparm_type |= (1 << n);
+ 		}
+ #if HAVE_TSEARCH
++		if (tparm_memoable(result))
++		    result->memo = typeCalloc(TPARM_MEMO, TPARM_MEMO_SIZE);
+ 		if ((fs = typeCalloc(TPARM_DATA, 1)) != NULL) {
+ 		    *fs = *result;
+ 		    if ((fs->format = strdup(string)) != NULL) {
+@@ -696,6 +749,10 @@ tparm_setup(TERMINAL *term, const char *string, TPARM_DATA *result)
+ 		} else {
+ 		    rc = ERR;
+ 		}
++		if (rc != OK) {
++		    free(result->memo);
++		    result->memo = NULL;
++		}
+ #endif
+ 	    }
+ 	}
+@@ -822,6 +879,8 @@ tparam_internal(TPARM_STATE *tps, const char *string, TPARM_DATA *data)
+     bool dynamic_used = FALSE;
+     int dynamic_vars[NUM_VARS];
+ 
++    TPARM_MEMO *memo;
++
+     tparm_trace_call(tps, string, data);
+ 
+     if (TPS(fmt_buff) == NULL) {
+@@ -829,6 +888,19 @@ tparam_internal(TPARM_STATE *tps, const char *string, TPARM_DATA *data)
+ 	return NULL;
+     }
+ 
++    if ((memo = tparm_memo_slot(data)) != NULL
++	&& memo->used
++	&& !memcmp(memo->param, data->param,
++		   sizeof(TPARM_ARG) * (size_t) data->num_actual)) {
++	size_t used = strlen(memo->text);
++
++	get_space(tps, used + 1);
++	memcpy(TPS(out_buff), memo->text, used + 1);
++	TPS(out_used) = used;
++	T((T_RETURN("%s"), _nc_visbuf(TPS(out_buff))));
++	return (TPS(out_buff));
++    }
++
+     while ((cp - string) < (int) len2) {
+ 	if (*cp != '%') {
+ 	    save_char(tps, UChar(*cp));
+@@ -1115,6 +1187,13 @@ tparam_internal(TPARM_STATE *tps, const char *string, TPARM_DATA *data)
+ 	_nc_tparm_err++;
+     }
+ 
++    if (memo != NULL && TPS(out_used) < TPARM_MEMO_TEXT) {
++	memcpy(memo->param, data->param,
++	       sizeof(TPARM_ARG) * (size_t) data->num_actual);
++	memcpy(memo->text, TPS(out_buff), TPS(out_used) + 1);
++	memo->used = 1;
++    }
++
+     T((T_RETURN("%s"), _nc_visbuf(TPS(out_buff))));
+     return (TPS(out_buff));
+ }
+-- 
+2.50.1 (Apple Git-155)
+

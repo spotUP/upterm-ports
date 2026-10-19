@@ -21,4 +21,6 @@ ncurses_CONFIGURE := --enable-widec --without-cxx --without-cxx-binding --withou
 ncurses_ENV     := cf_cv_mixedcase=no
 ncurses_HOST_CONFIGURE := --enable-widec --without-cxx --without-cxx-binding --without-ada \
 	--disable-shared --without-debug --without-tests --disable-db-install
+# pkgs/ncurses/check/*.sh run against the host build (frame_write: one write per doupdate)
+ncurses_CHECK_SH_BIN := bin/tput
 ncurses_BINS    := bin/tput bin/tset bin/reset bin/clear bin/infocmp bin/tic bin/toe bin/tabs

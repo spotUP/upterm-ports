@@ -1,7 +1,7 @@
-From 38c788fcacb71708909b4ef5a3490e09d8c959be Mon Sep 17 00:00:00 2001
+From 592125df31e13ef19920376fd7f8e2c99fb9fc1f Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Mon, 19 Oct 2026 12:02:37 +0200
-Subject: [PATCH] doupdate: one write per frame, fast tparm %d formatting
+Subject: [PATCH 1/2] doupdate: one write per frame, fast tparm %d formatting
 
 newterm leaves the screen in ewInitial and doupdate only moved it to
 ewRunning when resuming from endwin.  A program that never calls endwin
