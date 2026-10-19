@@ -9,6 +9,12 @@ bad=0
 for p in $(make -s -C "$ROOT" print-PKGS); do
 	[ -n "$(var "$p" VERSION)" ] || { echo "test_recipe_var: $p: ${p}_VERSION reads empty" >&2; bad=1; }
 done
+# A "#" in a recipe variable starts a make comment unless written "\#": git's install line was cut
+# at '#!/bin/sh' and the shell failed on the open quote, so the helper scripts were never written.
+case "$(var git INSTALL_CMD)" in
+	*'#!/bin/sh'*'chmod 755'*) ;;
+	*) echo "test_recipe_var: git_INSTALL_CMD is cut short (unescaped # in pkgs/git/recipe.mk)" >&2; bad=1 ;;
+esac
 [ "$(var upkg-ui OWN)" = 1 ] || { echo "test_recipe_var: upkg-ui_OWN is not 1" >&2; bad=1; }
 [ $bad = 0 ] && echo "test_recipe_var: ok"
 exit $bad

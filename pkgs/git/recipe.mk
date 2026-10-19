@@ -31,7 +31,7 @@ git_BUILD_CMD = $(MAKE) -C $(git_OBJ) -j$(JOBS) $(git_FLAGS) uname_S=AmigaOS una
 # (ixemul's __load_seg runs #! scripts through shell_path_alias). The templates are what
 # `git init` copies into .git.
 git_INSTALL_CMD = mkdir -p $(SYSROOT)$(PREFIX)/bin && cp $(git_OBJ)/git $(SYSROOT)$(PREFIX)/bin/git && \
-	for h in $(git_HELPERS); do printf '#!/bin/sh\nexec git %s "$$@"\n' $${h#git-} > $(SYSROOT)$(PREFIX)/bin/$$h && \
+	for h in $(git_HELPERS); do printf '\#!/bin/sh\nexec git %s "$$@"\n' $${h\#git-} > $(SYSROOT)$(PREFIX)/bin/$$h && \
 	chmod 755 $(SYSROOT)$(PREFIX)/bin/$$h || exit 1; done && \
 	$(MAKE) -C $(git_OBJ)/templates install DESTDIR=$(SYSROOT) prefix=$(PREFIX) NO_GETTEXT=1 SHELL_PATH=/bin/sh
 git_HOST_CONFIGURE_CMD = (cd $(git_SRC) && tar cf - --exclude=.git .) | tar xf - -C $(git_HOBJ) && chmod -R u+w $(git_HOBJ)
