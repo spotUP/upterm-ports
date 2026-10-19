@@ -1,7 +1,7 @@
-From f0a96569803b1f7dc33ec62864ee871c9beb98a8 Mon Sep 17 00:00:00 2001
+From a576275ace899506bc05d350f54ed2cd4117422b Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Mon, 19 Oct 2026 00:22:47 +0200
-Subject: [PATCH 2/5] config.h.in: define WITH_SHA256 so the sha256 checks
+Subject: [PATCH 2/7] config.h.in: define WITH_SHA256 so the sha256 checks
  compile in
 
 The CMake option WITH_SHA256 was never written into config.h, so every

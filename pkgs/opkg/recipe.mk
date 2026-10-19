@@ -9,6 +9,9 @@
 # libarchive and liblzma come from the sysroot, static.
 # patches/0003: cache files are named by 30 md5 hex digits (AmigaDOS keeps 30 characters of a name);
 # the host build gets the same names from -DUPKG_SHORT_NAMES so check/cache_name.sh can see them.
+# patches/0007: temp files under tmp_dir get fixed short names (control.XXXXXX, list.XXXXXX,
+# unpack.XXXXXX); check/temp_name.sh runs install and --force-reinstall with check/ffs_names.c
+# preloaded, which refuses names over 30 characters the way ixemul on FFS does.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

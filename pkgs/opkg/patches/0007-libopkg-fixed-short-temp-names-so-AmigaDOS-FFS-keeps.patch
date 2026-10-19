@@ -1,0 +1,68 @@
+From 3d40a11d23599e5856ba659c9aab383d6491b165 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 09:45:20 +0200
+Subject: [PATCH 7/7] libopkg: fixed short temp names so AmigaDOS FFS keeps
+ them
+
+The control file, the installed-files list and the control unpack directory were named after the cache file or the package ("<30 hex digits>.control.XXXXXX" is 45 characters). AmigaDOS FFS keeps 30 characters and ixemul refuses a longer new name with ENAMETOOLONG, so upkg install --force-reinstall of an add-on failed. mkstemp/mkdtemp make the names unique, so fixed short templates are enough.
+---
+ libopkg/opkg_install.c |  5 +++--
+ libopkg/pkg.c          | 14 +++++++-------
+ 2 files changed, 10 insertions(+), 9 deletions(-)
+
+diff --git a/libopkg/opkg_install.c b/libopkg/opkg_install.c
+index 69a8211..2f3bdfe 100644
+--- a/libopkg/opkg_install.c
++++ b/libopkg/opkg_install.c
+@@ -154,8 +154,9 @@ static int unpack_pkg_control_files(pkg_t * pkg)
+     char *root_dir;
+     FILE *conffiles_file;
+ 
+-    sprintf_alloc(&pkg->tmp_unpack_dir, "%s/%s-XXXXXX", opkg_config->tmp_dir,
+-                  pkg->name);
++    /* upkg: a fixed short temp name; one named after the package or cache file can pass the 30
++     * characters AmigaDOS FFS allows (ixemul refuses it with ENAMETOOLONG) */
++    sprintf_alloc(&pkg->tmp_unpack_dir, "%s/unpack.XXXXXX", opkg_config->tmp_dir);
+ 
+     pkg->tmp_unpack_dir = mkdtemp(pkg->tmp_unpack_dir);
+     if (pkg->tmp_unpack_dir == NULL) {
+diff --git a/libopkg/pkg.c b/libopkg/pkg.c
+index ed69a78..ae98709 100644
+--- a/libopkg/pkg.c
++++ b/libopkg/pkg.c
+@@ -265,16 +265,15 @@ int pkg_init_from_file(pkg_t * pkg, const char *filename)
+ {
+     int fd, err = 0;
+     FILE *control_file;
+-    char *control_path, *tmp;
++    char *control_path;
+ 
+     pkg_init(pkg);
+ 
+     pkg->local_filename = xstrdup(filename);
+ 
+-    tmp = xstrdup(filename);
+-    sprintf_alloc(&control_path, "%s/%s.control.XXXXXX", opkg_config->tmp_dir,
+-                  basename(tmp));
+-    free(tmp);
++    /* upkg: a fixed short temp name; one named after the package or cache file can pass the 30
++     * characters AmigaDOS FFS allows (ixemul refuses it with ENAMETOOLONG) */
++    sprintf_alloc(&control_path, "%s/control.XXXXXX", opkg_config->tmp_dir);
+     fd = mkstemp(control_path);
+     if (fd == -1) {
+         opkg_perror(ERROR, "Failed to make temp file %s", control_path);
+@@ -1159,8 +1158,9 @@ file_list_t *pkg_get_installed_files(pkg_t * pkg)
+          * file. In other words, change deb_extract so that it can
+          * simply return the file list as a char *[] rather than
+          * insisting on writing it to a FILE * as it does now. */
+-        sprintf_alloc(&list_file_name, "%s/%s.list.XXXXXX",
+-                      opkg_config->tmp_dir, pkg->name);
++        /* upkg: a fixed short temp name; one named after the package or cache file can pass the 30
++         * characters AmigaDOS FFS allows (ixemul refuses it with ENAMETOOLONG) */
++        sprintf_alloc(&list_file_name, "%s/list.XXXXXX", opkg_config->tmp_dir);
+         fd = mkstemp(list_file_name);
+         if (fd == -1) {
+             opkg_perror(ERROR, "Failed to make temp file %s.", list_file_name);
+-- 
+2.50.1 (Apple Git-155)
+

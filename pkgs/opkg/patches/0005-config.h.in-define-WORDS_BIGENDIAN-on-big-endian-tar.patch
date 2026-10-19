@@ -1,7 +1,7 @@
-From d6fd3d3ecb0437b404cc02cb0b2c912ca5a923f8 Mon Sep 17 00:00:00 2001
+From 93807ed9506bef209b7d1faf530ef44bc4adcd2a Mon Sep 17 00:00:00 2001
 From: spotUP <spotUP@users.noreply.github.com>
 Date: Mon, 19 Oct 2026 02:28:04 +0200
-Subject: [PATCH 5/5] config.h.in: define WORDS_BIGENDIAN on big-endian targets
+Subject: [PATCH 5/7] config.h.in: define WORDS_BIGENDIAN on big-endian targets
  so sha256.c does not byte-swap
 
 ---

@@ -11,41 +11,25 @@
 #   sh pkgs/opkg/check/preinst_fail.sh build/host/opkg/inst/bin/upkg
 set -eu
 upkg=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+here=$(cd "$(dirname "$0")" && pwd)
 w=$(mktemp -d "${TMPDIR:-/tmp}/preinstfail.XXXXXX")
 trap 'rm -rf "$w"' EXIT
 mkdir "$w/feed"
-python3 -I - "$w" <<'PY'
-import gzip, hashlib, io, sys, tarfile
-w = sys.argv[1]
-def targz(files):
-    raw = io.BytesIO()
-    with tarfile.open(fileobj=raw, mode='w', format=tarfile.GNU_FORMAT) as tf:
-        for name, data, mode in files:
-            ti = tarfile.TarInfo(name); ti.size = len(data); ti.mode = mode
-            tf.addfile(ti, io.BytesIO(data))
-    out = io.BytesIO()
-    with gzip.GzipFile(filename='', mode='wb', fileobj=out, mtime=0) as gz:
-        gz.write(raw.getvalue())
-    return out.getvalue()
-def ar(members):
-    out = b'!<arch>\n'
-    for name, data in members:
-        out += b'%-16s%-12d%-6d%-6d%-8s%-10d`\n' % ((name + '/').encode(), 0, 0, 0, b'100644', len(data))
-        out += data + (b'\n' if len(data) % 2 else b'')
-    return out
+python3 -I - "$w" "$here" <<'PY'
+import sys
+w = sys.argv[1]; sys.path.insert(0, sys.argv[2])
+from ipk import ipk, stanza, write_index
 index = b''
 for name, rc in (('pfail', 1), ('pok', 0)):
     ctl = b'Package: %s\nVersion: 1.0\nArchitecture: m68k-amigaos\nMaintainer: t\nDescription: preinst check\n' % name.encode()
     pre = b'#!/bin/sh\nexit %d\n' % rc
     post = b'#!/bin/sh\necho "$*" >> %s/%s.postrm\n' % (w.encode(), name.encode())
-    ipk = ar([('debian-binary', b'2.0\n'),
-              ('control.tar.gz', targz([('./control', ctl, 0o644), ('./preinst', pre, 0o755), ('./postrm', post, 0o755)])),
-              ('data.tar.gz', targz([('./%s.marker' % name, b'installed\n', 0o644)]))])
+    pkg = ipk([('./control', ctl, 0o644), ('./preinst', pre, 0o755), ('./postrm', post, 0o755)],
+              [('./%s.marker' % name, b'installed\n', 0o644)])
     fn = '%s_1.0_m68k-amigaos.ipk' % name
-    open('%s/feed/%s' % (w, fn), 'wb').write(ipk)
-    index += ctl + b'Filename: %s\nSize: %d\nSHA256sum: %s\n\n' % (fn.encode(), len(ipk), hashlib.sha256(ipk).hexdigest().encode())
-with gzip.GzipFile('%s/feed/Packages.gz' % w, 'wb', mtime=0) as gz:
-    gz.write(index)
+    open('%s/feed/%s' % (w, fn), 'wb').write(pkg)
+    index += stanza(ctl, fn, pkg) + b'\n'
+write_index('%s/feed/Packages.gz' % w, index)
 PY
 { echo "arch m68k-amigaos 10"; echo "src/gz test file://$w/feed"; echo "dest root $w/root"
   for o in lists_dir lock_file info_dir status_file cache_dir; do echo "option $o $w/$o"; done; } > "$w/conf"

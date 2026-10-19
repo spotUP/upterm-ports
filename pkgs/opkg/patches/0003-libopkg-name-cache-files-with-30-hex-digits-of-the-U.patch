@@ -1,7 +1,7 @@
-From 002c0a8de84e2523ef91f3097cb1e68a69a9e445 Mon Sep 17 00:00:00 2001
+From d205e833eff27cc78132f12dee6e072933407388 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Mon, 19 Oct 2026 01:54:08 +0200
-Subject: [PATCH 3/5] libopkg: name cache files with 30 hex digits of the URI
+Subject: [PATCH 3/7] libopkg: name cache files with 30 hex digits of the URI
  md5 so AmigaDOS keeps the whole name
 
 AmigaDOS FFS truncates file names to 30 characters silently. The stock cache

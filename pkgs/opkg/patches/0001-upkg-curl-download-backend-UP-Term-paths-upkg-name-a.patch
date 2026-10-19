@@ -1,7 +1,7 @@
-From e6ec6dcd403fe0e24dc7f8ad2f60e14a4b69cee7 Mon Sep 17 00:00:00 2001
+From 480dfeec9eaabffde58d76e66968face9e445578 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Mon, 19 Oct 2026 00:10:04 +0200
-Subject: [PATCH 1/5] upkg: curl download backend, UP-Term paths, upkg name and
+Subject: [PATCH 1/7] upkg: curl download backend, UP-Term paths, upkg name and
  version text
 
 ---

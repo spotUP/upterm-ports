@@ -1,8 +1,8 @@
-From ff8127fab401dfe42c93603575c572c0fdf2334d Mon Sep 17 00:00:00 2001
+From d608f59877f64a5799e2212fe9976f9772720143 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Mon, 19 Oct 2026 08:00:56 +0200
-Subject: [PATCH] libopkg: a fresh install that fails before unpack returns to
- not-installed
+Subject: [PATCH 6/7] libopkg: a fresh install that fails before unpack returns
+ to not-installed
 
 Stock opkg 0.9.0 sends every failure between prerm and unpack to
 pkg_is_hosed, which writes the package to status as
