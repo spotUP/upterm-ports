@@ -1,0 +1,96 @@
+From 548ede88494a18071d015efde42600f9040cd5e8 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 19 Oct 2026 02:13:17 +0200
+Subject: [PATCH 4/4] libopkg: refuse to download to a name component over 30
+ characters (AmigaDOS cuts it silently)
+
+---
+ libopkg/opkg_download.c      |  2 --
+ libopkg/opkg_download.h      |  3 +++
+ libopkg/opkg_download_wget.c | 29 +++++++++++++++++++++++++++++
+ 3 files changed, 32 insertions(+), 2 deletions(-)
+
+diff --git a/libopkg/opkg_download.c b/libopkg/opkg_download.c
+index bac1aea..f37df5c 100644
+--- a/libopkg/opkg_download.c
++++ b/libopkg/opkg_download.c
+@@ -46,8 +46,6 @@
+  * differs between plaforms but 128 characters should be reasonable.
+  */
+ #define MAX_SHORT_FILE_NAME_LENGTH 90
+-/* upkg: longest file name AmigaDOS FFS keeps */
+-#define UPKG_CACHE_NAME_LENGTH 30
+ 
+ static int opkg_download_set_env()
+ {
+diff --git a/libopkg/opkg_download.h b/libopkg/opkg_download.h
+index c131232..92a8896 100644
+--- a/libopkg/opkg_download.h
++++ b/libopkg/opkg_download.h
+@@ -27,6 +27,9 @@ extern "C" {
+ 
+ #include "pkg.h"
+ 
++/* upkg: longest file name component AmigaDOS FFS keeps; it cuts longer ones silently */
++#define UPKG_CACHE_NAME_LENGTH 30
++
+ typedef void (*opkg_download_progress_callback) (int percent, char *url);
+ typedef int (*curl_progress_func) (void *data, double t, double d,
+                                    double ultotal, double ulnow);
+diff --git a/libopkg/opkg_download_wget.c b/libopkg/opkg_download_wget.c
+index d0337e9..6526c7b 100644
+--- a/libopkg/opkg_download_wget.c
++++ b/libopkg/opkg_download_wget.c
+@@ -22,6 +22,7 @@
+ 
+ #include "config.h"
+ 
++#include <errno.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <unistd.h>
+@@ -62,6 +63,29 @@ static const char *amiga_dest(const char *path, char **buf)
+ #endif
+ }
+ 
++#if defined(__amigaos__) || defined(UPKG_SHORT_NAMES)
++/* curl is a native program: ixemul cannot see it when AmigaDOS cuts a long
++ * name, so every component of the destination is checked before curl runs. */
++static int dest_name_too_long(const char *path)
++{
++    const char *p = path;
++
++    while (*p) {
++        size_t n = strcspn(p, "/:");
++        if (n > UPKG_CACHE_NAME_LENGTH) {
++            opkg_msg(ERROR, "File name too long for AmigaDOS (limit %d characters per name): %s\n",
++                     UPKG_CACHE_NAME_LENGTH, path);
++            errno = ENAMETOOLONG;
++            return 1;
++        }
++        p += n;
++        if (*p)
++            p++;
++    }
++    return 0;
++}
++#endif
++
+ int opkg_download_backend(const char *src, const char *dest,
+                           curl_progress_func cb, void *data, int use_cache)
+ {
+@@ -75,6 +99,11 @@ int opkg_download_backend(const char *src, const char *dest,
+     (void)data;
+     (void)use_cache;
+ 
++#if defined(__amigaos__) || defined(UPKG_SHORT_NAMES)
++    if (dest_name_too_long(dest))
++        return -1;
++#endif
++
+     unlink(dest);
+ 
+     /* upkg: curl, not wget. -f turns an HTTP error into a non-zero exit, -sS
+-- 
+2.50.1 (Apple Git-155)
+
