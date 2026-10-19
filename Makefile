@@ -24,6 +24,7 @@ sysroot: ixcompat ncurses
 # host tests of the build tools (m68k_scan.py's flow rules)
 test:
 	python3 tools/test_m68k_scan.py
+	cc -Wall -Wextra -o build/test_chrome pkgs/upkg-ui/src/test_chrome.c pkgs/upkg-ui/src/chrome.c && build/test_chrome
 
 sizes:
 	@column -t $(STATE)/sizes.tsv
