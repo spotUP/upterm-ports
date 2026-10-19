@@ -23,9 +23,25 @@
 set -eu
 KIT=$B/kit/userland
 KSRC=$B/kit/userland-src
+. "$ROOT/tools/recipe-var.sh"
+
+# A package that is installed but not checked was rebuilt and its check did
+# not run (or failed): skipping it quietly shipped a kit with no xz and no tar
+# (2026-10-19, caught only by the rig install). Stop before the old kit goes.
+unchecked=
+for p in $PKGS; do
+	[ "$p" != ixcompat ] || continue
+	[ -z "$(var "$p" NO_KIT)" ] || continue
+	[ -z "$(var "$p" KIT_HOLD)" ] || continue
+	[ -f "$STATE/$p.installed" ] && [ ! -f "$STATE/$p.checked" ] && unchecked="$unchecked $p"
+done
+if [ -n "$unchecked" ]; then
+	echo "kit-stage: installed but not checked:$unchecked (run make$unchecked, or set <p>_KIT_HOLD)" >&2
+	exit 1
+fi
+
 rm -rf "$KIT" "$KSRC"
 mkdir -p "$KIT/bin" "$KIT/licenses" "$KSRC/ports"
-. "$ROOT/tools/recipe-var.sh"
 
 for p in $PKGS; do
 	# <p>_NO_KIT: built and checked, not shipped
