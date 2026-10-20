@@ -1,0 +1,114 @@
+upkg: unrecognized option `--help'
+upkg must have one sub-command argument
+usage: upkg [options...] sub-command [arguments...]
+where sub-command is one of:
+
+Package Manipulation:
+  update                      Update list of available packages
+  upgrade                     Upgrade installed packages
+  dist-upgrade                Upgrade operation that allows package removal
+                              (libsolv backend)
+  install <pkgs>              Install package(s)
+  configure <pkgs>            Configure unpacked package(s)
+  remove <pkgs|glob>          Remove package(s)
+  clean                       Clean internal cache
+  flag <flag> <pkgs>          Flag package(s)
+  <flag>=hold|noprune|user|ok|installed|unpacked (one per invocation)
+
+Informational Commands:
+  list                        List available packages
+  list-installed              List installed packages
+  list-upgradable             List installed and upgradable packages
+  list-changed-conffiles      List user modified configuration files
+  files <pkg>                 List files belonging to <pkg>
+  search <file|glob>          List package providing <file>
+  find <regexp>               List packages with names or description
+                              matching <regexp>
+  info [pkg|glob]             Display all info for <pkg>
+  status [pkg|glob]           Display all status for <pkg>
+  download <pkg>              Download <pkg> to current directory
+  compare-versions <v1> <op> <v2>
+                              compare versions using <= < > >= = << >>
+  print-architecture          List installable package architectures
+  depends [-A] [pkgname|glob]+
+  whatdepends [-A] [pkgname|glob]+
+  whatdependsrec [-A] [pkgname|glob]+
+  whatrecommends[-A] [pkgname|glob]+
+  whatsuggests[-A] [pkgname|glob]+
+  whatprovides [-A] [pkgname|glob]+
+  whatconflicts [-A] [pkgname|glob]+
+  whatreplaces [-A] [pkgname|glob]+
+  verify [pkg|glob]           Verifies the integrity of <pkg>, or all
+                              packages if omitted by comparing the md5sum of
+                              each file with the information stored on the
+                              opkg metadata database
+  -v, --version               Print version
+
+Options:
+  -A                          Query all packages not just those installed
+  -V[<level>]                 Set verbosity level to <level>.
+  --verbosity[=<level>]       Verbosity levels:
+                                0 errors only
+                                1 normal messages (default)
+                                2 informative messages
+                                3 debug
+                                4 debug level 2
+  -f <conf_file>              Use <conf_file> as the opkg configuration file
+  --conf <conf_file>          Can be given multiple times
+  --cache-dir <path>          Specify cache directory.
+  -t, --tmp-dir <directory>   Specify tmp-dir.
+  -l, --lists-dir <directory>
+                              Specify lists-dir.
+  -d <dest_name>              Use <dest_name> as the root directory for
+  --dest <dest_name>          package installation, removal, upgrading.
+                              <dest_name> should be a defined dest name from
+                              the configuration file, (but can also be a
+                              directory name in a pinch).
+  -o <dir>                    Use <dir> as the root directory for
+  --offline-root <dir>        offline installation of packages.
+  --add-dest <name>:<path>    Register destination with given path
+  --add-arch <arch>:<prio>    Register architecture with given priority
+  --add-exclude <name>        Register package to be excluded from install
+  --add-ignore-recommends <name>
+                              Register package to be ignored as a
+                              recommendee
+  --prefer-arch-to-version    Use the architecture priority package rather
+                              than the higher version one if more than one
+                              candidate is found.
+  --combine                   Combine upgrade and install operations, this
+                              may be needed to resolve dependency issues.
+                              Only available for the internal solver
+                              backend.
+  --fields <field1>,<field2>  Limit display information to the specified
+                              fields plus the package name. Valid for info
+                              and status.
+  --short-description         Display only the first line of the
+                              description.
+  --size                      Print package size when listing available
+                              packages
+
+Force Options:
+  --force-depends             Install/remove despite failed dependencies
+  --force-maintainer          Overwrite preexisting config files
+  --force-reinstall           Reinstall package(s)
+  --force-overwrite           Overwrite files from other package(s)
+  --force-downgrade           Allow opkg to downgrade packages
+  --force-space               Disable free space checks
+  --force-postinstall         Run postinstall scripts even in offline mode
+  --force-remove              Remove package even if prerm script fails
+  --force-checksum            Don't fail on checksum mismatches
+  --noaction                  No action -- test only
+  --download-only             No action -- download only
+  --nodeps                    Do not follow dependencies
+  --[no-]install-recommends   (Do not) install any recommended packages
+  --force-removal-of-dependent-packages
+                              Remove package and all dependencies
+  --autoremove                Remove packages that were installed
+                              automatically to satisfy dependencies
+  --host-cache-dir            Don't place cache in offline root dir.
+  --volatile-cache            Use volatile cache. Volatile cache will be
+                              cleared on exit
+
+ glob could be something like 'pkgname*' '*file*' or similar
+ e.g. upkg info 'libstd*' or upkg search '*libop*' or
+ upkg remove 'libncur*'

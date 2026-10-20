@@ -14,6 +14,10 @@
 # preloaded, which refuses names over 30 characters the way ixemul on FFS does.
 # patches/0008: `upkg --help` is reflowed to 76 columns (a 640x256 hires shell fits about 77, stock opkg
 # prints 103); check/help_width.sh fails on any help line over 76 columns with tabs expanded.
+# patches/0009: every line upkg prints to a console follows the window width (ioctl TIOCGWINSZ, then
+# COLUMNS, then 76), wrapped with a hanging indent; piped output is unchanged; check/console_width.sh.
+# patches/0010: the console writer holds a partial word across print calls, so a word printed in
+# pieces wraps whole instead of splitting between them; check/wrap_split.sh.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

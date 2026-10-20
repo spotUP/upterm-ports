@@ -1,0 +1,319 @@
+From d57b655a9f56ae3a4fc5a21ad815e2483280c3ef Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 20 Oct 2026 15:04:59 +0200
+Subject: [PATCH 10/10] upkg: wrap a word printed by several calls as one word
+
+The writer holds the partial word and the blanks before it across print
+calls and decides the break only when the word ends (blank, newline,
+exit, before a child runs, before the other stream writes).
+---
+ libopkg/upkg_wrap.c | 215 +++++++++++++++++++++++++++++---------------
+ libopkg/upkg_wrap.h |   6 ++
+ libopkg/xsystem.c   |   2 +
+ 3 files changed, 153 insertions(+), 70 deletions(-)
+
+diff --git a/libopkg/upkg_wrap.c b/libopkg/upkg_wrap.c
+index e0931d9..42d113c 100644
+--- a/libopkg/upkg_wrap.c
++++ b/libopkg/upkg_wrap.c
+@@ -19,22 +19,28 @@
+ #define UPKG_MIN_COLUMNS 20
+ 
+ struct wrap_state {
++    FILE *fp;
+     int tty;                    /* -1 unknown, 0 no, 1 yes */
+     int col;                    /* columns already on the current line */
+     int lead;                   /* the current line's own leading blanks */
+     int in_lead;                /* nothing but blanks written on this line */
++    int blanks;                 /* columns of blanks held back, not yet written */
++    char *word;                 /* the partial word held back across calls */
++    size_t wlen, wcap;
+ };
+ 
+-static struct wrap_state st_out = { -1, 0, 0, 1 };
+-static struct wrap_state st_err = { -1, 0, 0, 1 };
++static struct wrap_state st_out = { NULL, -1, 0, 0, 1, 0, NULL, 0, 0 };
++static struct wrap_state st_err = { NULL, -1, 0, 0, 1, 0, NULL, 0, 0 };
+ 
+ static struct wrap_state *state_of(FILE *fp)
+ {
+     if (fp == stdout)
+-        return &st_out;
+-    if (fp == stderr)
+-        return &st_err;
+-    return NULL;
++        st_out.fp = fp;
++    else if (fp == stderr)
++        st_err.fp = fp;
++    else
++        return NULL;
++    return fp == stdout ? &st_out : &st_err;
+ }
+ 
+ int upkg_wrap_width(FILE *fp)
+@@ -61,20 +67,130 @@ int upkg_wrap_width(FILE *fp)
+     return cols < UPKG_MIN_COLUMNS ? UPKG_MIN_COLUMNS : cols;
+ }
+ 
+-static size_t word_len(const char *s)
+-{
+-    size_t n = 0;
+-    while (s[n] && s[n] != ' ' && s[n] != '\t' && s[n] != '\n')
+-        n++;
+-    return n;
+-}
+-
+ static void put_blanks(FILE *fp, int n)
+ {
+     while (n-- > 0)
+         fputc(' ', fp);
+ }
+ 
++static void newline_indent(struct wrap_state *st, int ind)
++{
++    fputc('\n', st->fp);
++    put_blanks(st->fp, ind);
++    st->col = ind;
++}
++
++/* Write out the held blanks when no word follows them (a newline, the end of the
++ * run): blanks that fit are kept, the rest give way. */
++static void flush_blanks(struct wrap_state *st, int w)
++{
++    int n = st->blanks;
++
++    st->blanks = 0;
++    if (n <= 0)
++        return;
++    if (st->in_lead) {
++        if (n > w / 2)
++            n = w / 2;
++        put_blanks(st->fp, n);
++        st->col += n;
++        st->lead = st->col;
++    } else if (st->col + n <= w) {
++        put_blanks(st->fp, n);
++        st->col += n;
++    }
++}
++
++/* The held word has ended: decide its break now, with the held blanks before it. */
++static void emit_word(struct wrap_state *st, int w, int hang)
++{
++    FILE *fp = st->fp;
++    const char *s = st->word;
++    int len = (int)st->wlen;
++    int ind = st->lead > hang ? st->lead : hang;
++    int n = st->blanks;
++
++    if (len == 0)
++        return;
++    if (ind > w / 2)
++        ind = w / 2;
++    st->blanks = 0;
++
++    if (st->in_lead) {
++        if (n > w / 2)
++            n = w / 2;
++        put_blanks(fp, n);
++        st->col += n;
++        st->lead = st->col;
++        ind = st->lead > hang ? st->lead : hang;
++        if (ind > w / 2)
++            ind = w / 2;
++    } else if (n > 0) {
++        if (st->col + n + len <= w) {
++            put_blanks(fp, n);
++            st->col += n;
++        } else {
++            newline_indent(st, ind);
++        }
++    }
++    st->in_lead = 0;
++    if (st->col + len > w && st->col > ind)
++        newline_indent(st, ind);
++    while (st->col + len > w) {
++        int room = w - st->col;
++        if (room < 1) {
++            newline_indent(st, ind);
++            continue;
++        }
++        fwrite(s, 1, room, fp);
++        s += room;
++        len -= room;
++        newline_indent(st, ind);
++    }
++    fwrite(s, 1, len, fp);
++    st->col += len;
++    st->wlen = 0;
++}
++
++static void hold_char(struct wrap_state *st, char c)
++{
++    if (st->wlen + 1 > st->wcap) {
++        size_t cap = st->wcap ? st->wcap * 2 : 128;
++        char *p = realloc(st->word, cap);
++        if (!p)
++            exit(EXIT_FAILURE);
++        st->word = p;
++        st->wcap = cap;
++    }
++    st->word[st->wlen++] = c;
++}
++
++static int cur_hang[2];
++
++static void flush_one(struct wrap_state *st)
++{
++    int w;
++
++    if (!st->fp || (!st->wlen && !st->blanks))
++        return;
++    w = upkg_wrap_width(st->fp);
++    if (w) {
++        emit_word(st, w, cur_hang[st == &st_err]);
++        flush_blanks(st, w);
++    }
++    fflush(st->fp);
++}
++
++/* Write out what is held back: the partial word and the blanks after it. Called
++ * at exit, before a child process runs, and before the other stream writes. */
++void upkg_wrap_flush(void)
++{
++    flush_one(&st_out);
++    flush_one(&st_err);
++}
++
++static int atexit_done;
++
+ void upkg_wrap_puts(FILE *fp, int hang, const char *s)
+ {
+     int w = upkg_wrap_width(fp);
+@@ -84,71 +200,30 @@ void upkg_wrap_puts(FILE *fp, int hang, const char *s)
+         fputs(s, fp);
+         return;
+     }
++    if (!atexit_done) {
++        atexit_done = 1;
++        atexit(upkg_wrap_flush);
++    }
++    /* keep stdout and stderr in the order they were written */
++    flush_one(fp == stdout ? &st_err : &st_out);
+     if (hang > w / 2)
+         hang = w / 2;
++    cur_hang[st == &st_err] = hang;
+ 
+-    while (*s) {
+-        int ind = st->lead > hang ? st->lead : hang;
+-        if (ind > w / 2)
+-            ind = w / 2;
+-
++    for (; *s; s++) {
+         if (*s == '\n') {
++            emit_word(st, w, hang);
++            flush_blanks(st, w);
+             fputc('\n', fp);
+             st->col = st->lead = 0;
+             st->in_lead = 1;
+-            s++;
+         } else if (*s == ' ' || *s == '\t') {
+-            int n = 0, c = st->col;
+-            size_t len;
+-            while (*s == ' ' || *s == '\t') {
+-                int step = *s == '\t' ? 8 - c % 8 : 1;
+-                n += step;
+-                c += step;
+-                s++;
+-            }
+-            len = word_len(s);
+-            if (st->in_lead) {
+-                if (n > w / 2)
+-                    n = w / 2;
+-                put_blanks(fp, n);
+-                st->col += n;
+-                st->lead = st->col;
+-            } else if (st->col + n + (int)len <= w) {
+-                put_blanks(fp, n);
+-                st->col += n;
+-            } else if (len > 0) {
+-                /* the next word does not fit: the blanks give way to a break */
+-                fputc('\n', fp);
+-                put_blanks(fp, ind);
+-                st->col = ind;
+-            }
+-            /* blanks at the end of a line that do not fit are dropped */
++            int c;
++            emit_word(st, w, hang);
++            c = st->col + st->blanks;
++            st->blanks += *s == '\t' ? 8 - c % 8 : 1;
+         } else {
+-            int len = (int)word_len(s);
+-            st->in_lead = 0;
+-            if (st->col + len > w && st->col > ind) {
+-                fputc('\n', fp);
+-                put_blanks(fp, ind);
+-                st->col = ind;
+-            }
+-            while (st->col + len > w) {
+-                int room = w - st->col;
+-                if (room < 1) {
+-                    fputc('\n', fp);
+-                    put_blanks(fp, ind);
+-                    st->col = ind;
+-                    continue;
+-                }
+-                fwrite(s, 1, room, fp);
+-                s += room;
+-                len -= room;
+-                fputc('\n', fp);
+-                put_blanks(fp, ind);
+-                st->col = ind;
+-            }
+-            fwrite(s, 1, len, fp);
+-            s += len;
+-            st->col += len;
++            hold_char(st, *s);
+         }
+     }
+ }
+diff --git a/libopkg/upkg_wrap.h b/libopkg/upkg_wrap.h
+index 1a34f4f..92d8914 100644
+--- a/libopkg/upkg_wrap.h
++++ b/libopkg/upkg_wrap.h
+@@ -22,6 +22,12 @@ int upkg_wrap_width(FILE *fp);
+  * wider; a word longer than the line breaks hard at the width. */
+ void upkg_wrap_puts(FILE *fp, int hang, const char *s);
+ 
++/* Write out the partial word and blanks held back across calls. A word printed
++ * by two calls is wrapped as one word, so its end is only known at a blank, a
++ * newline or here: called at exit (registered by the first wrapped write) and
++ * before a child process runs. */
++void upkg_wrap_flush(void);
++
+ /* printf into the wrapper; HANG as for upkg_wrap_puts */
+ int upkg_vfprintf(FILE *fp, int hang, const char *fmt, va_list ap);
+ 
+diff --git a/libopkg/xsystem.c b/libopkg/xsystem.c
+index d7cc31e..23c21ed 100644
+--- a/libopkg/xsystem.c
++++ b/libopkg/xsystem.c
+@@ -26,6 +26,7 @@
+ 
+ #include "opkg_message.h"
+ #include "xsystem.h"
++#include "upkg_wrap.h"
+ 
+ /* Like system(3), but with error messages printed if the fork fails
+    or if the child process dies due to an uncaught signal. Also, the
+@@ -41,6 +42,7 @@ int xsystem(const char *argv[])
+     pid_t pid;
+     int r;
+ 
++    upkg_wrap_flush();
+     pid = vfork();
+ 
+     switch (pid) {
+-- 
+2.50.1 (Apple Git-155)
+

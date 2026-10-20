@@ -1,0 +1,722 @@
+From 438e926586d74b028f3e894d235b482fa1b21115 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 20 Oct 2026 15:00:21 +0200
+Subject: [PATCH 09/10] upkg: wrap all output to the console width
+
+---
+ libopkg/CMakeLists.txt |   2 +
+ libopkg/opkg_cmd.c     |  38 +++--
+ libopkg/opkg_message.c |   5 +-
+ libopkg/pkg.c          |   5 +
+ libopkg/upkg_wrap.c    | 196 +++++++++++++++++++++++++
+ libopkg/upkg_wrap.h    |  36 +++++
+ src/opkg.c             | 316 ++++++++++++++++++++++++++---------------
+ 7 files changed, 475 insertions(+), 123 deletions(-)
+ create mode 100644 libopkg/upkg_wrap.c
+ create mode 100644 libopkg/upkg_wrap.h
+
+diff --git a/libopkg/CMakeLists.txt b/libopkg/CMakeLists.txt
+index 628cb8c..a6e865b 100644
+--- a/libopkg/CMakeLists.txt
++++ b/libopkg/CMakeLists.txt
+@@ -22,6 +22,7 @@ set(HEADER_FILES
+     opkg_download.h
+     opkg_install.h
+     opkg_message.h
++    upkg_wrap.h
+     opkg_remove.h
+     opkg_solver.h
+     opkg_utils.h
+@@ -100,6 +101,7 @@ set(SOURCE_FILES
+     opkg_download.c
+     opkg_install.c
+     opkg_message.c
++    upkg_wrap.c
+     opkg_remove.c
+     opkg_utils.c
+     opkg_verify.c
+diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
+index c6089f1..abe058e 100644
+--- a/libopkg/opkg_cmd.c
++++ b/libopkg/opkg_cmd.c
+@@ -46,20 +46,40 @@
+ #include "xsystem.h"
+ #include "xfuncs.h"
+ #include "opkg_solver.h"
++#include "upkg_wrap.h"
++
++/* paths, notices and rows follow the console width (a plain printf when piped) */
++#define printf upkg_printf
+ 
+ static void print_pkg(pkg_t * pkg)
+ {
+     char *version = pkg_version_str_alloc(pkg);
+-    printf("%s - %s", pkg->name, version);
++    char *row = NULL, *prefix = NULL;
++    int hang;
++
++    /* a wrapped description continues under its own start, "name - version - " wide at most a third of the line */
++    sprintf_alloc(&prefix, "%s - %s", pkg->name, version);
+     if (opkg_config->size) {
+-	if(pkg->state_status == SS_INSTALLED || pkg->state_status == SS_UNPACKED)
+-	    printf(" - %lu", pkg->installed_size);
+-	else
+-	    printf(" - %lu", pkg->size);
+-	}
+-    if (pkg->description)
+-        printf(" - %s", pkg->description);
+-    printf("\n");
++        if (pkg->state_status == SS_INSTALLED || pkg->state_status == SS_UNPACKED)
++            sprintf_alloc(&row, "%s - %lu", prefix, pkg->installed_size);
++        else
++            sprintf_alloc(&row, "%s - %lu", prefix, pkg->size);
++        free(prefix);
++        prefix = row;
++        row = NULL;
++    }
++    if (pkg->description) {
++        sprintf_alloc(&row, "%s - %s\n", prefix, pkg->description);
++        hang = strlen(prefix) + 3;
++    } else {
++        sprintf_alloc(&row, "%s\n", prefix);
++        hang = 2;
++    }
++    if (upkg_wrap_width(stdout) && hang > upkg_wrap_width(stdout) / 3)
++        hang = upkg_wrap_width(stdout) / 3;
++    upkg_wrap_puts(stdout, hang, row);
++    free(row);
++    free(prefix);
+     free(version);
+ }
+ 
+diff --git a/libopkg/opkg_message.c b/libopkg/opkg_message.c
+index fec3077..a40ef95 100644
+--- a/libopkg/opkg_message.c
++++ b/libopkg/opkg_message.c
+@@ -25,6 +25,7 @@
+ #include "opkg_conf.h"
+ #include "opkg_message.h"
+ #include "xfuncs.h"
++#include "upkg_wrap.h"
+ 
+ void opkg_message(message_level_t level, const char *fmt, ...)
+ {
+@@ -58,10 +59,10 @@ void opkg_message(message_level_t level, const char *fmt, ...)
+         if (ret >= MSG_LEN) {
+             fprintf(stderr, "%s: Message truncated.\n", __FUNCTION__);
+         }
+-        fprintf(stderr, "%s", msg);
++        upkg_wrap_puts(stderr, 2, msg);
+     } else {
+         int ret;
+-        ret = vprintf(fmt, ap);
++        ret = upkg_vfprintf(stdout, 2, fmt, ap);
+         if (ret < 0) {
+             fprintf(stderr,
+                     "%s: encountered an output or encoding"
+diff --git a/libopkg/pkg.c b/libopkg/pkg.c
+index ae98709..6dac802 100644
+--- a/libopkg/pkg.c
++++ b/libopkg/pkg.c
+@@ -42,6 +42,11 @@
+ #include "file_util.h"
+ #include "xsystem.h"
+ #include "opkg_conf.h"
++#include "upkg_wrap.h"
++
++/* pkg_formatted_info writes to stdout for `upkg info`; on a console it wraps to the width, to a
++ * file (the status database) upkg_fprintf is a plain fprintf. */
++#define fprintf upkg_fprintf
+ 
+ typedef struct enum_map enum_map_t;
+ struct enum_map {
+diff --git a/libopkg/upkg_wrap.c b/libopkg/upkg_wrap.c
+new file mode 100644
+index 0000000..e0931d9
+--- /dev/null
++++ b/libopkg/upkg_wrap.c
+@@ -0,0 +1,196 @@
++/* upkg_wrap.c - upkg: output that follows the console width (UP-Term).
++   The size query is the one watch and column use: ioctl(TIOCGWINSZ), which
++   ixemul answers from vtcon (ACTION_VTCON_GWINSZ) or the native console
++   (ACTION_DISK_INFO), then $COLUMNS.
++   SPDX-License-Identifier: GPL-2.0-or-later */
++
++#include "config.h"
++
++#include <stdarg.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <sys/ioctl.h>
++
++#include "upkg_wrap.h"
++
++#define UPKG_DEFAULT_COLUMNS 76 /* a 640x256 hires Workbench shell */
++#define UPKG_MIN_COLUMNS 20
++
++struct wrap_state {
++    int tty;                    /* -1 unknown, 0 no, 1 yes */
++    int col;                    /* columns already on the current line */
++    int lead;                   /* the current line's own leading blanks */
++    int in_lead;                /* nothing but blanks written on this line */
++};
++
++static struct wrap_state st_out = { -1, 0, 0, 1 };
++static struct wrap_state st_err = { -1, 0, 0, 1 };
++
++static struct wrap_state *state_of(FILE *fp)
++{
++    if (fp == stdout)
++        return &st_out;
++    if (fp == stderr)
++        return &st_err;
++    return NULL;
++}
++
++int upkg_wrap_width(FILE *fp)
++{
++    struct wrap_state *st = state_of(fp);
++    struct winsize ws;
++    const char *e;
++    int fd, cols;
++
++    if (!st)
++        return 0;
++    fd = fileno(fp);
++    if (st->tty < 0)
++        st->tty = fd >= 0 && isatty(fd);
++    if (!st->tty)
++        return 0;
++
++    cols = UPKG_DEFAULT_COLUMNS;
++    if (ioctl(fd, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0)
++        cols = ws.ws_col;
++    else if ((e = getenv("COLUMNS")) != NULL && atoi(e) > 0)
++        cols = atoi(e);
++    cols--;
++    return cols < UPKG_MIN_COLUMNS ? UPKG_MIN_COLUMNS : cols;
++}
++
++static size_t word_len(const char *s)
++{
++    size_t n = 0;
++    while (s[n] && s[n] != ' ' && s[n] != '\t' && s[n] != '\n')
++        n++;
++    return n;
++}
++
++static void put_blanks(FILE *fp, int n)
++{
++    while (n-- > 0)
++        fputc(' ', fp);
++}
++
++void upkg_wrap_puts(FILE *fp, int hang, const char *s)
++{
++    int w = upkg_wrap_width(fp);
++    struct wrap_state *st = state_of(fp);
++
++    if (!w) {
++        fputs(s, fp);
++        return;
++    }
++    if (hang > w / 2)
++        hang = w / 2;
++
++    while (*s) {
++        int ind = st->lead > hang ? st->lead : hang;
++        if (ind > w / 2)
++            ind = w / 2;
++
++        if (*s == '\n') {
++            fputc('\n', fp);
++            st->col = st->lead = 0;
++            st->in_lead = 1;
++            s++;
++        } else if (*s == ' ' || *s == '\t') {
++            int n = 0, c = st->col;
++            size_t len;
++            while (*s == ' ' || *s == '\t') {
++                int step = *s == '\t' ? 8 - c % 8 : 1;
++                n += step;
++                c += step;
++                s++;
++            }
++            len = word_len(s);
++            if (st->in_lead) {
++                if (n > w / 2)
++                    n = w / 2;
++                put_blanks(fp, n);
++                st->col += n;
++                st->lead = st->col;
++            } else if (st->col + n + (int)len <= w) {
++                put_blanks(fp, n);
++                st->col += n;
++            } else if (len > 0) {
++                /* the next word does not fit: the blanks give way to a break */
++                fputc('\n', fp);
++                put_blanks(fp, ind);
++                st->col = ind;
++            }
++            /* blanks at the end of a line that do not fit are dropped */
++        } else {
++            int len = (int)word_len(s);
++            st->in_lead = 0;
++            if (st->col + len > w && st->col > ind) {
++                fputc('\n', fp);
++                put_blanks(fp, ind);
++                st->col = ind;
++            }
++            while (st->col + len > w) {
++                int room = w - st->col;
++                if (room < 1) {
++                    fputc('\n', fp);
++                    put_blanks(fp, ind);
++                    st->col = ind;
++                    continue;
++                }
++                fwrite(s, 1, room, fp);
++                s += room;
++                len -= room;
++                fputc('\n', fp);
++                put_blanks(fp, ind);
++                st->col = ind;
++            }
++            fwrite(s, 1, len, fp);
++            s += len;
++            st->col += len;
++        }
++    }
++}
++
++int upkg_vfprintf(FILE *fp, int hang, const char *fmt, va_list ap)
++{
++    va_list ap2;
++    char *buf;
++    int n;
++
++    if (!upkg_wrap_width(fp))
++        return vfprintf(fp, fmt, ap);
++
++    va_copy(ap2, ap);
++    n = vsnprintf(NULL, 0, fmt, ap2);
++    va_end(ap2);
++    if (n < 0 || (buf = malloc((size_t)n + 1)) == NULL)
++        return vfprintf(fp, fmt, ap);
++    vsnprintf(buf, (size_t)n + 1, fmt, ap);
++    upkg_wrap_puts(fp, hang, buf);
++    free(buf);
++    return n;
++}
++
++int upkg_fprintf(FILE *fp, const char *fmt, ...)
++{
++    va_list ap;
++    int n;
++
++    va_start(ap, fmt);
++    n = upkg_vfprintf(fp, 2, fmt, ap);
++    va_end(ap);
++    return n;
++}
++
++int upkg_printf(const char *fmt, ...)
++{
++    va_list ap;
++    int n;
++
++    va_start(ap, fmt);
++    n = upkg_vfprintf(stdout, 2, fmt, ap);
++    va_end(ap);
++    return n;
++}
+diff --git a/libopkg/upkg_wrap.h b/libopkg/upkg_wrap.h
+new file mode 100644
+index 0000000..1a34f4f
+--- /dev/null
++++ b/libopkg/upkg_wrap.h
+@@ -0,0 +1,36 @@
++/* upkg_wrap.h - upkg: output that follows the console width (UP-Term).
++   SPDX-License-Identifier: GPL-2.0-or-later */
++#ifndef _UPKG_WRAP_H_
++#define _UPKG_WRAP_H_
++
++#include <stdarg.h>
++#include <stdio.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* Usable columns of the console FP is attached to, or 0 when FP is not an
++ * interactive console (a pipe, a file, any stream but stdout and stderr):
++ * then nothing is wrapped and the output is byte for byte what opkg prints.
++ * Order: the console's own size (TIOCGWINSZ), $COLUMNS, 76. One column is
++ * left free so a full line does not wrap twice on a console that wraps at once. */
++int upkg_wrap_width(FILE *fp);
++
++/* Write S (may hold newlines) word-wrapped to the console. A continuation line
++ * is indented by HANG columns or by the line's own leading blanks, whichever is
++ * wider; a word longer than the line breaks hard at the width. */
++void upkg_wrap_puts(FILE *fp, int hang, const char *s);
++
++/* printf into the wrapper; HANG as for upkg_wrap_puts */
++int upkg_vfprintf(FILE *fp, int hang, const char *fmt, va_list ap);
++
++int upkg_fprintf(FILE *fp, const char *fmt, ...)
++    __attribute__ ((format(printf, 2, 3)));
++int upkg_printf(const char *fmt, ...)
++    __attribute__ ((format(printf, 1, 2)));
++
++#ifdef __cplusplus
++}
++#endif
++#endif
+diff --git a/src/opkg.c b/src/opkg.c
+index f400999..34c2939 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -30,6 +30,7 @@
+ #include <getopt.h>
+ #include <stdlib.h>
+ #include <locale.h>
++#include <string.h>
+ 
+ #include "opkg_conf.h"
+ #include "opkg_cmd.h"
+@@ -37,6 +38,11 @@
+ #include "opkg_message.h"
+ #include "opkg_download.h"
+ #include "xfuncs.h"
++#include "upkg_wrap.h"
++
++/* every message follows the console width; piped it is a plain printf / fprintf */
++#define printf upkg_printf
++#define fprintf upkg_fprintf
+ 
+ enum {
+     ARGS_OPT_FORCE_MAINTAINER = 129,
+@@ -347,120 +353,206 @@ static int args_parse_stage2(int argc, char *argv[])
+         return optind;
+ }
+ 
++/* Help layout. Piped, the text is exactly what patch 0008 printed: options in a column at 30, the
++ * description lines as written. On a console the lines of a description are joined and wrapped to
++ * the window, the column grows with it (18 below 60 columns, 30, 36 from 100). */
++static int help_col(void)
++{
++    int w = upkg_wrap_width(stdout);
++
++    if (!w)
++        return 30;
++    return w < 60 ? 18 : w < 100 ? 30 : 36;
++}
++
++/* S with each newline (and the blanks after it) turned into SEP */
++static char *help_join(const char *s, const char *sep)
++{
++    char *r = xmalloc(strlen(s) * 2 + 1), *p = r;
++
++    while (*s) {
++        if (*s == '\n') {
++            p += sprintf(p, "%s", sep);
++            s++;
++            while (*s == ' ')
++                s++;
++        } else
++            *p++ = *s++;
++    }
++    *p = '\0';
++    return r;
++}
++
++static const char *help_line(const char *s, int n, char *buf, size_t len)
++{
++    const char *e;
++
++    while (n-- > 0 && s) {
++        s = strchr(s, '\n');
++        if (s)
++            s++;
++    }
++    if (!s)
++        return NULL;
++    e = strchr(s, '\n');
++    snprintf(buf, len, "%.*s", e ? (int)(e - s) : (int)strlen(s), s);
++    return buf;
++}
++
++static int help_lines(const char *s)
++{
++    int n = 1;
++
++    for (; s && *s; s++)
++        n += *s == '\n';
++    return n;
++}
++
++static void upkg_help_row(const char *opt, const char *desc)
++{
++    int col = help_col(), joined = upkg_wrap_width(stdout) != 0;
++    char *o = joined ? help_join(opt, ", ") : xstrdup(opt);
++    char *d = desc ? (joined ? help_join(desc, " ") : xstrdup(desc)) : NULL;
++    int no = help_lines(o), nd = d ? help_lines(d) : 0;
++    int own_line = d && no == 1 && (int)strlen(o) > col - 4;
++    int i, n = no > nd ? no : nd;
++    char ob[512], db[512];
++    char *out = xcalloc(1, strlen(o) + (d ? strlen(d) : 0) + (size_t)(no + nd + 1) * (col + 8));
++
++    if (own_line) {
++        sprintf(out, "  %s\n", o);
++        for (i = 0; i < nd; i++)
++            sprintf(out + strlen(out), "%*s%s\n", col, "", help_line(d, i, db, sizeof db));
++    } else {
++        for (i = 0; i < n; i++) {
++            const char *ol = i < no ? help_line(o, i, ob, sizeof ob) : NULL;
++            const char *dl = i < nd ? help_line(d, i, db, sizeof db) : NULL;
++
++            if (ol && dl)
++                sprintf(out + strlen(out), "  %-*s%s\n", col - 2, ol, dl);
++            else if (ol)
++                sprintf(out + strlen(out), "  %s\n", ol);
++            else
++                sprintf(out + strlen(out), "%*s%s\n", col, "", dl);
++        }
++    }
++    upkg_wrap_puts(stdout, col, out);
++    free(out);
++    free(o);
++    free(d);
++}
++
++/* a line nested under a row (the verbosity levels) */
++static void upkg_help_sub(const char *text)
++{
++    char line[256];
++
++    snprintf(line, sizeof line, "%*s%s\n", help_col() + 2, "", text);
++    upkg_wrap_puts(stdout, help_col() + 2, line);
++}
++
++static void upkg_help_text(const char *text)
++{
++    upkg_wrap_puts(stdout, 2, text);
++}
++
++/* running text: piped as written, on a console one paragraph that wraps */
++static void upkg_help_para(const char *text)
++{
++    if (upkg_wrap_width(stdout)) {
++        char *j = help_join(text, " ");
++        upkg_wrap_puts(stdout, 1, j);
++        free(j);
++    } else
++        fputs(text, stdout);
++}
++
+ static void usage()
+ {
+-    printf("usage: upkg [options...] sub-command [arguments...]\n");
+-    printf("where sub-command is one of:\n");
+-
+-    printf("\nPackage Manipulation:\n");
+-    printf("  update                      Update list of available packages\n");
+-    printf("  upgrade                     Upgrade installed packages\n");
+-    printf("  dist-upgrade                Upgrade operation that allows package removal\n");
+-    printf("                              (libsolv backend)\n");
+-    printf("  install <pkgs>              Install package(s)\n");
+-    printf("  configure <pkgs>            Configure unpacked package(s)\n");
+-    printf("  remove <pkgs|glob>          Remove package(s)\n");
+-    printf("  clean                       Clean internal cache\n");
+-    printf("  flag <flag> <pkgs>          Flag package(s)\n");
+-    printf("  <flag>=hold|noprune|user|ok|installed|unpacked (one per invocation)\n");
+-
+-    printf("\nInformational Commands:\n");
+-    printf("  list                        List available packages\n");
+-    printf("  list-installed              List installed packages\n");
+-    printf("  list-upgradable             List installed and upgradable packages\n");
+-    printf("  list-changed-conffiles      List user modified configuration files\n");
+-    printf("  files <pkg>                 List files belonging to <pkg>\n");
+-    printf("  search <file|glob>          List package providing <file>\n");
+-    printf("  find <regexp>               List packages with names or description\n");
+-    printf("                              matching <regexp>\n");
+-    printf("  info [pkg|glob]             Display all info for <pkg>\n");
+-    printf("  status [pkg|glob]           Display all status for <pkg>\n");
+-    printf("  download <pkg>              Download <pkg> to current directory\n");
+-    printf("  compare-versions <v1> <op> <v2>\n");
+-    printf("                              compare versions using <= < > >= = << >>\n");
+-    printf("  print-architecture          List installable package architectures\n");
+-    printf("  depends [-A] [pkgname|glob]+\n");
+-    printf("  whatdepends [-A] [pkgname|glob]+\n");
+-    printf("  whatdependsrec [-A] [pkgname|glob]+\n");
+-    printf("  whatrecommends[-A] [pkgname|glob]+\n");
+-    printf("  whatsuggests[-A] [pkgname|glob]+\n");
+-    printf("  whatprovides [-A] [pkgname|glob]+\n");
+-    printf("  whatconflicts [-A] [pkgname|glob]+\n");
+-    printf("  whatreplaces [-A] [pkgname|glob]+\n");
+-    printf("  verify [pkg|glob]           Verifies the integrity of <pkg>, or all\n");
+-    printf("                              packages if omitted by comparing the md5sum of\n");
+-    printf("                              each file with the information stored on the\n");
+-    printf("                              opkg metadata database\n");
+-    printf("  -v, --version               Print version\n");
+-    printf("\nOptions:\n");
+-    printf("  -A                          Query all packages not just those installed\n");
+-    printf("  -V[<level>]                 Set verbosity level to <level>.\n");
+-    printf("  --verbosity[=<level>]       Verbosity levels:\n");
+-    printf("                                0 errors only\n");
+-    printf("                                1 normal messages (default)\n");
+-    printf("                                2 informative messages\n");
+-    printf("                                3 debug\n");
+-    printf("                                4 debug level 2\n");
+-    printf("  -f <conf_file>              Use <conf_file> as the opkg configuration file\n");
+-    printf("  --conf <conf_file>          Can be given multiple times\n");
+-    printf("  --cache-dir <path>          Specify cache directory.\n");
+-    printf("  -t, --tmp-dir <directory>   Specify tmp-dir.\n");
+-    printf("  -l, --lists-dir <directory>\n");
+-    printf("                              Specify lists-dir.\n");
+-    printf("  -d <dest_name>              Use <dest_name> as the root directory for\n");
+-    printf("  --dest <dest_name>          package installation, removal, upgrading.\n");
+-    printf("                              <dest_name> should be a defined dest name from\n");
+-    printf("                              the configuration file, (but can also be a\n");
+-    printf("                              directory name in a pinch).\n");
+-    printf("  -o <dir>                    Use <dir> as the root directory for\n");
+-    printf("  --offline-root <dir>        offline installation of packages.\n");
+-    printf("  --add-dest <name>:<path>    Register destination with given path\n");
+-    printf("  --add-arch <arch>:<prio>    Register architecture with given priority\n");
+-    printf("  --add-exclude <name>        Register package to be excluded from install\n");
+-    printf("  --add-ignore-recommends <name>\n");
+-    printf("                              Register package to be ignored as a\n");
+-    printf("                              recommendee\n");
+-    printf("  --prefer-arch-to-version    Use the architecture priority package rather\n");
+-    printf("                              than the higher version one if more than one\n");
+-    printf("                              candidate is found.\n");
+-    printf("  --combine                   Combine upgrade and install operations, this\n");
+-    printf("                              may be needed to resolve dependency issues.\n");
+-    printf("                              Only available for the internal solver\n");
+-    printf("                              backend.\n");
+-    printf("  --fields <field1>,<field2>  Limit display information to the specified\n");
+-    printf("                              fields plus the package name. Valid for info\n");
+-    printf("                              and status.\n");
+-    printf("  --short-description         Display only the first line of the\n");
+-    printf("                              description.\n");
+-    printf("  --size                      Print package size when listing available\n");
+-    printf("                              packages\n");
+-
+-    printf("\nForce Options:\n");
+-    printf("  --force-depends             Install/remove despite failed dependencies\n");
+-    printf("  --force-maintainer          Overwrite preexisting config files\n");
+-    printf("  --force-reinstall           Reinstall package(s)\n");
+-    printf("  --force-overwrite           Overwrite files from other package(s)\n");
+-    printf("  --force-downgrade           Allow opkg to downgrade packages\n");
+-    printf("  --force-space               Disable free space checks\n");
+-    printf("  --force-postinstall         Run postinstall scripts even in offline mode\n");
+-    printf("  --force-remove              Remove package even if prerm script fails\n");
+-    printf("  --force-checksum            Don't fail on checksum mismatches\n");
+-    printf("  --noaction                  No action -- test only\n");
+-    printf("  --download-only             No action -- download only\n");
+-    printf("  --nodeps                    Do not follow dependencies\n");
+-    printf("  --[no-]install-recommends   (Do not) install any recommended packages\n");
+-    printf("  --force-removal-of-dependent-packages\n");
+-    printf("                              Remove package and all dependencies\n");
+-    printf("  --autoremove                Remove packages that were installed\n");
+-    printf("                              automatically to satisfy dependencies\n");
+-    printf("  --host-cache-dir            Don't place cache in offline root dir.\n");
+-    printf("  --volatile-cache            Use volatile cache. Volatile cache will be\n");
+-    printf("                              cleared on exit\n");
+-    printf("\n");
+-
+-    printf(" glob could be something like 'pkgname*' '*file*' or similar\n");
+-    printf(" e.g. upkg info 'libstd*' or upkg search '*libop*' or\n");
+-    printf(" upkg remove 'libncur*'\n");
++    upkg_help_text("usage: upkg [options...] sub-command [arguments...]\n");
++    upkg_help_text("where sub-command is one of:\n");
++    upkg_help_text("\nPackage Manipulation:\n");
++    upkg_help_row("update", "Update list of available packages");
++    upkg_help_row("upgrade", "Upgrade installed packages");
++    upkg_help_row("dist-upgrade", "Upgrade operation that allows package removal\n(libsolv backend)");
++    upkg_help_row("install <pkgs>", "Install package(s)");
++    upkg_help_row("configure <pkgs>", "Configure unpacked package(s)");
++    upkg_help_row("remove <pkgs|glob>", "Remove package(s)");
++    upkg_help_row("clean", "Clean internal cache");
++    upkg_help_row("flag <flag> <pkgs>", "Flag package(s)");
++    upkg_help_row("<flag>=hold|noprune|user|ok|installed|unpacked (one per invocation)", NULL);
++    upkg_help_text("\nInformational Commands:\n");
++    upkg_help_row("list", "List available packages");
++    upkg_help_row("list-installed", "List installed packages");
++    upkg_help_row("list-upgradable", "List installed and upgradable packages");
++    upkg_help_row("list-changed-conffiles", "List user modified configuration files");
++    upkg_help_row("files <pkg>", "List files belonging to <pkg>");
++    upkg_help_row("search <file|glob>", "List package providing <file>");
++    upkg_help_row("find <regexp>", "List packages with names or description\nmatching <regexp>");
++    upkg_help_row("info [pkg|glob]", "Display all info for <pkg>");
++    upkg_help_row("status [pkg|glob]", "Display all status for <pkg>");
++    upkg_help_row("download <pkg>", "Download <pkg> to current directory");
++    upkg_help_row("compare-versions <v1> <op> <v2>", "compare versions using <= < > >= = << >>");
++    upkg_help_row("print-architecture", "List installable package architectures");
++    upkg_help_row("depends [-A] [pkgname|glob]+", NULL);
++    upkg_help_row("whatdepends [-A] [pkgname|glob]+", NULL);
++    upkg_help_row("whatdependsrec [-A] [pkgname|glob]+", NULL);
++    upkg_help_row("whatrecommends[-A] [pkgname|glob]+", NULL);
++    upkg_help_row("whatsuggests[-A] [pkgname|glob]+", NULL);
++    upkg_help_row("whatprovides [-A] [pkgname|glob]+", NULL);
++    upkg_help_row("whatconflicts [-A] [pkgname|glob]+", NULL);
++    upkg_help_row("whatreplaces [-A] [pkgname|glob]+", NULL);
++    upkg_help_row("verify [pkg|glob]", "Verifies the integrity of <pkg>, or all\npackages if omitted by comparing the md5sum of\neach file with the information stored on the\nopkg metadata database");
++    upkg_help_row("-v, --version", "Print version");
++    upkg_help_text("\nOptions:\n");
++    upkg_help_row("-A", "Query all packages not just those installed");
++    upkg_help_row("-V[<level>]", "Set verbosity level to <level>.");
++    upkg_help_row("--verbosity[=<level>]", "Verbosity levels:");
++    upkg_help_sub("0 errors only");
++    upkg_help_sub("1 normal messages (default)");
++    upkg_help_sub("2 informative messages");
++    upkg_help_sub("3 debug");
++    upkg_help_sub("4 debug level 2");
++    upkg_help_row("-f <conf_file>", "Use <conf_file> as the opkg configuration file");
++    upkg_help_row("--conf <conf_file>", "Can be given multiple times");
++    upkg_help_row("--cache-dir <path>", "Specify cache directory.");
++    upkg_help_row("-t, --tmp-dir <directory>", "Specify tmp-dir.");
++    upkg_help_row("-l, --lists-dir <directory>", "Specify lists-dir.");
++    upkg_help_row("-d <dest_name>\n--dest <dest_name>",
++                  "Use <dest_name> as the root directory for\npackage installation, removal, upgrading.\n<dest_name> should be a defined dest name from\nthe configuration file, (but can also be a\ndirectory name in a pinch).");
++    upkg_help_row("-o <dir>\n--offline-root <dir>",
++                  "Use <dir> as the root directory for\noffline installation of packages.");
++    upkg_help_row("--add-dest <name>:<path>", "Register destination with given path");
++    upkg_help_row("--add-arch <arch>:<prio>", "Register architecture with given priority");
++    upkg_help_row("--add-exclude <name>", "Register package to be excluded from install");
++    upkg_help_row("--add-ignore-recommends <name>", "Register package to be ignored as a\nrecommendee");
++    upkg_help_row("--prefer-arch-to-version", "Use the architecture priority package rather\nthan the higher version one if more than one\ncandidate is found.");
++    upkg_help_row("--combine", "Combine upgrade and install operations, this\nmay be needed to resolve dependency issues.\nOnly available for the internal solver\nbackend.");
++    upkg_help_row("--fields <field1>,<field2>", "Limit display information to the specified\nfields plus the package name. Valid for info\nand status.");
++    upkg_help_row("--short-description", "Display only the first line of the\ndescription.");
++    upkg_help_row("--size", "Print package size when listing available\npackages");
++    upkg_help_text("\nForce Options:\n");
++    upkg_help_row("--force-depends", "Install/remove despite failed dependencies");
++    upkg_help_row("--force-maintainer", "Overwrite preexisting config files");
++    upkg_help_row("--force-reinstall", "Reinstall package(s)");
++    upkg_help_row("--force-overwrite", "Overwrite files from other package(s)");
++    upkg_help_row("--force-downgrade", "Allow opkg to downgrade packages");
++    upkg_help_row("--force-space", "Disable free space checks");
++    upkg_help_row("--force-postinstall", "Run postinstall scripts even in offline mode");
++    upkg_help_row("--force-remove", "Remove package even if prerm script fails");
++    upkg_help_row("--force-checksum", "Don't fail on checksum mismatches");
++    upkg_help_row("--noaction", "No action -- test only");
++    upkg_help_row("--download-only", "No action -- download only");
++    upkg_help_row("--nodeps", "Do not follow dependencies");
++    upkg_help_row("--[no-]install-recommends", "(Do not) install any recommended packages");
++    upkg_help_row("--force-removal-of-dependent-packages", "Remove package and all dependencies");
++    upkg_help_row("--autoremove", "Remove packages that were installed\nautomatically to satisfy dependencies");
++    upkg_help_row("--host-cache-dir", "Don't place cache in offline root dir.");
++    upkg_help_row("--volatile-cache", "Use volatile cache. Volatile cache will be\ncleared on exit");
++    upkg_help_text("\n");
++    upkg_help_para(" glob could be something like 'pkgname*' '*file*' or similar\n"
++                   " e.g. upkg info 'libstd*' or upkg search '*libop*' or\n"
++                   " upkg remove 'libncur*'\n");
+ 
+     /* --force-removal-of-essential-packages        Let opkg remove essential packages.
+      * Using this option is almost guaranteed to break your system, hence this option
+-- 
+2.50.1 (Apple Git-155)
+
