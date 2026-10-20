@@ -1,0 +1,222 @@
+From 46dded9119eb8e25b65fba14c90de39d4b8dd241 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 20 Oct 2026 14:45:16 +0200
+Subject: [PATCH 8/8] upkg: reflow --help to 76 columns so a 640x256 Amiga
+ shell does not wrap it
+
+usage() printed lines up to 103 columns; a hires Workbench shell with topaz 8 fits about 77, so the shell wrapped them mid-word. The option column is narrower (2 space indent, descriptions at column 30), long descriptions continue on lines aligned to it, and an option too long for the column sits on its own line. Wording is unchanged apart from 'the the' and 'recomendee', and the examples tell the user to type upkg.
+---
+ src/opkg.c | 189 ++++++++++++++++++++++++++++-------------------------
+ 1 file changed, 100 insertions(+), 89 deletions(-)
+
+diff --git a/src/opkg.c b/src/opkg.c
+index ebf135d..f400999 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -353,103 +353,114 @@ static void usage()
+     printf("where sub-command is one of:\n");
+ 
+     printf("\nPackage Manipulation:\n");
+-    printf("\tupdate                          Update list of available packages\n");
+-    printf("\tupgrade                         Upgrade installed packages\n");
+-    printf("\tdist-upgrade                    Upgrade operation that allows package removal (libsolv backend)\n");
+-    printf("\tinstall <pkgs>                  Install package(s)\n");
+-    printf("\tconfigure <pkgs>                Configure unpacked package(s)\n");
+-    printf("\tremove <pkgs|glob>              Remove package(s)\n");
+-    printf("\tclean                           Clean internal cache\n");
+-    printf("\tflag <flag> <pkgs>              Flag package(s)\n");
+-    printf("\t <flag>=hold|noprune|user|ok|installed|unpacked (one per invocation)\n");
++    printf("  update                      Update list of available packages\n");
++    printf("  upgrade                     Upgrade installed packages\n");
++    printf("  dist-upgrade                Upgrade operation that allows package removal\n");
++    printf("                              (libsolv backend)\n");
++    printf("  install <pkgs>              Install package(s)\n");
++    printf("  configure <pkgs>            Configure unpacked package(s)\n");
++    printf("  remove <pkgs|glob>          Remove package(s)\n");
++    printf("  clean                       Clean internal cache\n");
++    printf("  flag <flag> <pkgs>          Flag package(s)\n");
++    printf("  <flag>=hold|noprune|user|ok|installed|unpacked (one per invocation)\n");
+ 
+     printf("\nInformational Commands:\n");
+-    printf("\tlist                            List available packages\n");
+-    printf("\tlist-installed                  List installed packages\n");
+-    printf("\tlist-upgradable                 List installed and upgradable packages\n");
+-    printf("\tlist-changed-conffiles          List user modified configuration files\n");
+-    printf("\tfiles <pkg>                     List files belonging to <pkg>\n");
+-    printf("\tsearch <file|glob>              List package providing <file>\n");
+-    printf("\tfind <regexp>                   List packages with names or description matching <regexp>\n");
+-    printf("\tinfo [pkg|glob]                 Display all info for <pkg>\n");
+-    printf("\tstatus [pkg|glob]               Display all status for <pkg>\n");
+-    printf("\tdownload <pkg>                  Download <pkg> to current directory\n");
+-    printf("\tcompare-versions <v1> <op> <v2>\n");
+-    printf("\t                                compare versions using <= < > >= = << >>\n");
+-    printf("\tprint-architecture              List installable package architectures\n");
+-    printf("\tdepends [-A] [pkgname|glob]+\n");
+-    printf("\twhatdepends [-A] [pkgname|glob]+\n");
+-    printf("\twhatdependsrec [-A] [pkgname|glob]+\n");
+-    printf("\twhatrecommends[-A] [pkgname|glob]+\n");
+-    printf("\twhatsuggests[-A] [pkgname|glob]+\n");
+-    printf("\twhatprovides [-A] [pkgname|glob]+\n");
+-    printf("\twhatconflicts [-A] [pkgname|glob]+\n");
+-    printf("\twhatreplaces [-A] [pkgname|glob]+\n");
+-    printf("\tverify [pkg|glob]               Verifies the integrity of <pkg>, or all packages if omitted by\n");
+-    printf("\t                                comparing the md5sum of each file with the information stored\n");
+-    printf("\t                                on the opkg metadata database\n");
+-    printf("\t-v, --version                   Print version\n");
++    printf("  list                        List available packages\n");
++    printf("  list-installed              List installed packages\n");
++    printf("  list-upgradable             List installed and upgradable packages\n");
++    printf("  list-changed-conffiles      List user modified configuration files\n");
++    printf("  files <pkg>                 List files belonging to <pkg>\n");
++    printf("  search <file|glob>          List package providing <file>\n");
++    printf("  find <regexp>               List packages with names or description\n");
++    printf("                              matching <regexp>\n");
++    printf("  info [pkg|glob]             Display all info for <pkg>\n");
++    printf("  status [pkg|glob]           Display all status for <pkg>\n");
++    printf("  download <pkg>              Download <pkg> to current directory\n");
++    printf("  compare-versions <v1> <op> <v2>\n");
++    printf("                              compare versions using <= < > >= = << >>\n");
++    printf("  print-architecture          List installable package architectures\n");
++    printf("  depends [-A] [pkgname|glob]+\n");
++    printf("  whatdepends [-A] [pkgname|glob]+\n");
++    printf("  whatdependsrec [-A] [pkgname|glob]+\n");
++    printf("  whatrecommends[-A] [pkgname|glob]+\n");
++    printf("  whatsuggests[-A] [pkgname|glob]+\n");
++    printf("  whatprovides [-A] [pkgname|glob]+\n");
++    printf("  whatconflicts [-A] [pkgname|glob]+\n");
++    printf("  whatreplaces [-A] [pkgname|glob]+\n");
++    printf("  verify [pkg|glob]           Verifies the integrity of <pkg>, or all\n");
++    printf("                              packages if omitted by comparing the md5sum of\n");
++    printf("                              each file with the information stored on the\n");
++    printf("                              opkg metadata database\n");
++    printf("  -v, --version               Print version\n");
+     printf("\nOptions:\n");
+-    printf("\t-A                              Query all packages not just those installed\n");
+-    printf("\t-V[<level>]                     Set verbosity level to <level>.\n");
+-    printf("\t--verbosity[=<level>]           Verbosity levels:\n");
+-    printf("\t                                  0 errors only\n");
+-    printf("\t                                  1 normal messages (default)\n");
+-    printf("\t                                  2 informative messages\n");
+-    printf("\t                                  3 debug\n");
+-    printf("\t                                  4 debug level 2\n");
+-    printf("\t-f <conf_file>                  Use <conf_file> as the opkg configuration file\n");
+-    printf("\t--conf <conf_file>              Can be given multiple times\n");
+-    printf("\t--cache-dir <path>              Specify cache directory.\n");
+-    printf("\t-t, --tmp-dir <directory>       Specify tmp-dir.\n");
+-    printf("\t-l, --lists-dir <directory>     Specify lists-dir.\n");
+-    printf("\t-d <dest_name>                  Use <dest_name> as the the root directory for\n");
+-    printf("\t--dest <dest_name>              package installation, removal, upgrading.\n");
+-    printf("\t                                <dest_name> should be a defined dest name from\n");
+-    printf("\t                                the configuration file, (but can also be a\n");
+-    printf("\t                                directory name in a pinch).\n");
+-    printf("\t-o <dir>                        Use <dir> as the root directory for\n");
+-    printf("\t--offline-root <dir>            offline installation of packages.\n");
+-    printf("\t--add-dest <name>:<path>        Register destination with given path\n");
+-    printf("\t--add-arch <arch>:<prio>        Register architecture with given priority\n");
+-    printf("\t--add-exclude <name>            Register package to be excluded from install\n");
+-    printf("\t--add-ignore-recommends <name>  Register package to be ignored as a recomendee\n");
+-    printf("\t--prefer-arch-to-version        Use the architecture priority package rather\n");
+-    printf("\t                                than the higher version one if more\n");
+-    printf("\t                                than one candidate is found.\n");
+-    printf("\t--combine                       Combine upgrade and install operations, this\n");
+-    printf("\t                                may be needed to resolve dependency issues.\n");
+-    printf("\t                                Only available for the internal solver backend.\n");
+-    printf("\t--fields <field1>,<field2>      Limit display information to the specified fields\n");
+-    printf("\t                                plus the package name. Valid for info and status.\n");
+-    printf("\t--short-description             Display only the first line of the description.\n");
+-    printf("\t--size                          Print package size when listing available packages\n");
++    printf("  -A                          Query all packages not just those installed\n");
++    printf("  -V[<level>]                 Set verbosity level to <level>.\n");
++    printf("  --verbosity[=<level>]       Verbosity levels:\n");
++    printf("                                0 errors only\n");
++    printf("                                1 normal messages (default)\n");
++    printf("                                2 informative messages\n");
++    printf("                                3 debug\n");
++    printf("                                4 debug level 2\n");
++    printf("  -f <conf_file>              Use <conf_file> as the opkg configuration file\n");
++    printf("  --conf <conf_file>          Can be given multiple times\n");
++    printf("  --cache-dir <path>          Specify cache directory.\n");
++    printf("  -t, --tmp-dir <directory>   Specify tmp-dir.\n");
++    printf("  -l, --lists-dir <directory>\n");
++    printf("                              Specify lists-dir.\n");
++    printf("  -d <dest_name>              Use <dest_name> as the root directory for\n");
++    printf("  --dest <dest_name>          package installation, removal, upgrading.\n");
++    printf("                              <dest_name> should be a defined dest name from\n");
++    printf("                              the configuration file, (but can also be a\n");
++    printf("                              directory name in a pinch).\n");
++    printf("  -o <dir>                    Use <dir> as the root directory for\n");
++    printf("  --offline-root <dir>        offline installation of packages.\n");
++    printf("  --add-dest <name>:<path>    Register destination with given path\n");
++    printf("  --add-arch <arch>:<prio>    Register architecture with given priority\n");
++    printf("  --add-exclude <name>        Register package to be excluded from install\n");
++    printf("  --add-ignore-recommends <name>\n");
++    printf("                              Register package to be ignored as a\n");
++    printf("                              recommendee\n");
++    printf("  --prefer-arch-to-version    Use the architecture priority package rather\n");
++    printf("                              than the higher version one if more than one\n");
++    printf("                              candidate is found.\n");
++    printf("  --combine                   Combine upgrade and install operations, this\n");
++    printf("                              may be needed to resolve dependency issues.\n");
++    printf("                              Only available for the internal solver\n");
++    printf("                              backend.\n");
++    printf("  --fields <field1>,<field2>  Limit display information to the specified\n");
++    printf("                              fields plus the package name. Valid for info\n");
++    printf("                              and status.\n");
++    printf("  --short-description         Display only the first line of the\n");
++    printf("                              description.\n");
++    printf("  --size                      Print package size when listing available\n");
++    printf("                              packages\n");
+ 
+     printf("\nForce Options:\n");
+-    printf("\t--force-depends                 Install/remove despite failed dependencies\n");
+-    printf("\t--force-maintainer              Overwrite preexisting config files\n");
+-    printf("\t--force-reinstall               Reinstall package(s)\n");
+-    printf("\t--force-overwrite               Overwrite files from other package(s)\n");
+-    printf("\t--force-downgrade               Allow opkg to downgrade packages\n");
+-    printf("\t--force-space                   Disable free space checks\n");
+-    printf("\t--force-postinstall             Run postinstall scripts even in offline mode\n");
+-    printf("\t--force-remove                  Remove package even if prerm script fails\n");
+-    printf("\t--force-checksum                Don't fail on checksum mismatches\n");
+-    printf("\t--noaction                      No action -- test only\n");
+-    printf("\t--download-only                 No action -- download only\n");
+-    printf("\t--nodeps                        Do not follow dependencies\n");
+-    printf("\t--[no-]install-recommends       (Do not) install any recommended packages\n");
+-    printf("\t--force-removal-of-dependent-packages\n");
+-    printf("\t                                Remove package and all dependencies\n");
+-    printf("\t--autoremove                    Remove packages that were installed\n");
+-    printf("\t                                automatically to satisfy dependencies\n");
+-    printf("\t--host-cache-dir                Don't place cache in offline root dir.\n");
+-    printf("\t--volatile-cache                Use volatile cache.\n");
+-    printf("\t                                Volatile cache will be cleared on exit\n");
++    printf("  --force-depends             Install/remove despite failed dependencies\n");
++    printf("  --force-maintainer          Overwrite preexisting config files\n");
++    printf("  --force-reinstall           Reinstall package(s)\n");
++    printf("  --force-overwrite           Overwrite files from other package(s)\n");
++    printf("  --force-downgrade           Allow opkg to downgrade packages\n");
++    printf("  --force-space               Disable free space checks\n");
++    printf("  --force-postinstall         Run postinstall scripts even in offline mode\n");
++    printf("  --force-remove              Remove package even if prerm script fails\n");
++    printf("  --force-checksum            Don't fail on checksum mismatches\n");
++    printf("  --noaction                  No action -- test only\n");
++    printf("  --download-only             No action -- download only\n");
++    printf("  --nodeps                    Do not follow dependencies\n");
++    printf("  --[no-]install-recommends   (Do not) install any recommended packages\n");
++    printf("  --force-removal-of-dependent-packages\n");
++    printf("                              Remove package and all dependencies\n");
++    printf("  --autoremove                Remove packages that were installed\n");
++    printf("                              automatically to satisfy dependencies\n");
++    printf("  --host-cache-dir            Don't place cache in offline root dir.\n");
++    printf("  --volatile-cache            Use volatile cache. Volatile cache will be\n");
++    printf("                              cleared on exit\n");
+     printf("\n");
+ 
+     printf(" glob could be something like 'pkgname*' '*file*' or similar\n");
+-    printf(" e.g. opkg info 'libstd*' or opkg search '*libop*' or opkg remove 'libncur*'\n");
++    printf(" e.g. upkg info 'libstd*' or upkg search '*libop*' or\n");
++    printf(" upkg remove 'libncur*'\n");
+ 
+     /* --force-removal-of-essential-packages        Let opkg remove essential packages.
+      * Using this option is almost guaranteed to break your system, hence this option
+-- 
+2.50.1 (Apple Git-155)
+
