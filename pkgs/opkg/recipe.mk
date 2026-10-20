@@ -20,6 +20,8 @@
 # pieces wraps whole instead of splitting between them; check/wrap_split.sh.
 # patches/0011: `upkg --help` prints the usage text alone and exits 0 (no "unrecognized option" line);
 # an unknown option is still reported; check/help_flag.sh. check/help_piped.txt lost its two error lines.
+# patches/0012: upkg sets PATH to UPKG_DEFAULT_PATH (/UP-Term/bin:/C) when the shell left it unset or
+# empty (a plain AmigaDOS Shell has none), so curl and /bin/sh are found; check/default_path.sh.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

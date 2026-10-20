@@ -1,0 +1,79 @@
+From 2e6da86ac81b3d144c09a7f54f18ab65cc878db4 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 20 Oct 2026 22:27:12 +0200
+Subject: [PATCH 12/12] upkg: give itself and its scripts a default PATH when
+ the shell set none
+
+A plain AmigaDOS Shell has no PATH variable (GetEnv PATH: object not
+found). The curl download backend (patch 0001) runs "curl" by bare name,
+so ixemul searched its own default path, the system asked for a volume
+"usr", and upkg failed with "curl returned -1 (is curl installed and in
+PATH?)". Maintainer scripts started by "/bin/sh -c" inherit the same
+empty environment, and opkg_prep_intercepts() fell back to the Unix
+"/usr/sbin:/usr/bin:/sbin:/bin", which does not exist on an Amiga. It
+worked from vsh only because vsh sets PATH.
+
+main() now sets PATH to UPKG_DEFAULT_PATH ("/UP-Term/bin:/C", read by
+ixemul as UP-Term:bin and C:) when it is unset or empty, before anything
+runs a child. The intercepts fallback uses the same define. The define
+lives in upkg_wrap.h and can be overridden with -DUPKG_DEFAULT_PATH.
+---
+ libopkg/opkg_cmd.c  | 2 +-
+ libopkg/upkg_wrap.h | 7 +++++++
+ src/opkg.c          | 9 +++++++++
+ 3 files changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
+index abe058e..e7a436e 100644
+--- a/libopkg/opkg_cmd.c
++++ b/libopkg/opkg_cmd.c
+@@ -199,7 +199,7 @@ static opkg_intercept_t opkg_prep_intercepts(void)
+ 
+     ctx = xcalloc(1, sizeof(*ctx));
+     ctx->oldpath = xstrdup(getenv("PATH"));
+-    oldpath = ctx->oldpath ? ctx->oldpath : "/usr/sbin:/usr/bin:/sbin:/bin";
++    oldpath = ctx->oldpath && *ctx->oldpath ? ctx->oldpath : UPKG_DEFAULT_PATH;
+     sprintf_alloc(&newpath, "%s:%s", opkg_config->intercepts_dir, oldpath);
+     sprintf_alloc(&ctx->statedir, "%s/opkg-intercept-XXXXXX",
+                   opkg_config->tmp_dir);
+diff --git a/libopkg/upkg_wrap.h b/libopkg/upkg_wrap.h
+index 92d8914..80d3fa4 100644
+--- a/libopkg/upkg_wrap.h
++++ b/libopkg/upkg_wrap.h
+@@ -6,6 +6,13 @@
+ #include <stdarg.h>
+ #include <stdio.h>
+ 
++/* PATH upkg gives itself and the maintainer scripts when the shell that started
++ * it left PATH unset or empty (a plain AmigaDOS Shell sets none). ixemul reads
++ * /UP-Term/bin as UP-Term:bin and /C as C:. Override with -DUPKG_DEFAULT_PATH. */
++#ifndef UPKG_DEFAULT_PATH
++#define UPKG_DEFAULT_PATH "/UP-Term/bin:/C"
++#endif
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+diff --git a/src/opkg.c b/src/opkg.c
+index bb6be17..6cac953 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -577,6 +577,15 @@ int main(int argc, char *argv[])
+     int noreadfeedsfile;
+     int noloadconf;
+ 
++    /* The download backend runs curl and maintainer scripts run /bin/sh by bare
++     * name; with no PATH ixemul falls back to its own default and asks for a
++     * volume "usr". Give every child a usable PATH whatever shell started us. */
++    {
++        const char *path = getenv("PATH");
++        if (path == NULL || *path == '\0')
++            setenv("PATH", UPKG_DEFAULT_PATH, 1);
++    }
++
+     if (opkg_conf_init())
+         goto err0;
+ 
+-- 
+2.50.1 (Apple Git-155)
+
