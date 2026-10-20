@@ -1,0 +1,104 @@
+From 91ee15c8db82c971c3406eae3170820061feb10f Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 20 Oct 2026 16:13:10 +0200
+Subject: [PATCH 11/11] upkg: --help prints the usage text alone and exits 0
+
+Stock opkg has no --help option: getopt reported it as unrecognized and
+usage() then exited 1. Declare it as a long option handled in stage 1 and
+let usage() take the exit status.
+---
+ src/opkg.c | 19 +++++++++++++------
+ 1 file changed, 13 insertions(+), 6 deletions(-)
+
+diff --git a/src/opkg.c b/src/opkg.c
+index 34c2939..bb6be17 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -136,9 +136,12 @@ static struct option long_options[] = {
+     {"fields", 1, 0, ARGS_OPT_FIELDS_FILTER},
+     {"verbosity", 2, 0, 'V'},
+     {"version", 0, 0, 'v'},
++    {"help", 0, 0, 'h'},
+     {0, 0, 0, 0}
+ };
+ 
++static void usage(int status);
++
+ const char *short_options = "Ad:f:no:p:l:t:vV::";
+ 
+ static void store_str_arg(char **dest, const char *arg)
+@@ -185,6 +188,9 @@ static int args_parse_stage1(int argc, char *argv[])
+                 printf("upkg version " VERSION ", based on opkg " VERSION "\n");
+             }
+             exit(0);
++        case 'h':
++            usage(0);
++            break;
+         case 'V':
+             opkg_config->verbosity = INFO;
+             if (optarg != NULL)
+@@ -237,6 +243,7 @@ static int args_parse_stage2(int argc, char *argv[])
+         case 'o':
+         case 'f':
+         case 'v':
++        case 'h':
+         case 'V':
+             // Already handled in stage 1 command line parsing
+             break;
+@@ -467,7 +474,7 @@ static void upkg_help_para(const char *text)
+         fputs(text, stdout);
+ }
+ 
+-static void usage()
++static void usage(int status)
+ {
+     upkg_help_text("usage: upkg [options...] sub-command [arguments...]\n");
+     upkg_help_text("where sub-command is one of:\n");
+@@ -558,7 +565,7 @@ static void usage()
+      * Using this option is almost guaranteed to break your system, hence this option
+      * is not even advertised in the usage statement. */
+ 
+-    exit(1);
++    exit(status);
+ }
+ 
+ int main(int argc, char *argv[])
+@@ -579,7 +586,7 @@ int main(int argc, char *argv[])
+     opts = args_parse_stage1(argc, argv);
+     if (opts == argc || opts < 0) {
+         fprintf(stderr, "upkg must have one sub-command argument\n");
+-        usage();
++        usage(1);
+     }
+ 
+     cmd_name = argv[opts++];
+@@ -610,7 +617,7 @@ int main(int argc, char *argv[])
+     cmd = opkg_cmd_find(cmd_name);
+     if (cmd == NULL) {
+         fprintf(stderr, "%s: unknown sub-command %s\n", argv[0], cmd_name);
+-        usage();
++        usage(1);
+     }
+ 
+     opkg_config->pfm = cmd->pfm;
+@@ -622,7 +629,7 @@ int main(int argc, char *argv[])
+ 
+     if (args_parse_stage2(argc, argv) < 0) {
+         fprintf(stderr, "Stage 2 argument parsing failed.\n");
+-        usage();
++        usage(1);
+     }
+ 
+     if (!noloadconf) {
+@@ -643,7 +650,7 @@ int main(int argc, char *argv[])
+     if (cmd->requires_args && opts == argc) {
+         fprintf(stderr, "%s: the ``%s'' command requires at least one argument\n",
+                 argv[0], cmd_name);
+-        usage();
++        usage(1);
+     }
+ 
+     err = opkg_cmd_exec(cmd, argc - opts, (const char **)(argv + opts));
+-- 
+2.50.1 (Apple Git-155)
+

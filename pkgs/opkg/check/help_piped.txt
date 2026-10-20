@@ -1,5 +1,3 @@
-upkg: unrecognized option `--help'
-upkg must have one sub-command argument
 usage: upkg [options...] sub-command [arguments...]
 where sub-command is one of:
 
