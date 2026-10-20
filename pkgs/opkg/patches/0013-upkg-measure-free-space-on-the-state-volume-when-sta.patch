@@ -1,0 +1,41 @@
+From 051f38c4c04e94955b437c8ef42967052502b2e4 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 20 Oct 2026 22:37:18 +0200
+Subject: [PATCH 13/14] upkg: measure free space on the state volume when
+ statvfs of the root fails
+
+On AmigaOS/ixemul the root / is not a volume: statfs on it fails with EPERM from a plain
+Shell, so verify_pkg_installable saw 0kb available. Fall back to info_dir, which lives on
+the volume the packages land on (UP-Term:).
+---
+ libopkg/opkg_utils.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/libopkg/opkg_utils.c b/libopkg/opkg_utils.c
+index d9d3b12..d56f72d 100644
+--- a/libopkg/opkg_utils.c
++++ b/libopkg/opkg_utils.c
+@@ -24,6 +24,7 @@
+ #include <sys/statvfs.h>
+ #include <string.h>
+ 
++#include "opkg_conf.h"
+ #include "opkg_message.h"
+ #include "xfuncs.h"
+ 
+@@ -33,6 +34,12 @@ unsigned long get_available_kbytes(char *filesystem)
+     int r;
+ 
+     r = statvfs(filesystem, &f);
++    if (r == -1 && opkg_config->info_dir) {
++        /* upkg (AmigaOS/ixemul): the root "/" is not a volume; statfs on it
++         * fails with EPERM from a plain Shell. Packages land under the
++         * volume that holds upkg's own state (UP-Term:), so measure that. */
++        r = statvfs(opkg_config->info_dir, &f);
++    }
+     if (r == -1) {
+         opkg_perror(ERROR, "Failed to statvfs for %s", filesystem);
+         return 0;
+-- 
+2.50.1 (Apple Git-155)
+

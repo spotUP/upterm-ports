@@ -18,7 +18,7 @@ from ipk import ipk, stanza, write_index
 index = b''
 for name in ('pathunset', 'pathempty'):
     ctl = b'Package: %s\nVersion: 1.0\nArchitecture: m68k-amigaos\nMaintainer: t\nDescription: PATH check\n' % name.encode()
-    pre = b'#!/bin/sh\necho "$PATH" > %s/%s.path\nexit 0\n' % (w.encode(), name.encode())
+    pre = b'#!/bin/sh\necho "$PATH" > %s/%s.path\necho "$IXSTACK" > %s/%s.stack\nexit 0\n' % (w.encode(), name.encode(), w.encode(), name.encode())
     pkg = ipk([('./control', ctl, 0o644), ('./preinst', pre, 0o755)], [('./%s.marker' % name, b'x\n', 0o644)])
     fn = '%s_1.0_m68k-amigaos.ipk' % name
     open('%s/feed/%s' % (w, fn), 'wb').write(pkg)
@@ -37,5 +37,6 @@ for n in pathunset pathempty; do
     /UP-Term/bin:/C|*:/UP-Term/bin:/C) ;;
     *) echo "[FAIL] $n: the preinst saw PATH='$p', want the default /UP-Term/bin:/C"; exit 1 ;;
   esac
+  [ "$(cat "$w/$n.stack" 2>/dev/null)" = 262144 ] || { echo "[FAIL] $n: the preinst saw IXSTACK='$(cat "$w/$n.stack" 2>/dev/null)', want 262144 (patches/0014)"; exit 1; }
 done
-echo "[OK] upkg with PATH unset or empty: maintainer scripts see /UP-Term/bin:/C"
+echo "[OK] upkg with PATH unset or empty: maintainer scripts see /UP-Term/bin:/C and IXSTACK 262144"

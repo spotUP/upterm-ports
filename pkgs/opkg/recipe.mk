@@ -22,6 +22,10 @@
 # an unknown option is still reported; check/help_flag.sh. check/help_piped.txt lost its two error lines.
 # patches/0012: upkg sets PATH to UPKG_DEFAULT_PATH (/UP-Term/bin:/C) when the shell left it unset or
 # empty (a plain AmigaDOS Shell has none), so curl and /bin/sh are found; check/default_path.sh.
+# patches/0013: when statvfs of the dest root fails (ixemul: "/" is no volume, EPERM from a plain Shell) the
+# free-space test measures the volume holding info_dir; check/statvfs_root.sh (shim statvfs_fail.c).
+# patches/0014: upkg sets IXSTACK=262144 unless set, so vfork children (curl) get a real stack; the
+# default_path.sh check reads it from a preinst.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
@@ -37,7 +41,11 @@ opkg_CHECK_SH_BIN := bin/upkg
 # check/byte_order.sh reads the m68k config.h, so the cross build must be configured first
 $(STATE)/host-opkg.expected: $(STATE)/opkg.configured
 opkg_BINS      := bin/upkg
-opkg_STACK     := 131072
+# upkg runs curl and maintainer scripts by vfork + exec, and a Shell without a Stack command gives 4096
+# bytes: `upkg install` rebooted an A1200 at the default stack (measured 2026-10-20); with 262144 it did not.
+# __stack extends upkg itself; the children get IXSTACK (patches/0014). check_bin checks __stack.
+opkg_STACK     := 262144
+opkg_STACK_VAR := 1
 opkg_HOST_DEPS := xz libarchive
 opkg_HOST_CONFIGURE := -DWITH_CURL=OFF -DWITH_SSLCURL=OFF -DWITH_GPGME=OFF -DUSE_SOLVER_LIBSOLV=OFF \
 	-DWITH_SHA256=ON -DWITH_XZ=ON -DUSE_ACL=OFF -DUSE_XATTR=OFF -DWITH_LIBOPKG_API=OFF \

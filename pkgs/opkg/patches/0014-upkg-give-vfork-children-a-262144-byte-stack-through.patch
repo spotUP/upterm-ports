@@ -1,0 +1,50 @@
+From e639812a20abc80bc10f1e5234bb90bdd8d43224 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 20 Oct 2026 22:46:11 +0200
+Subject: [PATCH 14/14] upkg: give vfork children a 262144 byte stack through
+ IXSTACK
+
+ixemul's vfork starts curl and maintainer scripts with the stack of the Shell that
+started upkg (4096 to 16384 bytes) unless IXSTACK is set; __stack only extends upkg.
+upkg update rebooted an A1200 from a plain Shell. Set IXSTACK unless the user did.
+---
+ libopkg/upkg_wrap.h | 5 +++++
+ src/opkg.c          | 6 ++++++
+ 2 files changed, 11 insertions(+)
+
+diff --git a/libopkg/upkg_wrap.h b/libopkg/upkg_wrap.h
+index 80d3fa4..6e6c5a9 100644
+--- a/libopkg/upkg_wrap.h
++++ b/libopkg/upkg_wrap.h
+@@ -13,6 +13,11 @@
+ #define UPKG_DEFAULT_PATH "/UP-Term/bin:/C"
+ #endif
+ 
++/* Stack in bytes (IXSTACK) for the programs upkg starts by vfork + exec. */
++#ifndef UPKG_CHILD_STACK
++#define UPKG_CHILD_STACK "262144"
++#endif
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+diff --git a/src/opkg.c b/src/opkg.c
+index 6cac953..cb5c8ea 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -586,6 +586,12 @@ int main(int argc, char *argv[])
+             setenv("PATH", UPKG_DEFAULT_PATH, 1);
+     }
+ 
++    /* ixemul's vfork gives the child (curl, a maintainer script) the stack of
++     * the Shell that started us (CLI default, 4096 to 16384 bytes) unless
++     * IXSTACK says more; __stack extends only upkg itself. curl on that small
++     * stack rebooted an A1200. Ask for UPKG_CHILD_STACK unless the user set one. */
++    setenv("IXSTACK", UPKG_CHILD_STACK, 0);
++
+     if (opkg_conf_init())
+         goto err0;
+ 
+-- 
+2.50.1 (Apple Git-155)
+

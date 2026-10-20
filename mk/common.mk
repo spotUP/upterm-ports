@@ -143,7 +143,7 @@ $(STATE)/$(1).installed: $(STATE)/$(1).built
 
 # a library package (no <p>_BINS, e.g. zlib) has no programs to check
 $(STATE)/$(1).checked: $(STATE)/$(1).installed tools/check_bin.sh
-	$$(if $$($(1)_BINS),$(ROOT)/tools/check_bin.sh $(1) "$$($(1)_STACK)" \
+	$$(if $$($(1)_BINS),STACK_VAR="$$($(1)_STACK_VAR)" $(ROOT)/tools/check_bin.sh $(1) "$$($(1)_STACK)" \
 		$$(addprefix $(SYSROOT)$(PREFIX)/,$$($(1)_BINS)),@true)
 	@touch $$@
 

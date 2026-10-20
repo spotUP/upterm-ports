@@ -47,6 +47,11 @@ for bin; do
 		if strings -a "$bin" | grep -q "\\\$STACK: *$stack\$"; then ok "\$STACK: $stack"
 		else bad "no \$STACK: $stack cookie (found: $(strings -a "$bin" | grep -o '\$STACK: *[0-9]*' | head -1))"; fi
 	fi
+	# __stack: a program started by vfork + exec (upkg's curl and scripts, ptyrun) ignores the cookie
+	if [ -n "${STACK_VAR:-}" ]; then
+		if "${X}nm" "$bin" 2>/dev/null | awk '$3 == "___stack" || $3 == "__stack"' | grep -q .; then ok "__stack defined"
+		else bad "no __stack variable (recipe sets STACK_VAR)"; fi
+	fi
 	# a flow-following scan: hunk executables keep const data in the code
 	# hunk, which a linear disassembly decodes as anything (m68k_scan.py)
 	scan=$(python3 "$ROOT/tools/m68k_scan.py" "$bin")
