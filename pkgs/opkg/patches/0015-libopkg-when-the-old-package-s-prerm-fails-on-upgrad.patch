@@ -1,0 +1,44 @@
+From bda58be68a8540c64059992dadacdc3bfef0847f Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Wed, 21 Oct 2026 01:17:10 +0200
+Subject: [PATCH 15/15] libopkg: when the old package's prerm fails on upgrade, let
+ the new prerm run failed-upgrade and go on
+
+---
+ libopkg/opkg_install.c | 20 +++++++++++++++++---
+ 1 file changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/libopkg/opkg_install.c b/libopkg/opkg_install.c
+index 2f3bdfe..9b269e4 100644
+--- a/libopkg/opkg_install.c
++++ b/libopkg/opkg_install.c
+@@ -249,9 +249,23 @@ static int prerm_upgrade_old_pkg(pkg_t * pkg, pkg_t * old_pkg)
+     err = pkg_run_script(old_pkg, "prerm", script_args);
+     free(script_args);
+     if (err != 0) {
+-        opkg_msg(ERROR, "prerm script for package \"%s\" failed\n",
+-                 old_pkg->name);
+-        return -1;
++        /* UP-Term (upkg): dpkg's recovery. The old prerm is code of the installed version and
++         * may be broken (an add-on whose Uninstall record is gone); the upgrade is then
++         * given to the new prerm as "failed-upgrade <old-version>", and goes on if that
++         * succeeds. If it fails too, the install stops as before. */
++        char *old_version = pkg_version_str_alloc(old_pkg);
++        sprintf_alloc(&script_args, "failed-upgrade %s", old_version);
++        free(old_version);
++        err = pkg_run_script(pkg, "prerm", script_args);
++        free(script_args);
++        if (err != 0) {
++            opkg_msg(ERROR, "prerm script for package \"%s\" failed\n",
++                     old_pkg->name);
++            return -1;
++        }
++        opkg_msg(NOTICE, "Warning: the prerm of installed %s failed; "
++                 "the prerm of the new %s took over (failed-upgrade) and the "
++                 "install goes on.\n", old_pkg->name, pkg->name);
+     }
+     return 0;
+ }
+-- 
+2.50.1 (Apple Git-155)
+

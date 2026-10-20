@@ -26,6 +26,8 @@
 # free-space test measures the volume holding info_dir; check/statvfs_root.sh (shim statvfs_fail.c).
 # patches/0014: upkg sets IXSTACK=262144 unless set, so vfork children (curl) get a real stack; the
 # default_path.sh check reads it from a preinst.
+# patches/0015: when the installed package's prerm fails on an upgrade, the new package's prerm runs with
+# `failed-upgrade <old-version>` (dpkg) and the install goes on if it succeeds; prerm_failed_upgrade.sh checks it.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
