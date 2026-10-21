@@ -1,0 +1,141 @@
+From fe7b00e13dbfb702ef4dda4790774ee9c26b2646 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Wed, 21 Oct 2026 07:35:55 +0200
+Subject: [PATCH 16/16] upkg: add the browse sub-command, which runs the browse
+ script with its arguments
+
+---
+ libopkg/opkg_cmd.c | 32 ++++++++++++++++++++++++++++++++
+ src/opkg.c         | 29 ++++++++++++++++++++++++++++-
+ 2 files changed, 60 insertions(+), 1 deletion(-)
+
+diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
+index e7a436e..b5d1138 100644
+--- a/libopkg/opkg_cmd.c
++++ b/libopkg/opkg_cmd.c
+@@ -21,6 +21,7 @@
+ #include "config.h"
+ 
+ #include <stdio.h>
++#include <string.h>
+ #include <dirent.h>
+ #include <glob.h>
+ #include <fnmatch.h>
+@@ -759,6 +760,36 @@ static int opkg_info_status_cmd(int argc, char **argv, int installed_only)
+     return 0;
+ }
+ 
++/* UP-Term (upkg): `upkg browse ARGS` runs the browse script (D1 of the browse plan) through
++ * /bin/sh the way a postinst runs upkg-ask. UPKG_BROWSE replaces the script command (host
++ * checks). Each argument is single-quoted; one holding a quote is refused. xsystem returns
++ * the script's exit code (WEXITSTATUS), or -1 when it could not run. */
++static int opkg_browse_cmd(int argc, char **argv)
++{
++    char *cmd = NULL, *tmp;
++    const char *sh_argv[4];
++    int i, r;
++
++    sprintf_alloc(&cmd, "${UPKG_BROWSE:-vsh UP-Term:bin/upkg-browse}");
++    for (i = 0; i < argc; i++) {
++        if (strchr(argv[i], '\'')) {
++            opkg_msg(ERROR, "browse: an argument must not contain a single quote.\n");
++            free(cmd);
++            return 2;
++        }
++        sprintf_alloc(&tmp, "%s '%s'", cmd, argv[i]);
++        free(cmd);
++        cmd = tmp;
++    }
++    sh_argv[0] = "/bin/sh";
++    sh_argv[1] = "-c";
++    sh_argv[2] = cmd;
++    sh_argv[3] = NULL;
++    r = xsystem(sh_argv);
++    free(cmd);
++    return r < 0 ? 1 : r;
++}
++
+ static int opkg_info_cmd(int argc, char **argv)
+ {
+     return opkg_info_status_cmd(argc, argv, 0);
+@@ -1240,6 +1271,7 @@ static opkg_cmd_t cmds[] = {
+         PFM_DESCRIPTION | PFM_SOURCE, true},
+     {"dist-upgrade", 0, (opkg_cmd_fun_t) opkg_distupgrade_cmd,
+         PFM_DESCRIPTION | PFM_SOURCE, true},
++    {"browse", 0, (opkg_cmd_fun_t) opkg_browse_cmd, 0, false},
+     {"list", 0, (opkg_cmd_fun_t) opkg_list_cmd, PFM_SOURCE, false},
+     {"list_installed", 0, (opkg_cmd_fun_t) opkg_list_installed_cmd, PFM_SOURCE,
+         false},
+diff --git a/src/opkg.c b/src/opkg.c
+index cb5c8ea..d01d573 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -492,6 +492,7 @@ static void usage(int status)
+     upkg_help_row("list", "List available packages");
+     upkg_help_row("list-installed", "List installed packages");
+     upkg_help_row("list-upgradable", "List installed and upgradable packages");
++    upkg_help_row("browse", "Pick add-ons from a list to install or remove");
+     upkg_help_row("list-changed-conffiles", "List user modified configuration files");
+     upkg_help_row("files <pkg>", "List files belonging to <pkg>");
+     upkg_help_row("search <file|glob>", "List package providing <file>");
+@@ -568,9 +569,27 @@ static void usage(int status)
+     exit(status);
+ }
+ 
++/* UP-Term (upkg): index of the sub-command, found with POSIX option order (the first
++ * word that is not an option or an option's value), or -1. Used only to recognise
++ * `browse`, whose arguments belong to the browse script: getopt_long would
++ * otherwise take `--help` after it for upkg's own option. */
++static int upkg_command_index(int argc, char **argv)
++{
++    int c, idx, saved_optind = optind, saved_opterr = opterr;
++
++    opterr = 0;
++    optind = 1;
++    while ((c = getopt_long(argc, argv, "+Ad:f:no:p:l:t:vV::", long_options, NULL)) != -1)
++        ;
++    idx = optind < argc ? optind : -1;
++    optind = saved_optind;
++    opterr = saved_opterr;
++    return idx;
++}
++
+ int main(int argc, char *argv[])
+ {
+-    int opts, err = -1;
++    int opts, err = -1, full_argc, cmd_at;
+     char *cmd_name = NULL;
+     opkg_cmd_t *cmd;
+     int nocheckfordirorfile;
+@@ -598,6 +617,12 @@ int main(int argc, char *argv[])
+     setlocale(LC_ALL, "");
+     opkg_config->verbosity = NOTICE;
+ 
++    /* `upkg browse ARGS`: parse the options before browse only; ARGS go to the script as they are. */
++    full_argc = argc;
++    cmd_at = upkg_command_index(argc, argv);
++    if (cmd_at > 0 && !strcmp(argv[cmd_at], "browse"))
++        argc = cmd_at + 1;
++
+     opts = args_parse_stage1(argc, argv);
+     if (opts == argc || opts < 0) {
+         fprintf(stderr, "upkg must have one sub-command argument\n");
+@@ -610,6 +635,7 @@ int main(int argc, char *argv[])
+         || !strcmp(cmd_name, "print_architecture")
+         || !strcmp(cmd_name, "print-installation-architecture")
+         || !strcmp(cmd_name, "print_installation_architecture")
++        || !strcmp(cmd_name, "browse")
+         || !strcmp(cmd_name, "compare_versions")
+         || !strcmp(cmd_name, "compare-versions")
+         || !strcmp(cmd_name, "clean");
+@@ -668,6 +694,7 @@ int main(int argc, char *argv[])
+         usage(1);
+     }
+ 
++    argc = full_argc;
+     err = opkg_cmd_exec(cmd, argc - opts, (const char **)(argv + opts));
+ 
+     opkg_download_cleanup();
+-- 
+2.50.1 (Apple Git-155)
+
