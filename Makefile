@@ -34,7 +34,13 @@ sizes:
 
 # build/kit/userland (programs, pages, data, licences, SOURCES.txt) and
 # build/kit/userland-src (the corresponding source): tools/kit-stage.sh
-kit-stage:
+# A package that was built once (its .installed stamp exists), has make rules
+# (not <p>_LOCAL) and ships in the kit is a prerequisite: make rebuilds it when
+# its source, recipe or patches are newer than its stamps, so the kit never gets
+# a stale binary (upkg-ui, 2026-10-21). A never-built package is not pulled in:
+# kit-stage.sh skips it, and a first toolchain build must not start from here.
+KIT_PKGS := $(foreach p,$(PKGS),$(if $($(p)_LOCAL),,$(if $($(p)_NO_KIT)$($(p)_KIT_HOLD),,$(if $(wildcard $(STATE)/$(p).installed),$(p)))))
+kit-stage: $(KIT_PKGS)
 	ROOT=$(ROOT) B=$(B) STATE=$(STATE) SYSROOT=$(SYSROOT) PREFIX=$(PREFIX) SRC=$(SRC) \
 	IXEMUL=$(IXEMUL) PKGS="$(PKGS)" sh tools/kit-stage.sh
 # print-<variable>: the value of exactly that variable (print-upkg-ui_OWN), as
