@@ -1,3 +1,5 @@
 input	sh -c "upkg-ui --title UP-TERM_ADD-ON --backtitle demo_1/3 --inputbox Where_should_the_files_go? 0 0 abc 2>ans.txt"	ans.txt
 yesno	sh -c "upkg-ui --defaultno --yesno Enable_the_service? 0 0 2>ans.txt"
 menu	sh -c "upkg-ui --no-items --default-item b --menu Pick_one 0 0 0 a \"\" b \"\" c \"\" 2>ans.txt"	ans.txt
+hotkey	sh -c "upkg-ui --no-items --hotkeys iru --menu Pick_one 0 0 0 a \"\" b \"\" c \"\" 2>ans.txt"	ans.txt
+hotenter	sh -c "upkg-ui --no-items --hotkeys iru --menu Pick_one 0 0 0 a \"\" b \"\" c \"\" 2>ans.txt"	ans.txt

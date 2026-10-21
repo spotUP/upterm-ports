@@ -3,11 +3,14 @@
  * (muted)"). The line builders are in chrome.c (pure, unit tested); this file is curses + args.
  *
  *   upkg-ui [--title T] [--backtitle V] [--defaultno] [--no-items] [--default-item X]
- *           (--inputbox PROMPT H W [INIT] | --yesno PROMPT H W | --menu PROMPT H W MH ITEM...)
+ *           [--hotkeys KEYS] (--inputbox PROMPT H W [INIT] | --yesno PROMPT H W | --menu PROMPT H W MH ITEM...)
  *
  * dialog-compatible subset: H, W and MH are accepted and ignored (the screen is the whole
  * terminal). The answer goes to STDERR (curses owns stdout). Exit 0 accept, 1 cancel or No,
- * 255 Escape, 2 usage error. */
+ * 255 Escape, 2 usage error.
+ *
+ * --hotkeys KEYS (menu only): pressing one of KEYS ends the menu with exit 0 and writes
+ * "KEY TAG"; Enter then writes "enter TAG". Without it the answer is the bare TAG. */
 #define _XOPEN_SOURCE_EXTENDED 1
 #include <langinfo.h>
 #include <locale.h>
@@ -33,7 +36,7 @@ typedef struct {
 } entry;
 
 static struct {
-	const char *title, *backtitle, *prompt, *default_item;
+	const char *title, *backtitle, *prompt, *default_item, *hotkeys;
 	int defaultno, no_items, kind;
 	wchar_t init[MAX_INPUT];
 	entry *entries;
@@ -382,6 +385,8 @@ static int key_yesno(int fn, wint_t c)
 	return -1;
 }
 
+static int hotkey; /* the --hotkeys key that ended the menu, 0 for Enter */
+
 static int key_menu(int fn, wint_t c)
 {
 	int n = opt.nentries, room = menu_room(widget_row), i;
@@ -399,6 +404,11 @@ static int key_menu(int fn, wint_t c)
 	}
 	if (c == '\n' || c == '\r')
 		return 0;
+	/* a hotkey ends the menu; it wins over the first-letter jump */
+	if (opt.hotkeys && c > 0 && c < 128 && strchr(opt.hotkeys, (int)c)) {
+		hotkey = (int)c;
+		return 0;
+	}
 	/* first-letter jump: the next entry after the selected one, wrapping */
 	for (i = 1; i <= n; i++) {
 		const char *t = opt.entries[(msel + i) % n].tag;
@@ -454,7 +464,7 @@ static int usage(const char *why)
 	if (why)
 		fprintf(stderr, "upkg-ui: %s\n", why);
 	fputs("usage: upkg-ui [--title T] [--backtitle V] [--defaultno] [--no-items] [--default-item X]\n"
-	      "       (--inputbox PROMPT H W [INIT] | --yesno PROMPT H W | --menu PROMPT H W MH ITEM...)\n",
+	      "       [--hotkeys KEYS] (--inputbox PROMPT H W [INIT] | --yesno PROMPT H W | --menu PROMPT H W MH ITEM...)\n",
 	      stderr);
 	return 2;
 }
@@ -471,6 +481,8 @@ static int parse(int argc, char **argv)
 			opt.backtitle = argv[++i];
 		else if (!strcmp(a, "--default-item") && i + 1 < argc)
 			opt.default_item = argv[++i];
+		else if (!strcmp(a, "--hotkeys") && i + 1 < argc)
+			opt.hotkeys = argv[++i];
 		else if (!strcmp(a, "--defaultno"))
 			opt.defaultno = 1;
 		else if (!strcmp(a, "--no-items"))
@@ -529,6 +541,8 @@ static int parse(int argc, char **argv)
 		return usage("no widget");
 	if (opt.prompt == NULL)
 		return usage("missing arguments");
+	if (opt.hotkeys && opt.kind != K_MENU)
+		return usage("hotkeys need a menu");
 	return 0;
 }
 
@@ -576,7 +590,12 @@ int main(int argc, char **argv)
 				out[0] = 0;
 			fputs(out, stderr);
 		} else if (opt.kind == K_MENU) {
-			fputs(opt.entries[msel].tag, stderr);
+			if (!opt.hotkeys)
+				fputs(opt.entries[msel].tag, stderr);
+			else if (hotkey)
+				fprintf(stderr, "%c %s", hotkey, opt.entries[msel].tag);
+			else
+				fprintf(stderr, "enter %s", opt.entries[msel].tag);
 		}
 	}
 	return rc;

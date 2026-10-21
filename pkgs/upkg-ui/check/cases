@@ -1,3 +1,4 @@
 usage	upkg-ui 2>&1 | sed -n 1p
 nowidget	upkg-ui --title x 2>&1 | sed -n 1p
 badmenu	upkg-ui --menu Pick 0 0 0 2>&1 | sed -n 1p
+badhotkeys	upkg-ui --hotkeys ir --yesno x 0 0 2>&1 | sed -n 1p
