@@ -26,6 +26,8 @@
 # free-space test measures the volume holding info_dir; check/statvfs_root.sh (shim statvfs_fail.c).
 # patches/0014: upkg sets IXSTACK=262144 unless set, so vfork children (curl) get a real stack; the
 # default_path.sh check reads it from a preinst.
+# patches/0017: list-upgradable no longer builds the file-owner index (pkg_info_preinstall_check read every installed .list and
+# stat-ed every path, twice: 41 s vs 1.1 s for list-installed on an A1200); check/list_upgradable_fast.sh.
 # patches/0015: when the installed package's prerm fails on an upgrade, the new package's prerm runs with
 # `failed-upgrade <old-version>` (dpkg) and the install goes on if it succeeds; prerm_failed_upgrade.sh checks it.
 opkg_VERSION   := 0.9.0

@@ -1,0 +1,65 @@
+From e5ffca25282c3dd425b20b33f7dfaa4563405731 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Wed, 21 Oct 2026 14:02:25 +0200
+Subject: [PATCH 17/17] libopkg: list-upgradable does not index the files of
+ every installed package
+
+pkg_info_preinstall_check() reads each installed package's .list and stats every path in it, to
+build the file-owner and directory indexes. list-upgradable ran it twice (command and
+prepare_upgrade_list) and needs neither index: on an A1200 with python, nvim and vim installed it
+took 41 s against 1.1 s for list-installed. Candidate choice uses states and dependencies only.
+---
+ libopkg/opkg.c                                   | 3 ---
+ libopkg/opkg_cmd.c                               | 5 +++--
+ libopkg/solvers/internal/opkg_upgrade_internal.c | 5 ++---
+ 3 files changed, 5 insertions(+), 8 deletions(-)
+
+diff --git a/libopkg/opkg.c b/libopkg/opkg.c
+index 15bae46..4ca0a13 100644
+--- a/libopkg/opkg.c
++++ b/libopkg/opkg.c
+@@ -580,9 +580,6 @@ int opkg_list_upgradable_packages(opkg_package_callback_t callback,
+ 
+     opkg_assert(callback);
+ 
+-    /* ensure all data is valid */
+-    pkg_info_preinstall_check();
+-
+     prepare_upgrade_list(&head);
+     list_for_each_entry(old, &head, list) {
+         new = pkg_hash_fetch_best_installation_candidate_by_name(old->name);
+diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
+index b5d1138..b854f95 100644
+--- a/libopkg/opkg_cmd.c
++++ b/libopkg/opkg_cmd.c
+@@ -702,8 +702,9 @@ static int opkg_list_changed_conffiles_cmd(int argc, char **argv)
+ 
+ static int opkg_list_upgradable_cmd(int argc, char **argv)
+ {
+-    pkg_info_preinstall_check();
+-
++    /* upkg: no pkg_info_preinstall_check() here. It reads the .list of every installed package and
++     * stats every path in it to build the file-owner and directory indexes; listing upgrades needs
++     * versions and dependencies only. It made list-upgradable 35x slower than list-installed. */
+     return opkg_solver_list_upgradable(argc, argv);
+ }
+ 
+diff --git a/libopkg/solvers/internal/opkg_upgrade_internal.c b/libopkg/solvers/internal/opkg_upgrade_internal.c
+index 1a3edd9..265a995 100644
+--- a/libopkg/solvers/internal/opkg_upgrade_internal.c
++++ b/libopkg/solvers/internal/opkg_upgrade_internal.c
+@@ -203,9 +203,8 @@ void prepare_upgrade_list(struct list_head *head)
+     pkg_t *old, *safe;
+     LIST_HEAD(all);
+ 
+-    /* ensure all data is valid */
+-    pkg_info_preinstall_check();
+-
++    /* upkg: the file-owner index (pkg_info_preinstall_check) is not built here; choosing the
++     * candidate version uses states and dependencies, not file ownership. */
+     hash_table_foreach(&opkg_config->pkg_hash,
+                        pkg_hash_check_installed_pkg_helper, &all);
+ 
+-- 
+2.50.1 (Apple Git-155)
+
