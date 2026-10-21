@@ -3,7 +3,7 @@
  * (muted)"). The line builders are in chrome.c (pure, unit tested); this file is curses + args.
  *
  *   upkg-ui [--title T] [--backtitle V] [--defaultno] [--no-items] [--default-item X]
- *           [--hotkeys KEYS] [--buttons A,B,C] [--colors]
+ *           [--hotkeys KEYS] [--buttons A,B,C] [--colors] [--keep-tite]
  *           (--inputbox PROMPT H W [INIT] | --yesno PROMPT H W | --menu PROMPT H W MH ITEM... |
  *            --msgbox PROMPT H W | --textbox FILE H W | --programbox PROMPT H W)
  *
@@ -22,7 +22,12 @@
  *
  * --textbox shows FILE wrapped, scrolled with Up/Down/PgUp/PgDn/Home/End. --programbox reads its
  * lines from stdin (the keys then come from the terminal, see open_keys), keeps the end in view, and at EOF drops the
- * keys typed meanwhile and shows OK. --colors (menu): \Z0..\Z7 colour the text, \Zn resets. */
+ * keys typed meanwhile and shows OK. --colors (menu): \Z0..\Z7 colour the text, \Zn resets.
+ *
+ * Like dialog, upkg-ui stays on the normal screen: a script that runs several screens one after
+ * another (upkg browse, upkg-ask) would otherwise show the Shell between every two, as each run
+ * switched to the alternate screen at the start and back at the exit. Such a script clears the
+ * screen when it ends. --keep-tite keeps the switch (the Shell comes back at the exit). */
 #define _XOPEN_SOURCE_EXTENDED 1
 #include <ctype.h>
 #include <langinfo.h>
@@ -54,7 +59,7 @@ typedef struct {
 
 static struct {
 	const char *title, *backtitle, *prompt, *default_item, *hotkeys, *buttons, *file;
-	int defaultno, no_items, colors, kind;
+	int defaultno, no_items, colors, keep_tite, kind;
 	wchar_t init[MAX_INPUT];
 	entry *entries;
 	int nentries;
@@ -726,12 +731,28 @@ static int run(void)
 
 /* ---- arguments ---- */
 
+/* newterm has already sent smcup (the terminfo is only read there): refresh flushes it, rmcup
+ * follows at once, and rmcup is then blanked so endwin switches nothing. tigetstr returns the
+ * library's own copy of the string; nulling exit_ca_mode from term.h (dialog's way) does not
+ * reach it in an ncurses built with extended numbers. The next refresh clears the screen. */
+static void leave_alternate_screen(void)
+{
+	char *smcup = tigetstr("smcup"), *rmcup = tigetstr("rmcup");
+
+	if (smcup == (char *)-1 || !smcup || !*smcup || rmcup == (char *)-1 || !rmcup || !*rmcup)
+		return;
+	refresh();
+	fputs(rmcup, stdout);
+	fflush(stdout);
+	*rmcup = 0;
+}
+
 static int usage(const char *why)
 {
 	if (why)
 		fprintf(stderr, "upkg-ui: %s\n", why);
 	fputs("usage: upkg-ui [--title T] [--backtitle V] [--defaultno] [--no-items] [--default-item X]\n"
-	      "       [--hotkeys KEYS] [--buttons A,B,C] [--colors]\n"
+	      "       [--hotkeys KEYS] [--buttons A,B,C] [--colors] [--keep-tite]\n"
 	      "       (--inputbox PROMPT H W [INIT] | --yesno PROMPT H W | --menu PROMPT H W MH ITEM... |\n"
 	      "        --msgbox PROMPT H W | --textbox FILE H W | --programbox PROMPT H W)\n",
 	      stderr);
@@ -758,6 +779,8 @@ static int parse(int argc, char **argv)
 			opt.colors = 1;
 		else if (!strcmp(a, "--defaultno"))
 			opt.defaultno = 1;
+		else if (!strcmp(a, "--keep-tite"))
+			opt.keep_tite = 1;
 		else if (!strcmp(a, "--no-items"))
 			opt.no_items = 1;
 		else if (!strcmp(a, "--inputbox") || !strcmp(a, "--yesno") || !strcmp(a, "--menu") ||
@@ -958,6 +981,8 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	set_term(scr);
+	if (!opt.keep_tite)
+		leave_alternate_screen();
 	cbreak();
 	noecho();
 	nonl();
