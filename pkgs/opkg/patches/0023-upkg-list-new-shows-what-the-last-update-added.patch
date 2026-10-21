@@ -1,0 +1,282 @@
+From 7c922a4926ac0adadb09f033db424857ab0c2851 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Wed, 21 Oct 2026 22:00:47 +0200
+Subject: [PATCH 23/23] upkg: list-new shows what the last update added
+
+upkg update now keeps each feed's old list as lists/<feed>.prev (none when
+there was no old list). The new command upkg list-new prints, in the format
+of upkg list, the packages in the current lists that no .prev has; with no
+.prev at all (the first update ever) it prints nothing. "New" lasts until the
+next update, with no seen file. .prev files are only opened by list-new:
+feeds are read by their configured names, never by listing lists_dir.
+
+upkg browse and list-browse write the list as a fourth file, PREFIX.new,
+from the same single load that produces the other three, so the browse
+script can mark new rows without another upkg run.
+---
+ libopkg/opkg_cmd.c | 121 ++++++++++++++++++++++++++++++++++++++++-----
+ libopkg/pkg_src.c  |  19 +++++++
+ src/opkg.c         |   1 +
+ 3 files changed, 130 insertions(+), 11 deletions(-)
+
+diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
+index a9553b2..9480f6c 100644
+--- a/libopkg/opkg_cmd.c
++++ b/libopkg/opkg_cmd.c
+@@ -48,6 +48,8 @@
+ #include "xfuncs.h"
+ #include "opkg_solver.h"
+ #include "upkg_wrap.h"
++#include "opkg_archive.h"
++#include "pkg_src.h"
+ 
+ /* paths, notices and rows follow the console width (a plain printf when piped) */
+ #define printf upkg_printf
+@@ -537,7 +539,91 @@ static int opkg_download_cmd(int argc, char **argv)
+     return err;
+ }
+ 
+-static int upkg_list_find(FILE *out, int argc, char **argv, int use_desc)
++/* UP-Term (upkg): `upkg update` keeps each feed's previous list as <feed>.prev (pkg_src_update).
++ * A package is new when it is in the current lists and in no .prev; with no .prev at all (the
++ * first update ever) nothing is new. The names are read from the .prev files only, which no
++ * other command opens: feeds are read by their configured names, never by listing lists_dir. */
++static char **prev_names;
++static size_t prev_count;
++static int prev_found;
++
++static int upkg_cmp_names(const void *a, const void *b)
++{
++    return strcmp(*(char *const *)a, *(char *const *)b);
++}
++
++static void upkg_prev_scan(FILE *fp)
++{
++    char line[512];
++    int at_start = 1;
++
++    while (fgets(line, sizeof line, fp)) {
++        size_t n = strlen(line);
++        if (at_start && !strncmp(line, "Package:", 8)) {
++            char *name = line + 8, *e;
++            while (*name == ' ' || *name == '\t')
++                name++;
++            e = name + strlen(name);
++            while (e > name && (e[-1] == '\n' || e[-1] == '\r' || e[-1] == ' '))
++                e--;
++            *e = '\0';
++            prev_names = xrealloc(prev_names, (prev_count + 1) * sizeof *prev_names);
++            prev_names[prev_count++] = xstrdup(name);
++        }
++        at_start = n > 0 && line[n - 1] == '\n';
++    }
++}
++
++static void upkg_load_prev(void)
++{
++    pkg_src_list_elt_t *iter;
++
++    for (iter = void_list_first(&opkg_config->pkg_src_list); iter;
++            iter = void_list_next(&opkg_config->pkg_src_list, iter)) {
++        pkg_src_t *src = (pkg_src_t *) iter->data;
++        char *path, *bp = NULL;
++        FILE *fp = NULL;
++
++        sprintf_alloc(&path, "%s/%s%s.prev", opkg_config->lists_dir, src->name,
++                      opkg_config->compress_list_files ? ".gz" : "");
++        if (file_exists(path)) {
++            if (opkg_config->compress_list_files) {
++                struct opkg_ar *ar = ar_open_compressed_file(path);
++                size_t size;
++                FILE *mfp = ar ? open_memstream(&bp, &size) : NULL;
++                if (mfp && ar_copy_to_stream(ar, mfp) >= 0) {
++                    fclose(mfp);
++                    fp = fmemopen(bp, size, "r");
++                } else if (mfp) {
++                    fclose(mfp);
++                }
++            } else {
++                fp = fopen(path, "r");
++            }
++            if (fp) {
++                prev_found = 1;
++                upkg_prev_scan(fp);
++                fclose(fp);
++            } else {
++                opkg_perror(ERROR, "Failed to open %s", path);
++            }
++        }
++        free(bp);
++        free(path);
++    }
++    if (prev_count)
++        qsort(prev_names, prev_count, sizeof *prev_names, upkg_cmp_names);
++}
++
++static int upkg_is_new(const pkg_t *pkg)
++{
++    const char *key = pkg->name;
++
++    return prev_found && !(prev_count && bsearch(&key, prev_names, prev_count,
++                                                  sizeof *prev_names, upkg_cmp_names));
++}
++
++static int upkg_list_find(FILE *out, int argc, char **argv, int use_desc, int only_new)
+ {
+     unsigned int i, shown = 0;
+     pkg_vec_t *available;
+@@ -547,11 +633,15 @@ static int upkg_list_find(FILE *out, int argc, char **argv, int use_desc)
+     if (argc > 0) {
+         pkg_name = argv[0];
+     }
++    if (only_new)
++        upkg_load_prev();
+     available = pkg_vec_alloc();
+     pkg_hash_fetch_available(available);
+     pkg_vec_sort(available, pkg_compare_names);
+     for (i = 0; i < available->len; i++) {
+         pkg = available->pkgs[i];
++        if (only_new && !upkg_is_new(pkg))
++            continue;
+         /* if we have package name or pattern and pkg does not match, then skip it */
+         if (pkg_name && fnmatch(pkg_name, pkg->name, 0) &&
+            (!use_desc || !pkg->description || fnmatch(pkg_name, pkg->description, 0)))
+@@ -572,12 +662,18 @@ static int upkg_list_find(FILE *out, int argc, char **argv, int use_desc)
+ 
+ static int opkg_list_cmd(int argc, char **argv)
+ {
+-    return upkg_list_find(stdout, argc, argv, 0);
++    return upkg_list_find(stdout, argc, argv, 0, 0);
++}
++
++/* UP-Term (upkg): the packages `upkg update` brought that the update before it did not have */
++static int opkg_list_new_cmd(int argc, char **argv)
++{
++    return upkg_list_find(stdout, 0, NULL, 0, 1);
+ }
+ 
+ static int opkg_find_cmd(int argc, char **argv)
+ {
+-    return upkg_list_find(stdout, argc, argv, 1);
++    return upkg_list_find(stdout, argc, argv, 1, 0);
+ }
+ 
+ static int opkg_verify_cmd(int argc, char **argv)
+@@ -785,22 +881,22 @@ static int opkg_info_status_cmd(int argc, char **argv, int installed_only)
+     return 0;
+ }
+ 
+-/* UP-Term (upkg): the browse script shows three lists, and each upkg run that reads them costs
++/* UP-Term (upkg): the browse script shows four lists, and each upkg run that reads them costs
+  * seconds on a 68k (3 s per load of upkg from a PFS3 disk, measured on a Replay 2026-10-21).
+  * This writes them with the package hash loaded once: PREFIX.all (list), PREFIX.inst
+- * (list-installed) and PREFIX.upg (list-upgradable), as a pipe gets them from those commands,
++ * (list-installed), PREFIX.upg (list-upgradable) and PREFIX.new (list-new), as a pipe gets them from those commands,
+  * except that a .inst row carries the feed's description where list-installed alone, which
+  * loads no feed, shows none for a package whose status entry has none (the browse script reads
+  * the version up to the first " - "). Each list prints to its own FILE, so stdout is untouched.
+  * 0, or 1 when a file could not be written. */
+ static int upkg_write_browse_lists(const char *prefix)
+ {
+-    static const char *const ext[3] = { "all", "inst", "upg" };
++    static const char *const ext[4] = { "all", "inst", "upg", "new" };
+     char *path;
+     FILE *fp;
+     int i, err = 0;
+ 
+-    for (i = 0; i < 3 && !err; i++) {
++    for (i = 0; i < 4 && !err; i++) {
+         sprintf_alloc(&path, "%s.%s", prefix, ext[i]);
+         fp = fopen(path, "w");
+         if (!fp) {
+@@ -808,11 +904,13 @@ static int upkg_write_browse_lists(const char *prefix)
+             err = 1;
+         } else {
+             if (i == 0)
+-                upkg_list_find(fp, 0, NULL, 0);
++                upkg_list_find(fp, 0, NULL, 0, 0);
+             else if (i == 1)
+                 upkg_list_installed(fp, 0, NULL);
+-            else
++            else if (i == 2)
+                 opkg_solver_list_upgradable(fp, 0, NULL);
++            else
++                upkg_list_find(fp, 0, NULL, 0, 1);
+             if (ferror(fp) | fclose(fp)) {
+                 opkg_perror(ERROR, "browse: cannot write %s", path);
+                 err = 1;
+@@ -843,7 +941,7 @@ static int opkg_browse_cmd(int argc, char **argv)
+ {
+     char *cmd = NULL, *tmp, *lists = NULL;
+     const char *sh_argv[4], *dir;
+-    static const char *const ext[3] = { "all", "inst", "upg" };
++    static const char *const ext[4] = { "all", "inst", "upg", "new" };
+     int i, r;
+ 
+     dir = getenv("TMPDIR");
+@@ -881,7 +979,7 @@ static int opkg_browse_cmd(int argc, char **argv)
+         r = 1;
+  out:
+     if (lists) {
+-        for (i = 0; i < 3; i++) {
++        for (i = 0; i < 4; i++) {
+             sprintf_alloc(&tmp, "%s.%s", lists, ext[i]);
+             unlink(tmp);
+             free(tmp);
+@@ -1382,6 +1480,7 @@ static opkg_cmd_t cmds[] = {
+         PFM_SOURCE, false},
+     {"list-upgradable", 0, (opkg_cmd_fun_t) opkg_list_upgradable_cmd,
+         PFM_SOURCE, false},
++    {"list-new", 0, (opkg_cmd_fun_t) opkg_list_new_cmd, PFM_SOURCE, false},
+     {"list-browse", 1, (opkg_cmd_fun_t) opkg_list_browse_cmd, PFM_SOURCE, false},
+     {"list_changed_conffiles", 0,
+         (opkg_cmd_fun_t) opkg_list_changed_conffiles_cmd, PFM_SOURCE, false},
+diff --git a/libopkg/pkg_src.c b/libopkg/pkg_src.c
+index f3bea59..b8d2c3c 100644
+--- a/libopkg/pkg_src.c
++++ b/libopkg/pkg_src.c
+@@ -199,10 +199,29 @@ int pkg_src_verify(pkg_src_t * src)
+     return err;
+ }
+ 
++/* UP-Term (upkg): keep the list this update replaces as <feed>.prev, for `upkg list-new`.
++ * No old list: no .prev, and an old .prev stays. A failed copy only costs the "new" marks. */
++static void pkg_src_keep_prev(pkg_src_t * src)
++{
++    char *feed, *prev;
++
++    sprintf_alloc(&feed, "%s/%s%s", opkg_config->lists_dir, src->name,
++                  opkg_config->compress_list_files ? ".gz" : "");
++    if (file_exists(feed)) {
++        sprintf_alloc(&prev, "%s.prev", feed);
++        if (file_copy(feed, prev))
++            opkg_msg(DEBUG, "Couldn't keep %s as %s.\n", feed, prev);
++        free(prev);
++    }
++    free(feed);
++}
++
+ int pkg_src_update(pkg_src_t * src)
+ {
+     int err;
+ 
++    pkg_src_keep_prev(src);
++
+     err = pkg_src_download(src);
+     if (err)
+         return err;
+diff --git a/src/opkg.c b/src/opkg.c
+index db434f6..73f0493 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -492,6 +492,7 @@ static void usage(int status)
+     upkg_help_row("list [glob]", "List available packages");
+     upkg_help_row("list-installed [glob]", "List installed packages\n(also: list installed)");
+     upkg_help_row("list-upgradable", "List installed and upgradable packages\n(also: list upgradable)");
++    upkg_help_row("list-new", "List packages the last update added");
+     upkg_help_row("browse", "Pick add-ons from a list to install or remove");
+     upkg_help_row("list-changed-conffiles", "List user modified configuration files");
+     upkg_help_row("files <pkg>", "List files belonging to <pkg>");
+-- 
+2.50.1 (Apple Git-155)
+

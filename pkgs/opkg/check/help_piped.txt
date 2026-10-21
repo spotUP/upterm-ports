@@ -19,6 +19,7 @@ Informational Commands:
                               (also: list installed)
   list-upgradable             List installed and upgradable packages
                               (also: list upgradable)
+  list-new                    List packages the last update added
   browse                      Pick add-ons from a list to install or remove
   list-changed-conffiles      List user modified configuration files
   files <pkg>                 List files belonging to <pkg>

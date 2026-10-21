@@ -41,6 +41,8 @@
 # <TMPDIR|T:|/tmp>upkg-lists.<pid>.{all,inst,upg}, names them in UPKG_BROWSE_LISTS for the script and removes
 # them after it; list-browse PREFIX writes the same files for a reload. Each upkg load is ~3 s on a 68k from
 # PFS3, so the browse start runs one load instead of four. check/browse_lists.sh.
+# patches/0023: upkg update keeps each feed's old list as lists/<feed>.prev; list-new prints the packages no .prev
+# has (nothing on the first update); browse and list-browse write it as the fourth file PREFIX.new. check/list_new.sh.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
