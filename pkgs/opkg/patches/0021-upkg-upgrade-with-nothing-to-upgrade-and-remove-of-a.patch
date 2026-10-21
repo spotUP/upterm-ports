@@ -1,0 +1,125 @@
+From 6e1b895c913ad1ca24e94573d8df6dc2090d0fcb Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Wed, 21 Oct 2026 16:14:28 +0200
+Subject: [PATCH 21/21] upkg: upgrade with nothing to upgrade and remove of a
+ missing package say so
+
+upgrade prints 'All installed add-ons are up to date.' when it upgraded nothing; remove prints 'X is not installed.' on stderr and exits 1 for a name or glob that matches no installed package.
+---
+ libopkg/solvers/internal/opkg_action.c         | 18 ++++++++++++++++++
+ .../solvers/internal/opkg_upgrade_internal.c   |  5 +++++
+ .../solvers/internal/opkg_upgrade_internal.h   |  1 +
+ 3 files changed, 24 insertions(+)
+
+diff --git a/libopkg/solvers/internal/opkg_action.c b/libopkg/solvers/internal/opkg_action.c
+index d0e1e93..fe0a694 100644
+--- a/libopkg/solvers/internal/opkg_action.c
++++ b/libopkg/solvers/internal/opkg_action.c
+@@ -61,10 +61,13 @@ int opkg_solver_remove(int num_pkgs, char **pkg_names)
+     pkg_hash_fetch_all_installed(available, INSTALLED_HALF_INSTALLED);
+ 
+     for (i = 0; i < num_pkgs; i++) {
++        int matched = 0;
++
+         for (a = 0; a < available->len; a++) {
+             pkg = available->pkgs[a];
+             if (fnmatch(pkg_names[i], pkg->name, 0))
+                  continue;
++            matched = 1;
+             if (opkg_config->restrict_to_default_dest) {
+                 pkg_to_remove = pkg_hash_fetch_installed_by_name_dest(pkg->name,
+                 opkg_config->default_dest);
+@@ -128,6 +131,12 @@ int opkg_solver_remove(int num_pkgs, char **pkg_names)
+                     err = -1;
+             }
+         }
++        /* upkg: a name or glob that matches no installed package is an error, not silence */
++        if (!matched) {
++            fprintf(stderr, "%s is not installed.\n", pkg_names[i]);
++            if (!err)
++                err = 1;
++        }
+     }
+ 
+     for (i = 0; i < pkgs_to_remove->len; i++) {
+@@ -189,6 +198,9 @@ int opkg_solver_upgrade(int num_pkgs, char **pkg_names)
+     int err = 0;
+     pkg_vec_t *pkgs_to_upgrade = NULL;
+     int r;
++    int missing = 0;
++
++    upkg_upgrade_attempts = 0;
+ 
+     if (num_pkgs) {
+         if (opkg_config->combine)
+@@ -201,12 +213,14 @@ int opkg_solver_upgrade(int num_pkgs, char **pkg_names)
+                 if (pkg == NULL) {
+                     opkg_msg(ERROR, "Package %s not installed in %s.\n",
+                         pkg_names[i], opkg_config->default_dest->name);
++                    missing = 1;
+                     continue;
+                 }
+             } else {
+                 pkg = pkg_hash_fetch_installed_by_name(pkg_names[i]);
+                 if (pkg == NULL) {
+                     opkg_msg(ERROR, "Package %s not installed.\n", pkg_names[i]);
++                    missing = 1;
+                     continue;
+                 }
+             }
+@@ -244,6 +258,10 @@ int opkg_solver_upgrade(int num_pkgs, char **pkg_names)
+         pkg_vec_free(installed);
+     }
+ 
++    /* upkg: an upgrade that upgraded nothing says so (stdout whatever it is: nothing parses this) */
++    if (!err && !missing && !upkg_upgrade_attempts)
++        printf("All installed add-ons are up to date.\n");
++
+     return err;
+ }
+ 
+diff --git a/libopkg/solvers/internal/opkg_upgrade_internal.c b/libopkg/solvers/internal/opkg_upgrade_internal.c
+index 265a995..5a4be06 100644
+--- a/libopkg/solvers/internal/opkg_upgrade_internal.c
++++ b/libopkg/solvers/internal/opkg_upgrade_internal.c
+@@ -95,6 +95,9 @@ static int opkg_prepare_upgrade_pkg(pkg_t * old, pkg_t ** pkg)
+     return 1;
+ }
+ 
++/* upkg: counts the packages an upgrade run really went on to upgrade, so "upgrade" can say when it did nothing. */
++unsigned int upkg_upgrade_attempts;
++
+ int opkg_upgrade_pkg(pkg_t * old)
+ {
+     pkg_t *new;
+@@ -104,6 +107,7 @@ int opkg_upgrade_pkg(pkg_t * old)
+     r = opkg_prepare_upgrade_pkg(old, &new);
+     if (r <= 0)
+         return r;
++    upkg_upgrade_attempts++;
+ 
+     pkgs_to_install = pkg_vec_alloc();
+     replacees = pkg_vec_alloc();
+@@ -144,6 +148,7 @@ int opkg_upgrade_multiple_pkgs(pkg_vec_t * pkgs_to_upgrade)
+             continue;
+ 
+         pkg_vec_insert(upgrade_pkgs, new);
++        upkg_upgrade_attempts++;
+     }
+ 
+     for (i = 0; i < upgrade_pkgs->len; i++) {
+diff --git a/libopkg/solvers/internal/opkg_upgrade_internal.h b/libopkg/solvers/internal/opkg_upgrade_internal.h
+index 411f880..dcaf790 100644
+--- a/libopkg/solvers/internal/opkg_upgrade_internal.h
++++ b/libopkg/solvers/internal/opkg_upgrade_internal.h
+@@ -25,6 +25,7 @@
+ extern "C" {
+ #endif
+ 
++extern unsigned int upkg_upgrade_attempts;
+ int opkg_upgrade_pkg(pkg_t * old);
+ int opkg_upgrade_multiple_pkgs(pkg_vec_t * pkgs_to_upgrade);
+ void prepare_upgrade_list(struct list_head *head);
+-- 
+2.50.1 (Apple Git-155)
+

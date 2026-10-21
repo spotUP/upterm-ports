@@ -30,6 +30,13 @@
 # stat-ed every path, twice: 41 s vs 1.1 s for list-installed on an A1200); check/list_upgradable_fast.sh.
 # patches/0015: when the installed package's prerm fails on an upgrade, the new package's prerm runs with
 # `failed-upgrade <old-version>` (dpkg) and the install goes on if it succeeds; prerm_failed_upgrade.sh checks it.
+# patches/0018-0021: no upkg command ends a no-op in silence. list/list-installed with a glob matching
+# nothing: 'upkg: no package matches "<glob>"' on stderr, rc 1 (0018). "list upgradable|upgradeable|installed"
+# run list-upgradable/list-installed (0019, help names them). On a terminal an empty list-upgradable /
+# list-installed prints a message, through a pipe nothing, because dist/upkg-browse reads them via $(...) (0020).
+# upgrade that upgraded nothing prints 'All installed add-ons are up to date.'; remove of a name matching no
+# installed package prints 'X is not installed.' and exits 1 (0021); install of an installed package
+# already prints 'Package X (v) installed in root is up to date.'. check/list_messages.sh.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

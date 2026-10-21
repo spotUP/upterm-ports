@@ -1,0 +1,47 @@
+From 1495765c3e11cb830b5f6221c0baf54a7363210f Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Wed, 21 Oct 2026 16:12:29 +0200
+Subject: [PATCH 19/21] upkg: list upgradable, list upgradeable and list
+ installed run list-upgradable and list-installed
+
+The two-word forms read naturally and the help names them. Any other word after list is still a glob.
+---
+ src/opkg.c | 15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/src/opkg.c b/src/opkg.c
+index d95fc5f..8d4d3ae 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -489,9 +489,9 @@ static void usage(int status)
+     upkg_help_row("flag <flag> <pkgs>", "Flag package(s)");
+     upkg_help_row("<flag>=hold|noprune|user|ok|installed|unpacked (one per invocation)", NULL);
+     upkg_help_text("\nInformational Commands:\n");
+-    upkg_help_row("list", "List available packages");
+-    upkg_help_row("list-installed", "List installed packages");
+-    upkg_help_row("list-upgradable", "List installed and upgradable packages");
++    upkg_help_row("list [glob]", "List available packages");
++    upkg_help_row("list-installed [glob]", "List installed packages\n(also: list installed)");
++    upkg_help_row("list-upgradable", "List installed and upgradable packages\n(also: list upgradable)");
+     upkg_help_row("browse", "Pick add-ons from a list to install or remove");
+     upkg_help_row("list-changed-conffiles", "List user modified configuration files");
+     upkg_help_row("files <pkg>", "List files belonging to <pkg>");
+@@ -631,6 +631,15 @@ int main(int argc, char *argv[])
+ 
+     cmd_name = argv[opts++];
+ 
++    /* upkg: two-word forms. "list upgradable", "list upgradeable" and "list installed" run
++     * list-upgradable and list-installed; any other second word is still a glob for list. */
++    if (!strcmp(cmd_name, "list") && opts < argc) {
++        if (!strcmp(argv[opts], "upgradable") || !strcmp(argv[opts], "upgradeable"))
++            cmd_name = "list-upgradable", opts++;
++        else if (!strcmp(argv[opts], "installed"))
++            cmd_name = "list-installed", opts++;
++    }
++
+     nocheckfordirorfile = !strcmp(cmd_name, "print-architecture")
+         || !strcmp(cmd_name, "print_architecture")
+         || !strcmp(cmd_name, "print-installation-architecture")
+-- 
+2.50.1 (Apple Git-155)
+

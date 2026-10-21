@@ -1,0 +1,71 @@
+From 4b96b62d27b991bfd04511e05cb5dbef356bbab5 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Wed, 21 Oct 2026 16:12:21 +0200
+Subject: [PATCH 18/21] upkg: list and list-installed with a glob that matches
+ nothing print an error and exit 1
+
+A silent empty answer looked like a working empty list. The message is 'upkg: no package matches "<glob>"' on stderr; with matches, and without a glob, nothing changes. find keeps its regexp behaviour.
+---
+ libopkg/opkg_cmd.c | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
+index b854f95..30ccd51 100644
+--- a/libopkg/opkg_cmd.c
++++ b/libopkg/opkg_cmd.c
+@@ -538,7 +538,7 @@ static int opkg_download_cmd(int argc, char **argv)
+ 
+ static int opkg_list_find_cmd(int argc, char **argv, int use_desc)
+ {
+-    unsigned int i;
++    unsigned int i, shown = 0;
+     pkg_vec_t *available;
+     pkg_t *pkg;
+     char *pkg_name = NULL;
+@@ -556,9 +556,16 @@ static int opkg_list_find_cmd(int argc, char **argv, int use_desc)
+            (!use_desc || !pkg->description || fnmatch(pkg_name, pkg->description, 0)))
+             continue;
+         print_pkg(pkg);
++        shown++;
+     }
+     pkg_vec_free(available);
+ 
++    /* upkg: a glob that matches nothing is an error, not silence (list only; find takes a regexp) */
++    if (pkg_name && !use_desc && !shown) {
++        fprintf(stderr, "upkg: no package matches \"%s\"\n", pkg_name);
++        return 1;
++    }
++
+     return 0;
+ }
+ 
+@@ -643,7 +650,7 @@ static int opkg_verify_cmd(int argc, char **argv)
+ 
+ static int opkg_list_installed_cmd(int argc, char **argv)
+ {
+-    unsigned int i;
++    unsigned int i, shown = 0;
+     pkg_vec_t *available;
+     pkg_t *pkg;
+     char *pkg_name = NULL;
+@@ -660,10 +667,17 @@ static int opkg_list_installed_cmd(int argc, char **argv)
+         if (pkg_name && fnmatch(pkg_name, pkg->name, 0))
+             continue;
+         print_pkg(pkg);
++        shown++;
+     }
+ 
+     pkg_vec_free(available);
+ 
++    /* upkg: a glob that matches nothing is an error, not silence */
++    if (pkg_name && !shown) {
++        fprintf(stderr, "upkg: no package matches \"%s\"\n", pkg_name);
++        return 1;
++    }
++
+     return 0;
+ }
+ 
+-- 
+2.50.1 (Apple Git-155)
+

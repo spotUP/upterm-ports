@@ -14,9 +14,11 @@ Package Manipulation:
   <flag>=hold|noprune|user|ok|installed|unpacked (one per invocation)
 
 Informational Commands:
-  list                        List available packages
-  list-installed              List installed packages
+  list [glob]                 List available packages
+  list-installed [glob]       List installed packages
+                              (also: list installed)
   list-upgradable             List installed and upgradable packages
+                              (also: list upgradable)
   browse                      Pick add-ons from a list to install or remove
   list-changed-conffiles      List user modified configuration files
   files <pkg>                 List files belonging to <pkg>
