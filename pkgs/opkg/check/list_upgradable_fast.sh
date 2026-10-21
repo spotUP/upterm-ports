@@ -47,4 +47,16 @@ if grep -q "$sentinel" "$w/out"; then
 fi
 "$upkg" -V2 -f "$w/conf" list-installed >"$w/out" 2>&1
 if grep -q "$sentinel" "$w/out"; then echo "[FAIL] list-installed indexed installed files"; exit 1; fi
-echo "[OK] list-upgradable lists the upgrade without indexing installed files"
+# upgrade runs the index once (opkg_upgrade_cmd) and, since patch 0017, not again in prepare_upgrade_list;
+# a second pass over the same installed package frees the list entry it is iterating (file_hash_set_file_owner
+# removes it from the list of its own owner) and the unpatched list-upgradable segfaulted there. upgrade
+# must not crash and must reach 2.0, both for the named package and for "upgrade" of everything.
+for what in "lu" ""; do
+  "$upkg" -f "$w/conf" upgrade $what >"$w/out" 2>&1 || { echo "[FAIL] upgrade $what: rc=$? $(tail -n 5 "$w/out")"; exit 1; }
+  "$upkg" -f "$w/conf" list-installed 2>&1 | grep -q '^lu - 2\.0$' || { echo "[FAIL] upgrade $what did not leave lu at 2.0"; exit 1; }
+  conf feed1; "$upkg" -f "$w/conf" update >/dev/null 2>&1
+  "$upkg" -f "$w/conf" install --force-downgrade lu=1.0 >/dev/null 2>&1 || true
+  "$upkg" -f "$w/conf" list-installed 2>&1 | grep -q '^lu - 1\.0$' || { echo "[FAIL] test setup: downgrade to 1.0 failed"; exit 1; }
+  conf feed2; "$upkg" -f "$w/conf" update >/dev/null 2>&1
+done
+echo "[OK] list-upgradable lists the upgrade without indexing installed files; upgrade lu and upgrade reach 2.0"
