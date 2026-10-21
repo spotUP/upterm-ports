@@ -3,7 +3,7 @@
 # SDK chrome, theme "Uprough Neon (muted)". chrome.c is pure (no curses) and has its own unit
 # test, test_chrome.c, run by the host build. No fork.
 upkg-ui_OWN       := 1
-upkg-ui_VERSION   := 1.0
+upkg-ui_VERSION   := 1.1
 upkg-ui_LICENSE   := own
 upkg-ui_DEPS      := ixcompat ncurses
 upkg-ui_BINS      := bin/upkg-ui

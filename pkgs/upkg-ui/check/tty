@@ -3,3 +3,8 @@ yesno	sh -c "upkg-ui --defaultno --yesno Enable_the_service? 0 0 2>ans.txt"
 menu	sh -c "upkg-ui --no-items --default-item b --menu Pick_one 0 0 0 a \"\" b \"\" c \"\" 2>ans.txt"	ans.txt
 hotkey	sh -c "upkg-ui --no-items --hotkeys iru --menu Pick_one 0 0 0 a \"\" b \"\" c \"\" 2>ans.txt"	ans.txt
 hotenter	sh -c "upkg-ui --no-items --hotkeys iru --menu Pick_one 0 0 0 a \"\" b \"\" c \"\" 2>ans.txt"	ans.txt
+msgbox	sh -c "upkg-ui --msgbox Done_installing._Press_Enter. 0 0 2>ans.txt"
+textbox	sh -c "upkg-ui --buttons Close,Next --textbox notes.txt 0 0 2>ans.txt"	ans.txt
+texthot	sh -c "upkg-ui --buttons Close,Next --textbox notes.txt 0 0 2>ans.txt"	ans.txt
+programbox	sh -c "printf 'one\\ntwo\\n[OK] done\\n' | upkg-ui --programbox Running_the_command 0 0 2>ans.txt"
+colors	sh -c "upkg-ui --colors --no-items --menu Pick_one 0 0 0 '\\\\Z3yellow' '' '\\\\Z2green' '' '\\\\Z6cyan\\\\Zn_plain' '' 2>ans.txt"	ans.txt

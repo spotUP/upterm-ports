@@ -2,3 +2,6 @@ usage	upkg-ui 2>&1 | sed -n 1p
 nowidget	upkg-ui --title x 2>&1 | sed -n 1p
 badmenu	upkg-ui --menu Pick 0 0 0 2>&1 | sed -n 1p
 badhotkeys	upkg-ui --hotkeys ir --yesno x 0 0 2>&1 | sed -n 1p
+badbuttons	upkg-ui --buttons A,B --menu Pick 0 0 0 a b 2>&1 | sed -n 1p
+notextfile	upkg-ui --textbox nosuchfile 0 0 2>&1 | sed -n 1p
+noprogramargs	upkg-ui --programbox Run 2>&1 | sed -n 1p
