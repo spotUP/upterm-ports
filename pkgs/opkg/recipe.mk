@@ -43,6 +43,8 @@
 # PFS3, so the browse start runs one load instead of four. check/browse_lists.sh.
 # patches/0023: upkg update keeps each feed's old list as lists/<feed>.prev; list-new prints the packages no .prev
 # has (nothing on the first update); browse and list-browse write it as the fourth file PREFIX.new. check/list_new.sh.
+# patches/0024: upkg sets stdout line buffered and the wrap code flushes at every newline when not on a terminal, so
+# a reader of `upkg install | ...` sees progress while it runs. check/pipe_lines.sh (an http feed that stalls).
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

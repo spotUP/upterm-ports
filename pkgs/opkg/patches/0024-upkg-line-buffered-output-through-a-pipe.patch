@@ -1,0 +1,63 @@
+From de9a71e332ae7b38c182fbe536ac00982f6426a8 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Wed, 21 Oct 2026 22:07:22 +0200
+Subject: [PATCH 24/24] upkg: line-buffered output through a pipe
+
+Through a pipe stdout is fully buffered, so upkg download or install piped
+into the browse programbox showed nothing until the buffer filled or upkg
+exited. main now sets stdout line buffered, and the wrap code, which writes
+through fputs/vfprintf when the width is 0 (a pipe or file), flushes at
+every newline. Terminal output goes through the wrapping branch and is
+unchanged.
+---
+ libopkg/upkg_wrap.c | 11 +++++++++--
+ src/opkg.c          |  4 ++++
+ 2 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/libopkg/upkg_wrap.c b/libopkg/upkg_wrap.c
+index 42d113c..2dac546 100644
+--- a/libopkg/upkg_wrap.c
++++ b/libopkg/upkg_wrap.c
+@@ -198,6 +198,9 @@ void upkg_wrap_puts(FILE *fp, int hang, const char *s)
+ 
+     if (!w) {
+         fputs(s, fp);
++        /* a pipe or file: whoever reads it sees each line as it is written, not at exit */
++        if (st && strchr(s, '\n'))
++            fflush(fp);
+         return;
+     }
+     if (!atexit_done) {
+@@ -234,8 +237,12 @@ int upkg_vfprintf(FILE *fp, int hang, const char *fmt, va_list ap)
+     char *buf;
+     int n;
+ 
+-    if (!upkg_wrap_width(fp))
+-        return vfprintf(fp, fmt, ap);
++    if (!upkg_wrap_width(fp)) {
++        n = vfprintf(fp, fmt, ap);
++        if (state_of(fp))       /* as upkg_wrap_puts: a pipe gets each line when written */
++            fflush(fp);
++        return n;
++    }
+ 
+     va_copy(ap2, ap);
+     n = vsnprintf(NULL, 0, fmt, ap2);
+diff --git a/src/opkg.c b/src/opkg.c
+index 73f0493..6b12f5e 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -597,6 +597,10 @@ int main(int argc, char *argv[])
+     int noreadfeedsfile;
+     int noloadconf;
+ 
++    /* Through a pipe stdout is fully buffered: `upkg download x | reader` (the browse dialogs'
++     * programbox) would show nothing until the buffer fills or upkg exits. Lines go out as written. */
++    setvbuf(stdout, NULL, _IOLBF, 0);
++
+     /* The download backend runs curl and maintainer scripts run /bin/sh by bare
+      * name; with no PATH ixemul falls back to its own default and asks for a
+      * volume "usr". Give every child a usable PATH whatever shell started us. */
+-- 
+2.50.1 (Apple Git-155)
+
