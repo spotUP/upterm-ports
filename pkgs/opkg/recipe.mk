@@ -37,6 +37,10 @@
 # upgrade that upgraded nothing prints 'All installed add-ons are up to date.'; remove of a name matching no
 # installed package prints 'X is not installed.' and exits 1 (0021); install of an installed package
 # already prints 'Package X (v) installed in root is up to date.'. check/list_messages.sh.
+# patches/0022: browse loads the feeds and status, writes list, list-installed and list-upgradable as piped to
+# <TMPDIR|T:|/tmp>upkg-lists.<pid>.{all,inst,upg}, names them in UPKG_BROWSE_LISTS for the script and removes
+# them after it; list-browse PREFIX writes the same files for a reload. Each upkg load is ~3 s on a 68k from
+# PFS3, so the browse start runs one load instead of four. check/browse_lists.sh.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
