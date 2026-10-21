@@ -9,7 +9,8 @@
  *
  * dialog-compatible subset: H, W and MH are accepted and ignored (the screen is the whole
  * terminal). The answer goes to STDERR (curses owns stdout). Exit 0 accept, 1 cancel or No,
- * 255 Escape, 2 usage error.
+ * 255 Escape, 2 usage error, 3 no terminal to read the keys from (none at the start, or it went
+ * away: end of file or hangup).
  *
  * --hotkeys KEYS (menu only): pressing one of KEYS ends the menu with exit 0 and writes
  * "KEY TAG"; Enter then writes "enter TAG". Without it the answer is the bare TAG.
@@ -20,7 +21,7 @@
  * default is one OK button and writes nothing.
  *
  * --textbox shows FILE wrapped, scrolled with Up/Down/PgUp/PgDn/Home/End. --programbox reads its
- * lines from stdin (curses then runs on /dev/tty), keeps the end in view, and at EOF drops the
+ * lines from stdin (the keys then come from the terminal, see open_keys), keeps the end in view, and at EOF drops the
  * keys typed meanwhile and shows OK. --colors (menu): \Z0..\Z7 colour the text, \Zn resets. */
 #define _XOPEN_SOURCE_EXTENDED 1
 #include <ctype.h>
@@ -30,6 +31,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/time.h>
+#include <unistd.h>
 #include <wchar.h>
 
 #include <curses.h>
@@ -58,6 +61,21 @@ static struct {
 } opt;
 
 static int utf8, tick;
+static FILE *keyfp; /* the terminal curses reads the keys from (open_keys) */
+
+#define TICK_MS 1000 /* the rail moves once a second */
+/* get_wch ERRs in a row that came back well before TICK_MS: no key can come (the key fd is at
+ * end of file or hung up; select says ready and read gives 0). The rig spun here for ever. */
+#define EARLY_ERRS 20
+#define EXIT_NO_TERMINAL 3
+
+static long since_ms(const struct timeval *t0)
+{
+	struct timeval t;
+
+	gettimeofday(&t, NULL);
+	return (long)(t.tv_sec - t0->tv_sec) * 1000L + (long)(t.tv_usec - t0->tv_usec) / 1000L;
+}
 static attr_t a_chrome, a_ink, a_dim, a_acc, a_sel, a_field, a_col[8];
 
 /* ---- colours: ground 0, ink 7, chrome 6, dim 8, accent 13, selection bg 5 ink 0 ---- */
@@ -651,10 +669,12 @@ static int key_menu(int fn, wint_t c)
 
 static int run(void)
 {
-	int redraw = 1;
+	int redraw = 1, early = 0;
 	wint_t c;
+	struct timeval start, t0;
 
-	timeout(1000);
+	timeout(TICK_MS);
+	gettimeofday(&start, NULL);
 	for (;;) {
 		int r, code;
 		if (redraw) {
@@ -663,12 +683,22 @@ static int run(void)
 		}
 		place_cursor();
 		refresh();
+		gettimeofday(&t0, NULL);
 		r = get_wch(&c);
-		if (r == ERR) { /* a tick: the rail's cells only */
-			tick++;
-			paint_rail();
+		if (r == ERR) {
+			/* the tick is wall time, not a count of ERRs: an early ERR moves nothing */
+			int t = (int)(since_ms(&start) / TICK_MS);
+			if (since_ms(&t0) >= TICK_MS / 2)
+				early = 0;
+			else if (++early >= EARLY_ERRS || !isatty(fileno(keyfp)))
+				return EXIT_NO_TERMINAL;
+			if (t != tick) { /* the rail's cells only */
+				tick = t;
+				paint_rail();
+			}
 			continue;
 		}
+		early = 0;
 		if (r == KEY_CODE_YES && c == KEY_RESIZE) {
 			redraw = 1;
 			continue;
@@ -849,6 +879,31 @@ static int load_file(void)
 	return 0;
 }
 
+/* The terminal the keys come from: /dev/tty, else stdin (not for a programbox: its lines come
+ * there), stdout or stderr, the first that is a terminal; NULL when none is. An ixemul program
+ * started by a native one (vsh is sh) has no controlling terminal, so its /dev/tty opens the
+ * process's console "*": under ptyrun on the rig that was NIL: (isatty 0, select ready at once,
+ * read 0) while stdin and stdout were the pty, and every widget spun on ERR from get_wch. */
+static FILE *open_keys(void)
+{
+	FILE *f = fopen("/dev/tty", "r+");
+	int fd;
+
+	if (f && isatty(fileno(f)))
+		return f;
+	if (f)
+		fclose(f);
+	for (fd = opt.kind == K_PROGRAM ? 1 : 0; fd <= 2; fd++) {
+		int d;
+		if (!isatty(fd) || (d = dup(fd)) < 0)
+			continue;
+		if ((f = fdopen(d, "r+")) != NULL)
+			return f;
+		close(d);
+	}
+	return NULL;
+}
+
 /* programbox: the command's lines come on stdin; show each as it arrives, then the OK button */
 static void read_program(void)
 {
@@ -871,7 +926,6 @@ int main(int argc, char **argv)
 {
 	int rc = parse(argc, argv), i;
 	char out[MAX_INPUT * 4];
-	FILE *ttyfp;
 	SCREEN *scr;
 
 	if (rc)
@@ -893,13 +947,12 @@ int main(int argc, char **argv)
 	}
 
 	set_escdelay(50);
-	/* curses reads the keys from /dev/tty, so stdin stays free for a programbox's lines */
-	ttyfp = fopen("/dev/tty", "r+");
-	if (!ttyfp && opt.kind == K_PROGRAM) {
-		fputs("upkg-ui: cannot open /dev/tty\n", stderr);
-		return 2;
+	keyfp = open_keys();
+	if (!keyfp) {
+		fputs("upkg-ui: no terminal to read the keys from\n", stderr);
+		return EXIT_NO_TERMINAL;
 	}
-	scr = newterm(NULL, stdout, ttyfp ? ttyfp : stdin);
+	scr = newterm(NULL, stdout, keyfp);
 	if (!scr) {
 		fputs("upkg-ui: cannot initialise the terminal\n", stderr);
 		return 2;
@@ -917,6 +970,10 @@ int main(int argc, char **argv)
 		read_program();
 	rc = run();
 	endwin();
+	if (rc == EXIT_NO_TERMINAL) {
+		fputs("upkg-ui: the terminal went away (no more keys)\n", stderr);
+		return rc;
+	}
 
 	if (rc == 0) {
 		if (opt.kind == K_INPUT) {

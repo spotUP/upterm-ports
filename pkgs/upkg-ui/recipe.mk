@@ -9,6 +9,7 @@ upkg-ui_DEPS      := ixcompat ncurses
 upkg-ui_BINS      := bin/upkg-ui
 upkg-ui_STACK     := 65536
 upkg-ui_HOST_DEPS := ncurses
+upkg-ui_CHECK_SH_BIN := bin/upkg-ui
 upkg-ui_CONFIGURE_CMD = mkdir -p $(upkg-ui_OBJ)
 upkg-ui_BUILD_CMD = $(ROOT)/tools/m68k-cc $(CPU) -O2 -Wall -I$(SYSINC) -I$(SYSINC)/ncursesw \
 	-o $(upkg-ui_OBJ)/upkg-ui $(upkg-ui_SRC)/upkg-ui.c $(upkg-ui_SRC)/chrome.c \
