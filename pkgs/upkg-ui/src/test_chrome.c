@@ -146,6 +146,19 @@ int main(void)
 	n = ch_wrap_words("", 40, sp, 16);
 	eqi("empty", n, 0);
 
+	/* menu item column (owner, 2026-10-22: "we need even columns its messy"): the items start
+	 * after the WIDEST tag, so up-claude and up-pi rows put their items in one column */
+	eqi("vis plain", ch_vis_len("up-pi", 0), 5);
+	eqi("vis colour codes", ch_vis_len("\\Z3up-pi\\Zn", 1), 5);
+	eqi("vis codes without --colors", ch_vis_len("\\Z3up-pi", 0), 8);
+	{
+		static const char *const pairs[] = { "up-pi", "installed 1.0", "up-claude", "x",
+		                                     "up-git", "a much longer item than any tag" };
+		eqi("widest tag", ch_widest(pairs, 3, 2, 0), 9);
+		eqi("widest item", ch_widest(pairs + 1, 3, 2, 0), 31);
+		eqi("widest none", ch_widest(pairs, 0, 2, 0), 0);
+	}
+
 	printf("test_chrome: %d checks, %d failed\n", checks, fails);
 	return fails ? 1 : 0;
 }

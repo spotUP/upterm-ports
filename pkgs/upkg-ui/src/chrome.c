@@ -247,3 +247,25 @@ int ch_wrap_words(const char *text, int width, ch_span *out, int max)
 	}
 	return n;
 }
+
+int ch_vis_len(const char *s, int colors)
+{
+	int n = 0;
+	if (!colors)
+		return (int)strlen(s);
+	for (; *s; s++, n++)
+		if (s[0] == '\\' && s[1] == 'Z' && s[2])
+			s += 2, n--;
+	return n;
+}
+
+int ch_widest(const char *const *s, int n, int stride, int colors)
+{
+	int i, w = 0;
+	for (i = 0; i < n; i++) {
+		int l = ch_vis_len(s[i * stride], colors);
+		if (l > w)
+			w = l;
+	}
+	return w;
+}

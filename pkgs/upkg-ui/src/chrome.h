@@ -63,4 +63,12 @@ typedef struct {
 
 int ch_wrap_words(const char *text, int width, ch_span *out, int max);
 
+/* The cells of s: with `colors` (--colors), the \\Z codes take none. */
+int ch_vis_len(const char *s, int colors);
+
+/* The widest of n strings, the i-th at s[i * stride] (stride 2 walks the tags of tag/item pairs).
+ * A menu draws every item two cells after the widest tag, as dialog does, so the items line up
+ * whatever each tag's length. */
+int ch_widest(const char *const *s, int n, int stride, int colors);
+
 #endif

@@ -418,18 +418,6 @@ static int menu_room(int y)
 	return r < 1 ? 1 : r;
 }
 
-/* the visible length of s: the \\Z codes of a --colors menu take no cells */
-static int vis_len(const char *s)
-{
-	int n = 0;
-	if (!opt.colors)
-		return (int)strlen(s);
-	for (; *s; s++, n++)
-		if (s[0] == '\\' && s[1] == 'Z' && s[2])
-			s += 2, n--;
-	return n;
-}
-
 /* draw s in the row's attribute `base`; with --colors the \\Z codes switch the foreground
  * (\\Z0..\\Z7 a colour, \\Zn back to base, any other \\Zx dropped). A selected row keeps base. */
 static void put(int y, int x, attr_t base, int sel, const char *s, int w)
@@ -474,6 +462,8 @@ static void put(int y, int x, attr_t base, int sel, const char *s, int w)
 static void draw_menu(int y)
 {
 	int room = menu_room(y), i, w = COLS - 4;
+	/* every item in one column, two cells after the widest tag */
+	int x = 3 + (opt.nentries ? ch_widest(&opt.entries[0].tag, opt.nentries, 2, opt.colors) : 0) + 2;
 
 	if (msel < mtop)
 		mtop = msel;
@@ -485,10 +475,8 @@ static void draw_menu(int y)
 		attr_t a = sel ? a_sel : a_ink;
 		spaces(y + i, 2, w, a);
 		put(y + i, 3, a, sel, e->tag, w - 2);
-		if (e->item && *e->item) {
-			int x = 3 + vis_len(e->tag) + 2;
+		if (e->item && *e->item)
 			put(y + i, x, sel ? a_sel : a_dim, sel, e->item, w + 2 - x);
-		}
 	}
 }
 
@@ -734,7 +722,9 @@ static int run(void)
 /* newterm has already sent smcup (the terminfo is only read there): refresh flushes it, rmcup
  * follows at once, and rmcup is then blanked so endwin switches nothing. tigetstr returns the
  * library's own copy of the string; nulling exit_ca_mode from term.h (dialog's way) does not
- * reach it in an ncurses built with extended numbers. The next refresh clears the screen. */
+ * reach it in an ncurses built with extended numbers. rmcup also puts the cursor back where smcup
+ * saved it (the Shell prompt) while ncurses believes it is home on a cleared screen; clearok makes
+ * the next refresh clear and home again, or the first row is drawn at the prompt. */
 static void leave_alternate_screen(void)
 {
 	char *smcup = tigetstr("smcup"), *rmcup = tigetstr("rmcup");
@@ -745,6 +735,7 @@ static void leave_alternate_screen(void)
 	fputs(rmcup, stdout);
 	fflush(stdout);
 	*rmcup = 0;
+	clearok(curscr, TRUE);
 }
 
 static int usage(const char *why)
