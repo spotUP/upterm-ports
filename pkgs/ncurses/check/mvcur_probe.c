@@ -14,7 +14,7 @@
 extern long _nc_mvcur_probe_skips __attribute__((weak));	/* absent without the patch */
 #define SKIPS (&_nc_mvcur_probe_skips ? _nc_mvcur_probe_skips : 0L)
 
-#define GOLDEN_VTCON 0x146f0101UL
+#define GOLDEN_VTCON 0x0507b79cUL	/* upstream 6.6, re-recorded after the tparm memo key fix; the old 146f0101 held wrong %i cup bytes */
 
 static unsigned long
 fnv(unsigned long h, const unsigned char *p, size_t n)

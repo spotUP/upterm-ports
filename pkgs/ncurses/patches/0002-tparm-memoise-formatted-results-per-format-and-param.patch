@@ -117,19 +117,22 @@ index ba01473..ff7c780 100644
  #endif
  	    }
  	}
-@@ -822,6 +879,8 @@ tparam_internal(TPARM_STATE *tps, const char *string, TPARM_DATA *data)
+@@ -822,6 +879,9 @@ tparam_internal(TPARM_STATE *tps, const char *string, TPARM_DATA *data)
      bool dynamic_used = FALSE;
      int dynamic_vars[NUM_VARS];
  
 +    TPARM_MEMO *memo;
++    TPARM_ARG memo_key[NUM_PARM];
 +
      tparm_trace_call(tps, string, data);
  
      if (TPS(fmt_buff) == NULL) {
-@@ -829,6 +888,19 @@ tparam_internal(TPARM_STATE *tps, const char *string, TPARM_DATA *data)
+@@ -829,6 +889,21 @@ tparam_internal(TPARM_STATE *tps, const char *string, TPARM_DATA *data)
  	return NULL;
      }
  
++    /* %i and friends rewrite data->param while formatting: key the memo by the caller's values */
++    memcpy(memo_key, data->param, sizeof memo_key);
 +    if ((memo = tparm_memo_slot(data)) != NULL
 +	&& memo->used
 +	&& !memcmp(memo->param, data->param,
@@ -151,7 +154,7 @@ index ba01473..ff7c780 100644
      }
  
 +    if (memo != NULL && TPS(out_used) < TPARM_MEMO_TEXT) {
-+	memcpy(memo->param, data->param,
++	memcpy(memo->param, memo_key,
 +	       sizeof(TPARM_ARG) * (size_t) data->num_actual);
 +	memcpy(memo->text, TPS(out_buff), TPS(out_used) + 1);
 +	memo->used = 1;
