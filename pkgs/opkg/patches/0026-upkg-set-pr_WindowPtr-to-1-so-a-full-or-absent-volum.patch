@@ -1,4 +1,4 @@
-From 6ff3db16a9d38204777b7f533e0ddfa33eaa3c61 Mon Sep 17 00:00:00 2001
+From 226fe5896296776fd19d5ee8b5baf326099f8bd0 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Thu, 22 Oct 2026 10:44:52 +0200
 Subject: [PATCH] upkg: set pr_WindowPtr to -1 so a full or absent volume
@@ -8,23 +8,27 @@ A browse install on a full System: opened a DOS Retry/Cancel requester that took
 blocked the writer. With WindowPtr -1 the write fails and the install reports it
 ([ERROR] upkg install <pkg> (exit N)). Amiga only; a no-op elsewhere.
 ---
- libopkg/upkg_wrap.c | 16 ++++++++++++++++
+ libopkg/upkg_wrap.c | 20 ++++++++++++++++++++
  libopkg/upkg_wrap.h |  7 +++++++
  src/opkg.c          |  4 ++++
- 3 files changed, 27 insertions(+)
+ 3 files changed, 31 insertions(+)
 
 diff --git a/libopkg/upkg_wrap.c b/libopkg/upkg_wrap.c
-index 1a7efbb..39b2b81 100644
+index 1a7efbb..8ed9ff7 100644
 --- a/libopkg/upkg_wrap.c
 +++ b/libopkg/upkg_wrap.c
-@@ -13,8 +13,24 @@
+@@ -13,8 +13,28 @@
  #include <unistd.h>
  #include <sys/ioctl.h>
  
 +#ifdef __amigaos__
++/* The NDK devices/timer.h declares its own struct timeval, which clashes with ixemul's; give the NDK one
++ * another name for the span of its headers. */
++#define timeval ndk_timeval
 +#include <exec/execbase.h>
 +#include <dos/dosextens.h>
 +#include <proto/exec.h>
++#undef timeval
 +#endif
 +
  #include "upkg_wrap.h"
