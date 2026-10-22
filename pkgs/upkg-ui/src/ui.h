@@ -1,0 +1,75 @@
+/* ui.h: the interface of libupkgui (ui.c, chrome.c). One screen at a time on the terminal; the
+ * caller fills ui_opt (what to show), calls ui_start once, then ui_view or ui_run for each widget,
+ * and ui_stop at the end. upkg-ui does that once per run; `upkg browse` (inside upkg) keeps the
+ * screen up and shows many widgets in a row. */
+#ifndef UPKG_UI_H
+#define UPKG_UI_H
+
+#include <stdio.h>
+#include <wchar.h>
+
+#define EXIT_NO_TERMINAL 3 /* no terminal to read keys from (none at the start, or it went away) */
+#define UI_MAX_INPUT 1024
+
+enum kind { K_NONE, K_INPUT, K_YESNO, K_MENU, K_MSGBOX, K_TEXTBOX, K_PROGRAM };
+
+typedef struct {
+	const char *tag;
+	const char *item;
+} entry;
+
+typedef struct {
+	const char *title, *backtitle, *prompt, *default_item, *hotkeys, *buttons, *file;
+	int defaultno, no_items, colors, keep_tite, kind;
+	wchar_t init[UI_MAX_INPUT];
+	entry *entries;
+	int nentries;
+} ui_opts;
+
+extern ui_opts ui_opt;
+
+/* the terminal: locale, keys, curses, theme; 0, EXIT_NO_TERMINAL or 2 (a message on stderr,
+ * prefixed with who). ui_stop ends curses. */
+int ui_start(const char *who);
+void ui_stop(void);
+
+/* input text and menu default from ui_opt, before the first ui_run */
+void ui_prepare(void);
+
+/* The button labels of ui_opt.buttons (comma separated), else Yes,No or OK; NULL, or why not. */
+const char *ui_init_buttons(void);
+
+/* run the widget ui_opt describes: 0 accepted, 1 No, 255 Escape, EXIT_NO_TERMINAL */
+int ui_run(void);
+/* the same for a widget of KIND on the screen already up: prompt and buttons replace ui_opt's;
+ * 2 when the buttons are bad */
+int ui_view(int kind, const char *prompt, const char *buttons);
+/* a message box with printf format FMT (one %s: TAG) and an OK button */
+int ui_message(const char *fmt, const char *tag);
+
+/* the text of a textbox or programbox: one line at a time (a newline ends it) */
+void ui_clear_lines(void);
+void ui_add_line(const char *s);
+/* programbox: begin shows the box, each line is added and drawn, done drops the keys typed
+ * meanwhile and arms the OK button (then ui_view(K_PROGRAM) waits for it) */
+void ui_program_begin(const char *prompt);
+void ui_program_line(const char *s);
+void ui_program_done(void);
+/* programbox from stdin or a pipe: begin, lines to the end, done */
+void ui_read_lines(FILE *in);
+
+/* what the last widget answered */
+int ui_hotkey(void);              /* the --hotkeys key that ended a menu, 0 for Enter */
+int ui_selected(void);            /* the menu row */
+void ui_select(int row);          /* put the menu cursor on row (the top follows) */
+const char *ui_button(void);      /* the chosen button's label */
+void ui_answer(FILE *out);        /* what upkg-ui writes for the last widget (stderr) */
+
+/* the terminal curses reads keys from */
+FILE *ui_keys(void);
+/* Leave curses for a program that draws on the real terminal (a package's scripts), and come
+ * back: ui_suspend clears the screen; ui_resume repaints. */
+void ui_suspend(void);
+void ui_resume(void);
+
+#endif

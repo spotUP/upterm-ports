@@ -1,11 +1,12 @@
 /* upkg-ui: the add-on install questions of UP-Term (vtcon upkg plan P10.6), a small ncurses
  * program that replaces dialog, drawn in the AmiExpress door SDK chrome (theme "Uprough Neon
- * (muted)"). The line builders are in chrome.c (pure, unit tested); this file is curses + args.
+ * (muted)"). The widgets are libupkgui (ui.c, chrome.c; `upkg browse` links the same library); this file
+ * is the arguments and the answer.
  *
  *   upkg-ui [--title T] [--backtitle V] [--defaultno] [--no-items] [--default-item X]
  *           [--hotkeys KEYS] [--buttons A,B,C] [--colors] [--keep-tite]
  *           (--inputbox PROMPT H W [INIT] | --yesno PROMPT H W | --menu PROMPT H W MH ITEM... |
- *            --msgbox PROMPT H W | --textbox FILE H W | --programbox PROMPT H W | --browse PREFIX)
+ *            --msgbox PROMPT H W | --textbox FILE H W | --programbox PROMPT H W)
  *
  * dialog-compatible subset: H, W and MH are accepted and ignored (the screen is the whole
  * terminal). The answer goes to STDERR (curses owns stdout). Exit 0 accept, 1 cancel or No,
@@ -24,1164 +25,18 @@
  * lines from stdin (the keys then come from the terminal, see open_keys), keeps the end in view, and at EOF drops the
  * keys typed meanwhile and shows OK. --colors (menu): \Z0..\Z7 colour the text, \Zn resets.
  *
- * --browse PREFIX is the whole of "upkg browse" in one process: the list (menu, colours, hotkeys i r
- * u q) is built from PREFIX.all, .inst, .upg and .new, and Enter shows that add-on's text from
- * PREFIX.info (records "@@ NAME" then the "upkg info" lines) in a textbox with the buttons that
- * apply. Back, the refusal messages ("X is not installed.") and the Remove question are views of the
- * same process on the same screen: no process starts and the cursor stays. The process ends only to
- * have a command run: exit 0 and "KEY TAG" on stderr (KEY i, r or u, or q to quit), like a menu with
- * --hotkeys; the caller runs the command and starts --browse again with --default-item TAG.
- *
  * Like dialog, upkg-ui stays on the normal screen: a script that runs several screens one after
- * another (upkg browse, upkg-ask) would otherwise show the Shell between every two, as each run
- * switched to the alternate screen at the start and back at the exit. Such a script clears the
+ * another (upkg-ask) would otherwise show the Shell between every two, as each run * switched to the alternate screen at the start and back at the exit. Such a script clears the
  * screen when it ends. --keep-tite keeps the switch (the Shell comes back at the exit). */
 #define _XOPEN_SOURCE_EXTENDED 1
-#include <ctype.h>
-#include <langinfo.h>
 #include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
-#include <dirent.h>
-#include <sys/time.h>
-#include <sys/wait.h>
-#include <unistd.h>
 #include <wchar.h>
 
-#include <curses.h>
+#include "ui.h"
 
-#include "chrome.h"
-
-#define RAIL "/////"
-#define DEFAULT_TITLE "UP-TERM ADD-ON"
-#define MAX_INPUT 1024
-#define BROWSE_PROMPT "Enter info   i install   r remove   u upgrade   q quit"
-
-enum kind { K_NONE, K_INPUT, K_YESNO, K_MENU, K_MSGBOX, K_TEXTBOX, K_PROGRAM, K_BROWSE };
-
-#define MAX_BUTTONS 8
-
-typedef struct {
-	const char *tag;
-	const char *item;
-} entry;
-
-static struct {
-	const char *title, *backtitle, *prompt, *default_item, *hotkeys, *buttons, *file;
-	int defaultno, no_items, colors, keep_tite, kind;
-	wchar_t init[MAX_INPUT];
-	entry *entries;
-	int nentries;
-} opt;
-
-static int utf8, tick;
-static FILE *keyfp; /* the terminal curses reads the keys from (open_keys) */
-
-#define TICK_MS 1000 /* the rail moves once a second */
-/* get_wch ERRs in a row that came back well before TICK_MS: no key can come (the key fd is at
- * end of file or hung up; select says ready and read gives 0). The rig spun here for ever. */
-#define EARLY_ERRS 20
-#define EXIT_NO_TERMINAL 3
-
-static long since_ms(const struct timeval *t0)
-{
-	struct timeval t;
-
-	gettimeofday(&t, NULL);
-	return (long)(t.tv_sec - t0->tv_sec) * 1000L + (long)(t.tv_usec - t0->tv_usec) / 1000L;
-}
-static attr_t a_chrome, a_ink, a_dim, a_acc, a_sel, a_field, a_col[8];
-
-/* ---- colours: ground 0, ink 7, chrome 6, dim 8, accent 13, selection bg 5 ink 0 ---- */
-
-static int pair_n;
-
-static attr_t make_attr(int fg, int bg)
-{
-	int p = ++pair_n;
-	attr_t bold = 0;
-	if (fg >= 8 && COLORS < 16) {
-		fg -= 8;
-		bold = A_BOLD;
-	}
-	init_pair((short)p, (short)fg, (short)bg);
-	return COLOR_PAIR(p) | bold;
-}
-
-static void init_theme(void)
-{
-	if (has_colors()) {
-		start_color();
-		a_chrome = make_attr(6, 0);
-		a_ink = make_attr(7, 0);
-		a_dim = make_attr(8, 0);
-		a_acc = make_attr(13, 0);
-		a_sel = make_attr(0, 5);
-		if (opt.colors) {
-			int i;
-			for (i = 0; i < 8; i++)
-				a_col[i] = make_attr(i, 0);
-		}
-	} else {
-		a_chrome = a_ink = 0;
-		a_dim = A_DIM;
-		a_acc = A_BOLD;
-		a_sel = A_REVERSE;
-	}
-	a_field = a_ink | A_UNDERLINE;
-}
-
-/* ---- drawing helpers ---- */
-
-static void text(int y, int x, attr_t a, const char *s, int n)
-{
-	attrset(a);
-	mvaddnstr(y, x, s, n);
-}
-
-static void spaces(int y, int x, int n, attr_t a)
-{
-	attrset(a);
-	for (; n > 0; n--, x++)
-		mvaddch(y, x, ' ');
-}
-
-enum { G_H, G_V, G_UL, G_UR, G_LL, G_LR, G_LT, G_RT };
-
-static void glyph(int y, int x, int g)
-{
-	attrset(a_chrome);
-	if (utf8) {
-		const cchar_t *w[] = { WACS_D_HLINE, WACS_D_VLINE, WACS_D_ULCORNER, WACS_D_URCORNER,
-		                       WACS_D_LLCORNER, WACS_D_LRCORNER, WACS_D_LTEE, WACS_D_RTEE };
-		mvadd_wch(y, x, w[g]);
-	} else {
-		mvaddch(y, x, g == G_H ? '=' : g == G_V ? '|' : '+');
-	}
-}
-
-static void hrule(int y, int l, int r)
-{
-	int x;
-	glyph(y, 0, l);
-	for (x = 1; x < COLS - 1; x++)
-		glyph(y, x, G_H);
-	glyph(y, COLS - 1, r);
-}
-
-static void frame_box(void)
-{
-	int y;
-	hrule(0, G_UL, G_UR);
-	hrule(LINES - 1, G_LL, G_LR);
-	for (y = 1; y < LINES - 1; y++) {
-		glyph(y, 0, G_V);
-		glyph(y, COLS - 1, G_V);
-		spaces(y, 1, COLS - 2, a_ink);
-	}
-}
-
-static const char *leader(void)
-{
-	return utf8 ? CH_LEADER_UTF8 : CH_LEADER_ASCII;
-}
-
-static void draw_masthead(void)
-{
-	ch_mast m;
-	int w = COLS - 2, i;
-	const char *value = opt.backtitle ? opt.backtitle : "";
-	const char *title = opt.title ? opt.title : DEFAULT_TITLE;
-
-	ch_mast_layout(&m, w, RAIL, title, value);
-	text(1, 1, a_chrome, RAIL, m.rail_len);
-	text(1, 1 + m.title_col, a_acc, title, m.title_len);
-	attrset(a_dim);
-	for (i = 0; i < m.lead_n; i++)
-		mvaddstr(1, 1 + m.lead_col + i, leader());
-	text(1, 1 + m.value_col, a_ink, value, m.value_len);
-}
-
-/* the tick: only the rail's own cells */
-static void paint_rail(void)
-{
-	char f[16];
-	ch_rail_frame(f, sizeof f, RAIL, tick);
-	text(1, 1, a_chrome, f, (int)strlen(f));
-}
-
-static void draw_footer(const ch_hint *h, int n)
-{
-	int x = 1, i, first = 1, w = COLS - 2;
-	int y = LINES - 2;
-	ch_foot f = ch_footer_fit(h, n, RAIL, w);
-
-	spaces(y, 1, w, a_dim);
-	for (i = 0; i < n; i++) {
-		if (!(f.shown & (1u << i)))
-			continue;
-		if (!first)
-			x += 2;
-		first = 0;
-		text(y, x, a_acc, h[i].key, w);
-		x += (int)strlen(h[i].key);
-		text(y, x, a_acc, ":", 1);
-		x += 2;
-		text(y, x, a_dim, h[i].does, w);
-		x += (int)strlen(h[i].does);
-	}
-	if (f.rail)
-		text(y, x + 2, a_dim, RAIL, w);
-}
-
-/* the prompt, wrapped; "\n" written as backslash-n counts as a line break (dialog's habit).
- * Returns the first free row. */
-static int draw_prompt(int y)
-{
-	char *p = strdup(opt.prompt ? opt.prompt : ""), *s, *d;
-	ch_span sp[64];
-	int n, i, w = COLS - 4;
-
-	if (!p)
-		return y;
-	for (s = d = p; *s; s++) {
-		if (s[0] == '\\' && s[1] == 'n') {
-			*d++ = '\n';
-			s++;
-		} else {
-			*d++ = *s;
-		}
-	}
-	*d = 0;
-	n = ch_wrap_words(p, w, sp, 64);
-	for (i = 0; i < n && y < LINES - 5; i++, y++)
-		text(y, 2, a_ink, p + sp[i].start, sp[i].len);
-	free(p);
-	return y;
-}
-
-/* ---- widgets ---- */
-
-static int widget_row;
-
-static wchar_t buf[MAX_INPUT];
-static int blen, bpos, boff, bx, by;
-static int msel, mtop;
-
-/* the button row: labels split from --buttons (or Yes,No / OK), the selected one, the accepted one */
-static char *blabel[MAX_BUTTONS];
-static int nbtn, bsel, bchosen;
-
-/* textbox and programbox: stored lines, and the wrapped rows drawn from them */
-typedef struct {
-	int line, start, len;
-} trow;
-static char **lines;
-static int nlines, lcap;
-static trow *rows;
-static int nrows, rcap, rows_lines, rows_w;
-static int tbtop, follow, pdone;
-
-static int cell_w(wchar_t c)
-{
-	int w = wcwidth(c);
-	return w < 0 ? 1 : w;
-}
-
-static void draw_input(int y)
-{
-	int fw = COLS - 4, i, col = 0, cx = 0;
-
-	/* scroll so the cursor stays inside the field, one cell kept for it */
-	if (bpos < boff)
-		boff = bpos;
-	for (;;) {
-		int span = 0;
-		for (i = boff; i < bpos; i++)
-			span += cell_w(buf[i]);
-		if (span < fw || boff >= bpos)
-			break;
-		boff++;
-	}
-	spaces(y, 2, fw, a_field);
-	attrset(a_field);
-	for (i = boff; i < blen; i++) {
-		int cw = cell_w(buf[i]);
-		wchar_t one[2] = { buf[i], 0 };
-		if (col + cw > fw)
-			break;
-		if (i < bpos)
-			cx += cw;
-		mvaddwstr(y, 2 + col, one);
-		col += cw;
-	}
-	bx = 2 + cx;
-	by = y;
-}
-
-static void draw_buttons(int y)
-{
-	int x = 4, i;
-	char cell[64];
-
-	for (i = 0; i < nbtn; i++) {
-		int n = snprintf(cell, sizeof cell, " %s ", blabel[i]);
-		text(y, x, i == bsel ? a_sel : a_ink, cell, n);
-		x += n + 3;
-	}
-}
-
-/* ---- stored lines (textbox, programbox) ---- */
-
-/* keep one line: no newline, tabs to 8 columns, control bytes as '?' */
-static void add_line(const char *s)
-{
-	size_t n = strlen(s), k = 0;
-	char *d = malloc(n * 8 + 1);
-	size_t i;
-
-	if (!d)
-		return;
-	for (i = 0; i < n && s[i] != '\n' && s[i] != '\r'; i++) {
-		if (s[i] == '\t')
-			do d[k++] = ' '; while (k % 8);
-		else
-			d[k++] = (unsigned char)s[i] < 32 ? '?' : s[i];
-	}
-	d[k] = 0;
-	if (nlines == lcap) {
-		char **nl = realloc(lines, (size_t)(lcap ? lcap * 2 : 64) * sizeof *lines);
-		if (!nl) {
-			free(d);
-			return;
-		}
-		lines = nl;
-		lcap = lcap ? lcap * 2 : 64;
-	}
-	lines[nlines++] = d;
-}
-
-static void add_row(int line, int start, int len)
-{
-	if (nrows == rcap) {
-		trow *nr = realloc(rows, (size_t)(rcap ? rcap * 2 : 128) * sizeof *rows);
-		if (!nr)
-			return;
-		rows = nr;
-		rcap = rcap ? rcap * 2 : 128;
-	}
-	rows[nrows].line = line, rows[nrows].start = start, rows[nrows].len = len;
-	nrows++;
-}
-
-/* wrap the lines not yet wrapped to the current width; a width change wraps all again */
-static void sync_rows(void)
-{
-	int w = COLS - 4;
-
-	if (w < 1)
-		w = 1;
-	if (w != rows_w)
-		rows_lines = nrows = 0, rows_w = w;
-	for (; rows_lines < nlines; rows_lines++) {
-		const char *s = lines[rows_lines];
-		ch_span *sp = malloc((strlen(s) + 2) * sizeof *sp);
-		int n, i;
-
-		if (!sp)
-			return;
-		n = ch_wrap_words(s, w, sp, (int)strlen(s) + 1);
-		if (n == 0)
-			add_row(rows_lines, 0, 0);
-		for (i = 0; i < n; i++)
-			add_row(rows_lines, sp[i].start, sp[i].len);
-		free(sp);
-	}
-}
-
-static int text_room(void)
-{
-	int r = LINES - 5 - widget_row;
-	return r < 1 ? 1 : r;
-}
-
-static void draw_textarea(void)
-{
-	int room = text_room(), i, maxtop;
-
-	sync_rows();
-	maxtop = nrows > room ? nrows - room : 0;
-	if (follow || tbtop > maxtop)
-		tbtop = maxtop;
-	if (tbtop < 0)
-		tbtop = 0;
-	for (i = 0; i < room && tbtop + i < nrows; i++) {
-		const trow *r = &rows[tbtop + i];
-		text(widget_row + i, 2, a_ink, lines[r->line] + r->start, r->len);
-	}
-}
-
-static int menu_room(int y)
-{
-	int r = LINES - 4 - y;
-	return r < 1 ? 1 : r;
-}
-
-/* draw s in the row's attribute `base`; with --colors the \\Z codes switch the foreground
- * (\\Z0..\\Z7 a colour, \\Zn back to base, any other \\Zx dropped). A selected row keeps base. */
-static void put(int y, int x, attr_t base, int sel, const char *s, int w)
-{
-	attr_t a = base;
-	int used = 0;
-	mbstate_t st;
-
-	if (!opt.colors) {
-		text(y, x, base, s, w);
-		return;
-	}
-	memset(&st, 0, sizeof st);
-	while (*s && used < w) {
-		size_t len;
-		wchar_t wc;
-		int cw;
-
-		if (s[0] == '\\' && s[1] == 'Z' && s[2]) {
-			if (s[2] >= '0' && s[2] <= '7' && !sel && has_colors())
-				a = a_col[s[2] - '0'];
-			else if (s[2] == 'n')
-				a = base;
-			s += 3;
-			continue;
-		}
-		len = mbrtowc(&wc, s, strlen(s), &st);
-		if (len == (size_t)-1 || len == (size_t)-2 || len == 0) {
-			len = 1;
-			wc = (unsigned char)*s;
-			memset(&st, 0, sizeof st);
-		}
-		cw = cell_w(wc);
-		if (used + cw > w)
-			break;
-		text(y, x + used, a, s, (int)len);
-		used += cw;
-		s += len;
-	}
-}
-
-static void draw_menu(int y)
-{
-	int room = menu_room(y), i, w = COLS - 4;
-	/* every item in one column, two cells after the widest tag */
-	int x = 3 + (opt.nentries ? ch_widest(&opt.entries[0].tag, opt.nentries, 2, opt.colors) : 0) + 2;
-
-	if (msel < mtop)
-		mtop = msel;
-	if (msel >= mtop + room)
-		mtop = msel - room + 1;
-	for (i = 0; i < room && mtop + i < opt.nentries; i++) {
-		const entry *e = &opt.entries[mtop + i];
-		int sel = mtop + i == msel;
-		attr_t a = sel ? a_sel : a_ink;
-		spaces(y + i, 2, w, a);
-		put(y + i, 3, a, sel, e->tag, w - 2);
-		if (e->item && *e->item)
-			put(y + i, x, sel ? a_sel : a_dim, sel, e->item, w + 2 - x);
-	}
-}
-
-static const ch_hint H_INPUT[] = { { "Enter", "Accept", 1 }, { "Escape", "Cancel", 1 } };
-static const ch_hint H_YESNO[] = { { "Left/Right", "Choose", 0 }, { "Enter", "Accept", 1 },
-	                                { "Escape", "Cancel", 1 } };
-static const ch_hint H_OK[] = { { "Enter", "Accept", 1 }, { "Escape", "Back", 1 } };
-static const ch_hint H_TEXT[] = { { "Up/Down", "Scroll", 0 }, { "Left/Right", "Choose", 0 },
-	                               { "Enter", "Accept", 1 }, { "Escape", "Back", 1 } };
-static const ch_hint H_WAIT[] = { { "Wait", "Command running", 1 } };
-static const ch_hint H_MENU[] = { { "Up/Down", "Move", 0 }, { "Enter", "Accept", 1 },
-	                               { "Escape", "Cancel", 1 } };
-
-static void draw_all(void)
-{
-	erase();
-	frame_box();
-	draw_masthead();
-	hrule(2, G_LT, G_RT);
-	widget_row = opt.kind == K_TEXTBOX ? 3 : draw_prompt(3) + 1;
-	hrule(LINES - 3, G_LT, G_RT);
-	switch (opt.kind) {
-	case K_INPUT:
-		draw_input(widget_row);
-		draw_footer(H_INPUT, 2);
-		break;
-	case K_YESNO:
-		draw_buttons(widget_row);
-		draw_footer(H_YESNO, 3);
-		break;
-	case K_MSGBOX:
-		draw_buttons(widget_row);
-		draw_footer(nbtn > 1 ? H_YESNO : H_OK, nbtn > 1 ? 3 : 2);
-		break;
-	case K_TEXTBOX:
-		draw_textarea();
-		draw_buttons(LINES - 4);
-		draw_footer(H_TEXT, 4);
-		break;
-	case K_PROGRAM:
-		draw_textarea();
-		if (pdone) {
-			draw_buttons(LINES - 4);
-			draw_footer(H_TEXT, 4);
-		} else {
-			draw_footer(H_WAIT, 1);
-		}
-		break;
-	default:
-		draw_menu(widget_row);
-		draw_footer(H_MENU, 3);
-		break;
-	}
-}
-
-static void place_cursor(void)
-{
-	if (opt.kind == K_INPUT)
-		move(by, bx);
-}
-
-/* keys: returns -1 to go on, else the exit code */
-static int key_input(int fn, wint_t c)
-{
-	int i;
-	if (fn) {
-		switch (c) {
-		case KEY_LEFT: if (bpos > 0) bpos--; break;
-		case KEY_RIGHT: if (bpos < blen) bpos++; break;
-		case KEY_HOME: bpos = 0; break;
-		case KEY_END: bpos = blen; break;
-		case KEY_BACKSPACE:
-			if (bpos > 0) {
-				memmove(buf + bpos - 1, buf + bpos, (size_t)(blen - bpos) * sizeof *buf);
-				bpos--, blen--;
-			}
-			break;
-		case KEY_DC:
-			if (bpos < blen) {
-				memmove(buf + bpos, buf + bpos + 1, (size_t)(blen - bpos - 1) * sizeof *buf);
-				blen--;
-			}
-			break;
-		}
-		return -1;
-	}
-	if (c == '\n' || c == '\r')
-		return 0;
-	if (c == 21) { /* Ctrl-U */
-		blen = bpos = boff = 0;
-	} else if (c == 8 || c == 127) {
-		return key_input(1, KEY_BACKSPACE);
-	} else if (c >= 32 && blen < MAX_INPUT - 1) {
-		for (i = blen; i > bpos; i--)
-			buf[i] = buf[i - 1];
-		buf[bpos++] = (wchar_t)c;
-		blen++;
-	}
-	return -1;
-}
-
-/* the button row: returns the accepted button, else -1 */
-static int key_buttons(int fn, wint_t c)
-{
-	int i;
-	if (fn) {
-		if (c == KEY_LEFT)
-			bsel = (bsel + nbtn - 1) % nbtn;
-		else if (c == KEY_RIGHT)
-			bsel = (bsel + 1) % nbtn;
-		else if (c == KEY_ENTER)
-			return bsel;
-		return -1;
-	}
-	if (c == '\t')
-		bsel = (bsel + 1) % nbtn;
-	else if (c == '\n' || c == '\r' || (c == ' ' && opt.kind == K_MSGBOX))
-		return bsel;
-	else if (c < 128)
-		for (i = 0; i < nbtn; i++)
-			if (tolower((unsigned char)blabel[i][0]) == tolower((int)c))
-				return i;
-	return -1;
-}
-
-/* textbox and programbox: scrolling, the rest is the button row */
-static int key_text(int fn, wint_t c)
-{
-	int room = text_room(), maxtop = nrows > room ? nrows - room : 0;
-	if (fn) {
-		switch (c) {
-		case KEY_UP: tbtop--; break;
-		case KEY_DOWN: tbtop++; break;
-		case KEY_PPAGE: tbtop -= room; break;
-		case KEY_NPAGE: tbtop += room; break;
-		case KEY_HOME: tbtop = 0; break;
-		case KEY_END: tbtop = maxtop; break;
-		default: return key_buttons(fn, c);
-		}
-		if (tbtop > maxtop)
-			tbtop = maxtop;
-		if (tbtop < 0)
-			tbtop = 0;
-		return -1;
-	}
-	return key_buttons(fn, c);
-}
-
-static int hotkey; /* the --hotkeys key that ended the menu, 0 for Enter */
-
-static int key_menu(int fn, wint_t c)
-{
-	int n = opt.nentries, room = menu_room(widget_row), i;
-	if (fn) {
-		switch (c) {
-		case KEY_UP: if (msel > 0) msel--; break;
-		case KEY_DOWN: if (msel < n - 1) msel++; break;
-		case KEY_HOME: msel = 0; break;
-		case KEY_END: msel = n - 1; break;
-		case KEY_PPAGE: msel = msel - room < 0 ? 0 : msel - room; break;
-		case KEY_NPAGE: msel = msel + room > n - 1 ? n - 1 : msel + room; break;
-		case KEY_ENTER: return 0;
-		}
-		return -1;
-	}
-	if (c == '\n' || c == '\r')
-		return 0;
-	/* a hotkey ends the menu; it wins over the first-letter jump */
-	if (opt.hotkeys && c > 0 && c < 128 && strchr(opt.hotkeys, (int)c)) {
-		hotkey = (int)c;
-		return 0;
-	}
-	/* first-letter jump: the next entry after the selected one, wrapping */
-	for (i = 1; i <= n; i++) {
-		const char *t = opt.entries[(msel + i) % n].tag;
-		if (c < 128 && t[0] && strncasecmp(t, (char[]){ (char)c, 0 }, 1) == 0) {
-			msel = (msel + i) % n;
-			break;
-		}
-	}
-	return -1;
-}
-
-static int run(void)
-{
-	int redraw = 1, early = 0;
-	wint_t c;
-	struct timeval start, t0;
-
-	timeout(TICK_MS);
-	gettimeofday(&start, NULL);
-	for (;;) {
-		int r, code;
-		if (redraw) {
-			draw_all();
-			redraw = 0;
-		}
-		place_cursor();
-		refresh();
-		gettimeofday(&t0, NULL);
-		r = get_wch(&c);
-		if (r == ERR) {
-			/* the tick is wall time, not a count of ERRs: an early ERR moves nothing */
-			int t = (int)(since_ms(&start) / TICK_MS);
-			if (since_ms(&t0) >= TICK_MS / 2)
-				early = 0;
-			else if (++early >= EARLY_ERRS || !isatty(fileno(keyfp)))
-				return EXIT_NO_TERMINAL;
-			if (t != tick) { /* the rail's cells only */
-				tick = t;
-				paint_rail();
-			}
-			continue;
-		}
-		early = 0;
-		if (r == KEY_CODE_YES && c == KEY_RESIZE) {
-			redraw = 1;
-			continue;
-		}
-		if (r == OK && c == 27)
-			return 255;
-		switch (opt.kind) {
-		case K_INPUT: code = key_input(r == KEY_CODE_YES, c); break;
-		case K_MENU: code = key_menu(r == KEY_CODE_YES, c); break;
-		default: {
-			int b = opt.kind == K_TEXTBOX || opt.kind == K_PROGRAM ? key_text(r == KEY_CODE_YES, c)
-			                                                       : key_buttons(r == KEY_CODE_YES, c);
-			code = -1;
-			if (b >= 0) {
-				bchosen = b;
-				return opt.kind == K_YESNO ? b : 0;
-			}
-		}
-		}
-		if (code >= 0)
-			return code;
-		redraw = 1;
-	}
-}
-
-static int init_buttons(void);
-static void read_lines(FILE *in);
-static void program_done(void);
-
-/* ---- browse: the list and its views in one process ---- */
-
-/* a text file split into its lines (the newlines become NULs) */
-typedef struct {
-	char *buf, **v;
-	int n;
-} lset;
-
-static int lset_read(lset *l, const char *prefix, const char *ext, int must)
-{
-	char *path = malloc(strlen(prefix) + strlen(ext) + 2), *p;
-	FILE *f;
-	long size;
-
-	memset(l, 0, sizeof *l);
-	if (!path)
-		return 2;
-	sprintf(path, "%s.%s", prefix, ext);
-	f = fopen(path, "r");
-	if (!f) {
-		if (must)
-			fprintf(stderr, "upkg-ui: cannot read %s\n", path);
-		free(path);
-		return must ? 2 : 0;
-	}
-	free(path);
-	fseek(f, 0, SEEK_END);
-	size = ftell(f);
-	fseek(f, 0, SEEK_SET);
-	l->buf = malloc((size_t)size + 2);
-	if (!l->buf || (size > 0 && fread(l->buf, 1, (size_t)size, f) != (size_t)size)) {
-		fclose(f);
-		return 2;
-	}
-	fclose(f);
-	l->buf[size] = '\n';
-	l->buf[size + 1] = 0;
-	for (p = l->buf; *p; p++)
-		if (*p == '\n')
-			l->n++;
-	l->v = calloc((size_t)l->n + 1, sizeof *l->v);
-	if (!l->v)
-		return 2;
-	l->n = 0;
-	for (p = l->buf; *p;) {
-		char *e = strchr(p, '\n');
-		l->v[l->n++] = p;
-		*e = 0;
-		p = e + 1;
-	}
-	return 0;
-}
-
-/* the rest of the line "NAME - REST", or NULL */
-static const char *lset_find(const lset *l, const char *name)
-{
-	size_t k = strlen(name);
-	int i;
-
-	for (i = 0; i < l->n; i++)
-		if (!strncmp(l->v[i], name, k) && !strncmp(l->v[i] + k, " - ", 3))
-			return l->v[i] + k + 3;
-	return NULL;
-}
-
-/* the text up to the first " - " (or all of it) as a printf precision */
-static int upto_sep(const char *s)
-{
-	const char *e = strstr(s, " - ");
-	return e ? (int)(e - s) : (int)strlen(s);
-}
-
-static const char *after_last_sep(const char *s)
-{
-	const char *e, *r = s;
-	while ((e = strstr(r, " - ")) != NULL)
-		r = e + 3;
-	return r;
-}
-
-/* row states, parallel to opt.entries */
-static char *rowstate;
-static lset infoset; /* PREFIX.info lines; headers are "@@ NAME" */
-
-/* one row per line of PREFIX.all: the status (new, installed, upgrade, available) with its colour
- * code, padded to the widest, then the description */
-static int browse_load(const char *prefix)
-{
-	lset all, inst, upg, nw;
-	char **st, **de;
-	int i, n = 0, w = 0;
-
-	if (lset_read(&all, prefix, "all", 1) || lset_read(&inst, prefix, "inst", 1) ||
-	    lset_read(&upg, prefix, "upg", 1) || lset_read(&nw, prefix, "new", 0) ||
-	    lset_read(&infoset, prefix, "info", 1))
-		return 2;
-	opt.entries = calloc((size_t)all.n + 1, sizeof *opt.entries);
-	rowstate = calloc((size_t)all.n + 1, 1);
-	st = calloc((size_t)all.n + 1, sizeof *st);
-	de = calloc((size_t)all.n + 1, sizeof *de);
-	if (!opt.entries || !rowstate || !st || !de)
-		return 2;
-	for (i = 0; i < all.n; i++) {
-		const char *line = all.v[i], *sep = strstr(line, " - "), *rest, *t, *u;
-		char *name, status[256];
-		int len;
-
-		if (!sep)
-			continue;
-		name = malloc((size_t)(sep - line) + 1);
-		st[n] = malloc(256);
-		if (!name || !st[n])
-			return 2;
-		memcpy(name, line, (size_t)(sep - line));
-		name[sep - line] = 0;
-		rest = sep + 3;
-		de[n] = (char *)(strstr(rest, " - ") ? strstr(rest, " - ") + 3 : "");
-		rowstate[n] = 'a';
-		snprintf(status, sizeof status, "available %.*s", upto_sep(rest), rest);
-		if (lset_find(&nw, name)) {
-			rowstate[n] = 'n';
-			snprintf(status, sizeof status, "\\Z6new %.*s", upto_sep(rest), rest);
-		}
-		if ((t = lset_find(&inst, name)) != NULL) {
-			rowstate[n] = 'i';
-			snprintf(status, sizeof status, "\\Z2installed %.*s", upto_sep(t), t);
-			if ((u = lset_find(&upg, name)) != NULL) {
-				rowstate[n] = 'u';
-				snprintf(status, sizeof status, "\\Z3upgrade %.*s to %s", upto_sep(u), u,
-				         after_last_sep(u));
-			}
-		}
-		strcpy(st[n], status);
-		opt.entries[n].tag = name;
-		len = (int)strlen(status) - (status[0] == '\\' ? 3 : 0); /* a colour code takes no column */
-		if (len > w)
-			w = len;
-		n++;
-	}
-	for (i = 0; i < n; i++) {
-		int len = (int)strlen(st[i]) - (st[i][0] == '\\' ? 3 : 0), pad = w - len;
-		char *item = malloc(strlen(st[i]) + (size_t)pad + strlen(de[i]) + 8), *p;
-
-		if (!item)
-			return 2;
-		strcpy(item, st[i]);
-		p = item + strlen(item);
-		if (*de[i]) {
-			while (pad-- > 0)
-				*p++ = ' ';
-			sprintf(p, "   %s", de[i]);
-		}
-		opt.entries[i].item = item;
-	}
-	opt.nentries = n;
-	if (n == 0) {
-		fputs("upkg-ui: no add-ons in the lists\n", stderr);
-		return 1;
-	}
-	{
-		char *bt = malloc(32);
-		if (!bt)
-			return 2;
-		sprintf(bt, "%d add-ons", n);
-		opt.backtitle = bt;
-	}
-	/* the info records: a header line "@@ NAME" starts one */
-	return 0;
-}
-
-static void clear_lines(void)
-{
-	int i;
-	for (i = 0; i < nlines; i++)
-		free(lines[i]);
-	nlines = rows_lines = nrows = tbtop = follow = 0;
-}
-
-/* run one view of the browse on the same screen; returns the widget's exit code */
-static int view(int kind, const char *prompt, const char *buttons)
-{
-	opt.kind = kind;
-	opt.prompt = prompt;
-	opt.buttons = buttons;
-	nbtn = bsel = bchosen = 0;
-	if (kind != K_MENU && init_buttons())
-		return 2;
-	return run();
-}
-
-static int message(const char *fmt, const char *tag)
-{
-	char text[256];
-	snprintf(text, sizeof text, fmt, tag);
-	return view(K_MSGBOX, text, NULL);
-}
-
-/* the info box of tag with the buttons that apply; returns the exit code of the box, and the
- * chosen button's key (i, u, r) in *key, 0 for Back */
-static int info_view(const char *tag, char state, int *key)
-{
-	const char *btn = state == 'u' ? "Upgrade,Remove,Back" : state == 'i' ? "Remove,Back" : "Install,Back";
-	int i, found = 0, rc;
-
-	clear_lines();
-	for (i = 0; i < infoset.n; i++) {
-		if (strncmp(infoset.v[i], "@@ ", 3)) {
-			if (found)
-				add_line(infoset.v[i]);
-		} else {
-			found = !strcmp(infoset.v[i] + 3, tag);
-		}
-	}
-	if (nlines == 0) {
-		char text[256];
-		snprintf(text, sizeof text, "No information for %s.", tag);
-		add_line(text);
-	}
-	*key = 0;
-	rc = view(K_TEXTBOX, "", btn);
-	if (rc == 0) {
-		const char *b = blabel[bchosen];
-		*key = !strcmp(b, "Install") ? 'i' : !strcmp(b, "Upgrade") ? 'u' : !strcmp(b, "Remove") ? 'r' : 0;
-	}
-	return rc;
-}
-
-
-/* ---- browse: the commands, run from inside the list ---- */
-
-static const char *upkg_cmd(void)
-{
-	const char *u = getenv("UPKG");
-	return u && *u ? u : "upkg";
-}
-
-/* true when the feed's control for tag has "UP-Term-Interactive: yes" (the package asks questions
- * of its own; tools/pkgs.py writes the field): the opkg lists of UPKG_LISTS_DIR, which "upkg info"
- * does not print the field from */
-static int interactive(const char *tag)
-{
-	const char *dir = getenv("UPKG_LISTS_DIR");
-	DIR *d = opendir(dir && *dir ? dir : "/UP-Term/pkg/upkg/lists");
-	struct dirent *e;
-	int yes = 0;
-
-	if (!d)
-		return 0;
-	while (!yes && (e = readdir(d)) != NULL) {
-		size_t n = strlen(e->d_name);
-		char path[1024], line[1024], cur[512] = "";
-		FILE *f;
-
-		if ((n > 5 && !strcmp(e->d_name + n - 5, ".prev")) || (n > 4 && !strcmp(e->d_name + n - 4, ".sig")))
-			continue;
-		snprintf(path, sizeof path, "%s/%s", dir && *dir ? dir : "/UP-Term/pkg/upkg/lists", e->d_name);
-		f = fopen(path, "r");
-		if (!f)
-			continue;
-		while (!yes && fgets(line, sizeof line, f)) {
-			line[strcspn(line, "\r\n")] = 0;
-			if (!strncmp(line, "Package: ", 9))
-				snprintf(cur, sizeof cur, "%s", line + 9);
-			else if (!strcmp(line, "UP-Term-Interactive: yes") && !strcmp(cur, tag))
-				yes = 1;
-		}
-		fclose(f);
-	}
-	closedir(d);
-	return yes;
-}
-
-/* the lists again after a command changed the add-ons: one "upkg list-browse PREFIX" */
-static int refresh_lists(void)
-{
-	char cmd[1024];
-	snprintf(cmd, sizeof cmd, "%s list-browse '%s' >/dev/null 2>&1", upkg_cmd(), opt.file);
-	return system(cmd);
-}
-
-static void result_line(char *out, size_t n, const char *verb, const char *tag, int status)
-{
-	int rc = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
-	if (rc == 0)
-		snprintf(out, n, "[OK] upkg %s %s", verb, tag);
-	else
-		snprintf(out, n, "[ERROR] upkg %s %s (exit %d)", verb, tag, rc);
-}
-
-/* install, remove or upgrade tag: the child's output scrolls in the programbox and waits for OK;
- * a package with questions of its own runs on the real terminal with curses suspended (never
- * active while its postinst draws). Then the lists are read again. Returns 0, or
- * EXIT_NO_TERMINAL */
-static int run_action(int key, const char *tag)
-{
-	const char *verb = key == 'i' ? "install" : key == 'r' ? "remove" : "upgrade";
-	static char prompt[256];
-	char cmd[1024], res[512], junk[64];
-	int status;
-
-	if (interactive(tag)) {
-		snprintf(cmd, sizeof cmd, "%s %s '%s'", upkg_cmd(), verb, tag);
-		def_prog_mode();
-		endwin();
-		fputs("\033[H\033[2J", stdout);
-		fflush(stdout);
-		status = system(cmd);
-		result_line(res, sizeof res, verb, tag, status);
-		printf("%s\nPress Return to go back to the list.\n", res);
-		fflush(stdout);
-		clearerr(keyfp);
-		if (!fgets(junk, sizeof junk, keyfp))
-			return EXIT_NO_TERMINAL;
-		refresh_lists();
-		reset_prog_mode();
-		clearok(curscr, TRUE);
-		refresh();
-		return 0;
-	}
-	snprintf(cmd, sizeof cmd, "%s %s '%s' 2>&1", upkg_cmd(), verb, tag);
-	snprintf(prompt, sizeof prompt, "upkg %s %s", verb, tag);
-	clear_lines();
-	pdone = 0;
-	opt.kind = K_PROGRAM;
-	opt.prompt = prompt;
-	opt.buttons = NULL;
-	nbtn = bsel = bchosen = 0;
-	init_buttons();
-	{
-		FILE *p = popen(cmd, "r");
-		if (p) {
-			read_lines(p);
-			status = pclose(p);
-		} else {
-			status = 1 << 8;
-		}
-	}
-	result_line(res, sizeof res, verb, tag, status);
-	add_line(res);
-	refresh_lists();
-	program_done();
-	return view(K_PROGRAM, prompt, NULL) == EXIT_NO_TERMINAL ? EXIT_NO_TERMINAL : 0;
-}
-
-static int browse_load(const char *prefix);
-
-/* reload the files and put the cursor back on tag */
-static int browse_reload(const char *tag)
-{
-	char *keep = strdup(tag);
-	int rc, i;
-
-	opt.entries = NULL;
-	rc = browse_load(opt.file);
-	if (rc) {
-		free(keep);
-		return rc;
-	}
-	msel = mtop = 0;
-	for (i = 0; keep && i < opt.nentries; i++)
-		if (!strcmp(opt.entries[i].tag, keep))
-			msel = i;
-	free(keep);
-	return 0;
-}
-
-/* the list and its views; 0 with hotkey q (and msel) to quit, else the
- * exit code of the list (255 Escape) or EXIT_NO_TERMINAL */
-static int browse_loop(void)
-{
-	for (;;) {
-		const char *tag;
-		char state;
-		int rc, key;
-
-		hotkey = 0;
-		rc = view(K_MENU, BROWSE_PROMPT, NULL);
-		if (rc)
-			return rc;
-		tag = opt.entries[msel].tag;
-		state = rowstate[msel];
-		key = hotkey ? hotkey : 'e';
-		if (key == 'q') {
-			hotkey = key;
-			return 0;
-		}
-		if (key == 'e') {
-			rc = info_view(tag, state, &key);
-			if (rc == EXIT_NO_TERMINAL)
-				return rc;
-			if (rc || !key)
-				continue;
-		}
-		if (key == 'i' && (state == 'i' || state == 'u')) {
-			if (message("%s is already installed.", tag) == EXIT_NO_TERMINAL)
-				return EXIT_NO_TERMINAL;
-			continue;
-		}
-		if (key == 'r' && state != 'i' && state != 'u') {
-			if (message("%s is not installed.", tag) == EXIT_NO_TERMINAL)
-				return EXIT_NO_TERMINAL;
-			continue;
-		}
-		if (key == 'u' && state != 'u') {
-			if (message("%s has no newer version.", tag) == EXIT_NO_TERMINAL)
-				return EXIT_NO_TERMINAL;
-			continue;
-		}
-		if (key == 'r') {
-			char text[256];
-			snprintf(text, sizeof text, "Remove %s?", tag);
-			opt.defaultno = 1;
-			rc = view(K_YESNO, text, NULL);
-			if (rc == EXIT_NO_TERMINAL)
-				return rc;
-			if (rc != 0)
-				continue; /* No or Escape: back to the list */
-		}
-		{
-			char *keep = strdup(tag);
-			rc = run_action(key, keep);
-			if (!rc)
-				rc = browse_reload(keep);
-			free(keep);
-			if (rc)
-				return rc;
-		}
-	}
-}
-
-/* ---- arguments ---- */
-
-/* newterm has already sent smcup (the terminfo is only read there): refresh flushes it, rmcup
- * follows at once, and rmcup is then blanked so endwin switches nothing. tigetstr returns the
- * library's own copy of the string; nulling exit_ca_mode from term.h (dialog's way) does not
- * reach it in an ncurses built with extended numbers. rmcup also puts the cursor back where smcup
- * saved it (the Shell prompt) while ncurses believes it is home on a cleared screen; clearok makes
- * the next refresh clear and home again, or the first row is drawn at the prompt. */
-static void leave_alternate_screen(void)
-{
-	char *smcup = tigetstr("smcup"), *rmcup = tigetstr("rmcup");
-
-	if (smcup == (char *)-1 || !smcup || !*smcup || rmcup == (char *)-1 || !rmcup || !*rmcup)
-		return;
-	refresh();
-	fputs(rmcup, stdout);
-	fflush(stdout);
-	*rmcup = 0;
-	clearok(curscr, TRUE);
-}
 
 static int usage(const char *why)
 {
@@ -1190,7 +45,7 @@ static int usage(const char *why)
 	fputs("usage: upkg-ui [--title T] [--backtitle V] [--defaultno] [--no-items] [--default-item X]\n"
 	      "       [--hotkeys KEYS] [--buttons A,B,C] [--colors] [--keep-tite]\n"
 	      "       (--inputbox PROMPT H W [INIT] | --yesno PROMPT H W | --menu PROMPT H W MH ITEM... |\n"
-	      "        --msgbox PROMPT H W | --textbox FILE H W | --programbox PROMPT H W | --browse PREFIX)\n",
+	      "        --msgbox PROMPT H W | --textbox FILE H W | --programbox PROMPT H W)\n",
 	      stderr);
 	return 2;
 }
@@ -1202,77 +57,69 @@ static int parse(int argc, char **argv)
 	for (; i < argc; i++) {
 		const char *a = argv[i];
 		if (!strcmp(a, "--title") && i + 1 < argc)
-			opt.title = argv[++i];
+			ui_opt.title = argv[++i];
 		else if (!strcmp(a, "--backtitle") && i + 1 < argc)
-			opt.backtitle = argv[++i];
+			ui_opt.backtitle = argv[++i];
 		else if (!strcmp(a, "--default-item") && i + 1 < argc)
-			opt.default_item = argv[++i];
+			ui_opt.default_item = argv[++i];
 		else if (!strcmp(a, "--hotkeys") && i + 1 < argc)
-			opt.hotkeys = argv[++i];
+			ui_opt.hotkeys = argv[++i];
 		else if (!strcmp(a, "--buttons") && i + 1 < argc)
-			opt.buttons = argv[++i];
+			ui_opt.buttons = argv[++i];
 		else if (!strcmp(a, "--colors"))
-			opt.colors = 1;
+			ui_opt.colors = 1;
 		else if (!strcmp(a, "--defaultno"))
-			opt.defaultno = 1;
+			ui_opt.defaultno = 1;
 		else if (!strcmp(a, "--keep-tite"))
-			opt.keep_tite = 1;
+			ui_opt.keep_tite = 1;
 		else if (!strcmp(a, "--no-items"))
-			opt.no_items = 1;
-		else if (!strcmp(a, "--browse") && i + 1 < argc) {
-			if (opt.kind != K_NONE)
-				return usage("only one widget");
-			opt.kind = K_BROWSE;
-			opt.file = argv[++i];
-			opt.prompt = BROWSE_PROMPT;
-			if (i + 1 < argc)
-				return usage("too many arguments");
-		} else if (!strcmp(a, "--inputbox") || !strcmp(a, "--yesno") || !strcmp(a, "--menu") ||
+			ui_opt.no_items = 1;
+		else if (!strcmp(a, "--inputbox") || !strcmp(a, "--yesno") || !strcmp(a, "--menu") ||
 		         !strcmp(a, "--msgbox") || !strcmp(a, "--textbox") || !strcmp(a, "--programbox")) {
-			int need = !strcmp(a, "--menu") ? 4 : 3; /* PROMPT H W (MH) must follow */
+			int need = !strcmp(a, "--menu") ? 4 : 3; /* PROMPT H W (MH) follow */
 			int extra = 0;
-			if (opt.kind != K_NONE)
+			if (ui_opt.kind != K_NONE)
 				return usage("only one widget");
-			opt.kind = !strcmp(a, "--inputbox") ? K_INPUT : !strcmp(a, "--yesno") ? K_YESNO :
+			ui_opt.kind = !strcmp(a, "--inputbox") ? K_INPUT : !strcmp(a, "--yesno") ? K_YESNO :
 			           !strcmp(a, "--msgbox") ? K_MSGBOX : !strcmp(a, "--textbox") ? K_TEXTBOX :
 			           !strcmp(a, "--programbox") ? K_PROGRAM : K_MENU;
 			if (argc - 1 - i < need)
 				return usage("missing arguments");
-			opt.prompt = argv[++i];
-			if (opt.kind == K_TEXTBOX)
-				opt.file = opt.prompt;
+			ui_opt.prompt = argv[++i];
+			if (ui_opt.kind == K_TEXTBOX)
+				ui_opt.file = ui_opt.prompt;
 			i += 2; /* H W */
-			if (opt.kind == K_MENU) {
+			if (ui_opt.kind == K_MENU) {
 				i++; /* MH */
 				extra = argc - 1 - i;
 				if (extra < 1)
 					return usage("menu needs at least one item");
 				/* tags only, or tag/item pairs; --no-items with an empty item after every
 				 * tag is the pair form upkg-ask has always passed */
-				no_items_pairs = !opt.no_items;
-				if (opt.no_items && extra % 2 == 0) {
+				no_items_pairs = !ui_opt.no_items;
+				if (ui_opt.no_items && extra % 2 == 0) {
 					no_items_pairs = 1;
 					for (j = 1; j <= extra; j += 2)
 						if (argv[i + 1 + j][0])
 							no_items_pairs = 0;
 				}
 				{
-					int step = (opt.no_items && !no_items_pairs) ? 1 : 2;
+					int step = (ui_opt.no_items && !no_items_pairs) ? 1 : 2;
 					if (step == 2 && extra % 2)
 						return usage("menu items come as tag item pairs");
-					opt.nentries = extra / step;
-					opt.entries = calloc((size_t)opt.nentries, sizeof *opt.entries);
-					if (!opt.entries)
+					ui_opt.nentries = extra / step;
+					ui_opt.entries = calloc((size_t)ui_opt.nentries, sizeof *ui_opt.entries);
+					if (!ui_opt.entries)
 						return usage("out of memory");
-					for (j = 0; j < opt.nentries; j++) {
-						opt.entries[j].tag = argv[i + 1 + j * step];
-						opt.entries[j].item = step == 2 && !opt.no_items ? argv[i + 2 + j * step] : "";
+					for (j = 0; j < ui_opt.nentries; j++) {
+						ui_opt.entries[j].tag = argv[i + 1 + j * step];
+						ui_opt.entries[j].item = step == 2 && !ui_opt.no_items ? argv[i + 2 + j * step] : "";
 					}
 				}
 				i = argc;
-			} else if (opt.kind == K_INPUT) {
+			} else if (ui_opt.kind == K_INPUT) {
 				if (i + 1 < argc)
-					mbstowcs(opt.init, argv[++i], MAX_INPUT - 1);
+					mbstowcs(ui_opt.init, argv[++i], UI_MAX_INPUT - 1);
 				if (i + 1 < argc)
 					return usage("too many arguments");
 			} else if (i + 1 < argc) {
@@ -1282,210 +129,64 @@ static int parse(int argc, char **argv)
 			return usage("unknown option");
 		}
 	}
-	if (opt.kind == K_NONE)
+	if (ui_opt.kind == K_NONE)
 		return usage("no widget");
-	if (opt.prompt == NULL)
+	if (ui_opt.prompt == NULL)
 		return usage("missing arguments");
-	if ((opt.hotkeys || opt.colors) && opt.kind == K_BROWSE)
-		return usage("browse sets its own hotkeys and colors");
-	if (opt.hotkeys && opt.kind != K_MENU)
+	if (ui_opt.hotkeys && ui_opt.kind != K_MENU)
 		return usage("hotkeys need a menu");
-	if (opt.buttons && opt.kind == K_BROWSE)
-		return usage("browse sets its own buttons");
-	if (opt.buttons && opt.kind != K_MSGBOX && opt.kind != K_TEXTBOX)
+	if (ui_opt.buttons && ui_opt.kind != K_MSGBOX && ui_opt.kind != K_TEXTBOX)
 		return usage("buttons need a msgbox or a textbox");
-	if (opt.colors && opt.kind != K_MENU)
+	if (ui_opt.colors && ui_opt.kind != K_MENU)
 		return usage("colors need a menu");
-	return 0;
-}
-
-/* the button labels: --buttons split at commas, else Yes,No for yesno and OK */
-static int init_buttons(void)
-{
-	char *list;
-	char *p;
-
-	if (opt.kind == K_YESNO) {
-		blabel[0] = "Yes", blabel[1] = "No", nbtn = 2;
-		bsel = opt.defaultno;
-		return 0;
-	}
-	if (!opt.buttons) {
-		blabel[0] = "OK", nbtn = 1;
-		return 0;
-	}
-	list = strdup(opt.buttons);
-	if (!list)
-		return usage("out of memory");
-	for (p = list; nbtn < MAX_BUTTONS; ) {
-		blabel[nbtn++] = p;
-		p = strchr(p, ',');
-		if (!p)
-			break;
-		*p++ = 0;
-	}
-	if (p)
-		return usage("too many buttons");
-	{
-		int i;
-		for (i = 0; i < nbtn; i++)
-			if (!blabel[i][0])
-				return usage("empty button label");
-	}
 	return 0;
 }
 
 static int load_file(void)
 {
-	FILE *f = fopen(opt.file, "r");
+	FILE *f = fopen(ui_opt.file, "r");
 	char chunk[4096];
 
 	if (!f) {
-		fprintf(stderr, "upkg-ui: cannot read %s\n", opt.file);
+		fprintf(stderr, "upkg-ui: cannot read %s\n", ui_opt.file);
 		return 2;
 	}
 	while (fgets(chunk, sizeof chunk, f))
-		add_line(chunk);
+		ui_add_line(chunk);
 	fclose(f);
 	return 0;
 }
 
-/* The terminal the keys come from: /dev/tty, else stdin (not for a programbox: its lines come
- * there), stdout or stderr, the first that is a terminal; NULL when none is. An ixemul program
- * started by a native one (vsh is sh) has no controlling terminal, so its /dev/tty opens the
- * process's console "*": under ptyrun on the rig that was NIL: (isatty 0, select ready at once,
- * read 0) while stdin and stdout were the pty, and every widget spun on ERR from get_wch. */
-static FILE *open_keys(void)
-{
-	FILE *f = fopen("/dev/tty", "r+");
-	int fd;
-
-	if (f && isatty(fileno(f)))
-		return f;
-	if (f)
-		fclose(f);
-	for (fd = opt.kind == K_PROGRAM ? 1 : 0; fd <= 2; fd++) {
-		int d;
-		if (!isatty(fd) || (d = dup(fd)) < 0)
-			continue;
-		if ((f = fdopen(d, "r+")) != NULL)
-			return f;
-		close(d);
-	}
-	return NULL;
-}
-
-/* programbox: the command's lines come on stdin; show each as it arrives, then the OK button */
-static void read_lines(FILE *in)
-{
-	char chunk[4096];
-
-	follow = 1;
-	draw_all();
-	refresh();
-	while (fgets(chunk, sizeof chunk, in)) {
-		add_line(chunk);
-		draw_all();
-		refresh();
-	}
-}
-
-static void program_done(void)
-{
-	flushinp(); /* keys typed while the command ran must not answer the dialog */
-	follow = 0;
-	pdone = 1;
-}
-
 static void read_program(void)
 {
-	read_lines(stdin);
-	program_done();
+	ui_read_lines(stdin);
+	ui_program_done();
 }
 
 int main(int argc, char **argv)
 {
-	int rc = parse(argc, argv), i, browsing = 0;
-	char out[MAX_INPUT * 4];
-	SCREEN *scr;
+	int rc = parse(argc, argv);
+	const char *bad;
 
 	if (rc)
 		return rc;
-	if (init_buttons())
+	if ((bad = ui_init_buttons()) != NULL)
+		return usage(bad);
+	if (ui_opt.kind == K_TEXTBOX && load_file())
 		return 2;
-	if (opt.kind == K_TEXTBOX && load_file())
-		return 2;
-	setlocale(LC_ALL, "");
-	utf8 = strcasecmp(nl_langinfo(CODESET), "UTF-8") == 0 || strcasecmp(nl_langinfo(CODESET), "UTF8") == 0;
-
-	if (opt.kind == K_BROWSE) {
-		browsing = 1;
-		rc = browse_load(opt.file);
-		if (rc)
-			return rc;
-		opt.kind = K_MENU;
-		opt.colors = 1;
-		opt.hotkeys = "iruq";
-		opt.prompt = BROWSE_PROMPT;
-	}
-	if (opt.kind == K_INPUT) {
-		blen = bpos = (int)wcslen(opt.init);
-		wmemcpy(buf, opt.init, (size_t)blen);
-	} else if (opt.kind == K_MENU) {
-		for (i = 0; i < opt.nentries; i++)
-			if (opt.default_item && !strcmp(opt.entries[i].tag, opt.default_item))
-				msel = i;
-	}
-
-	set_escdelay(50);
-	keyfp = open_keys();
-	if (!keyfp) {
-		fputs("upkg-ui: no terminal to read the keys from\n", stderr);
-		return EXIT_NO_TERMINAL;
-	}
-	scr = newterm(NULL, stdout, keyfp);
-	if (!scr) {
-		fputs("upkg-ui: cannot initialise the terminal\n", stderr);
-		return 2;
-	}
-	set_term(scr);
-	if (!opt.keep_tite)
-		leave_alternate_screen();
-	cbreak();
-	noecho();
-	nonl();
-	keypad(stdscr, TRUE);
-	curs_set(0);
-	init_theme();
-	if (opt.kind == K_INPUT)
-		curs_set(1);
-	if (opt.kind == K_PROGRAM)
+	ui_prepare();
+	rc = ui_start("upkg-ui");
+	if (rc)
+		return rc;
+	if (ui_opt.kind == K_PROGRAM)
 		read_program();
-	rc = browsing ? browse_loop() : run();
-	if (browsing)
-		opt.kind = K_MENU, opt.buttons = NULL;
-	endwin();
+	rc = ui_run();
+	ui_stop();
 	if (rc == EXIT_NO_TERMINAL) {
 		fputs("upkg-ui: the terminal went away (no more keys)\n", stderr);
 		return rc;
 	}
-
-	if (rc == 0) {
-		if (opt.kind == K_INPUT) {
-			buf[blen] = 0;
-			if (wcstombs(out, buf, sizeof out) == (size_t)-1)
-				out[0] = 0;
-			fputs(out, stderr);
-		} else if (opt.kind == K_MENU) {
-			if (!opt.hotkeys)
-				fputs(opt.entries[msel].tag, stderr);
-			else if (hotkey)
-				fprintf(stderr, "%c %s", hotkey, opt.entries[msel].tag);
-			else
-				fprintf(stderr, "enter %s", opt.entries[msel].tag);
-		} else if (opt.buttons) {
-			fputs(blabel[bchosen], stderr);
-		}
-	}
+	if (rc == 0)
+		ui_answer(stderr);
 	return rc;
 }
