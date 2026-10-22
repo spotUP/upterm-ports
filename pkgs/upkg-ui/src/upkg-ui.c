@@ -5,7 +5,7 @@
  *   upkg-ui [--title T] [--backtitle V] [--defaultno] [--no-items] [--default-item X]
  *           [--hotkeys KEYS] [--buttons A,B,C] [--colors] [--keep-tite]
  *           (--inputbox PROMPT H W [INIT] | --yesno PROMPT H W | --menu PROMPT H W MH ITEM... |
- *            --msgbox PROMPT H W | --textbox FILE H W | --programbox PROMPT H W)
+ *            --msgbox PROMPT H W | --textbox FILE H W | --programbox PROMPT H W | --browse PREFIX)
  *
  * dialog-compatible subset: H, W and MH are accepted and ignored (the screen is the whole
  * terminal). The answer goes to STDERR (curses owns stdout). Exit 0 accept, 1 cancel or No,
@@ -24,6 +24,14 @@
  * lines from stdin (the keys then come from the terminal, see open_keys), keeps the end in view, and at EOF drops the
  * keys typed meanwhile and shows OK. --colors (menu): \Z0..\Z7 colour the text, \Zn resets.
  *
+ * --browse PREFIX is the whole of "upkg browse" in one process: the list (menu, colours, hotkeys i r
+ * u q) is built from PREFIX.all, .inst, .upg and .new, and Enter shows that add-on's text from
+ * PREFIX.info (records "@@ NAME" then the "upkg info" lines) in a textbox with the buttons that
+ * apply. Back, the refusal messages ("X is not installed.") and the Remove question are views of the
+ * same process on the same screen: no process starts and the cursor stays. The process ends only to
+ * have a command run: exit 0 and "KEY TAG" on stderr (KEY i, r or u, or q to quit), like a menu with
+ * --hotkeys; the caller runs the command and starts --browse again with --default-item TAG.
+ *
  * Like dialog, upkg-ui stays on the normal screen: a script that runs several screens one after
  * another (upkg browse, upkg-ask) would otherwise show the Shell between every two, as each run
  * switched to the alternate screen at the start and back at the exit. Such a script clears the
@@ -36,7 +44,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <dirent.h>
 #include <sys/time.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <wchar.h>
 
@@ -47,8 +57,9 @@
 #define RAIL "/////"
 #define DEFAULT_TITLE "UP-TERM ADD-ON"
 #define MAX_INPUT 1024
+#define BROWSE_PROMPT "Enter info   i install   r remove   u upgrade   q quit"
 
-enum kind { K_NONE, K_INPUT, K_YESNO, K_MENU, K_MSGBOX, K_TEXTBOX, K_PROGRAM };
+enum kind { K_NONE, K_INPUT, K_YESNO, K_MENU, K_MSGBOX, K_TEXTBOX, K_PROGRAM, K_BROWSE };
 
 #define MAX_BUTTONS 8
 
@@ -717,6 +728,440 @@ static int run(void)
 	}
 }
 
+static int init_buttons(void);
+static void read_lines(FILE *in);
+static void program_done(void);
+
+/* ---- browse: the list and its views in one process ---- */
+
+/* a text file split into its lines (the newlines become NULs) */
+typedef struct {
+	char *buf, **v;
+	int n;
+} lset;
+
+static int lset_read(lset *l, const char *prefix, const char *ext, int must)
+{
+	char *path = malloc(strlen(prefix) + strlen(ext) + 2), *p;
+	FILE *f;
+	long size;
+
+	memset(l, 0, sizeof *l);
+	if (!path)
+		return 2;
+	sprintf(path, "%s.%s", prefix, ext);
+	f = fopen(path, "r");
+	if (!f) {
+		if (must)
+			fprintf(stderr, "upkg-ui: cannot read %s\n", path);
+		free(path);
+		return must ? 2 : 0;
+	}
+	free(path);
+	fseek(f, 0, SEEK_END);
+	size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	l->buf = malloc((size_t)size + 2);
+	if (!l->buf || (size > 0 && fread(l->buf, 1, (size_t)size, f) != (size_t)size)) {
+		fclose(f);
+		return 2;
+	}
+	fclose(f);
+	l->buf[size] = '\n';
+	l->buf[size + 1] = 0;
+	for (p = l->buf; *p; p++)
+		if (*p == '\n')
+			l->n++;
+	l->v = calloc((size_t)l->n + 1, sizeof *l->v);
+	if (!l->v)
+		return 2;
+	l->n = 0;
+	for (p = l->buf; *p;) {
+		char *e = strchr(p, '\n');
+		l->v[l->n++] = p;
+		*e = 0;
+		p = e + 1;
+	}
+	return 0;
+}
+
+/* the rest of the line "NAME - REST", or NULL */
+static const char *lset_find(const lset *l, const char *name)
+{
+	size_t k = strlen(name);
+	int i;
+
+	for (i = 0; i < l->n; i++)
+		if (!strncmp(l->v[i], name, k) && !strncmp(l->v[i] + k, " - ", 3))
+			return l->v[i] + k + 3;
+	return NULL;
+}
+
+/* the text up to the first " - " (or all of it) as a printf precision */
+static int upto_sep(const char *s)
+{
+	const char *e = strstr(s, " - ");
+	return e ? (int)(e - s) : (int)strlen(s);
+}
+
+static const char *after_last_sep(const char *s)
+{
+	const char *e, *r = s;
+	while ((e = strstr(r, " - ")) != NULL)
+		r = e + 3;
+	return r;
+}
+
+/* row states, parallel to opt.entries */
+static char *rowstate;
+static lset infoset; /* PREFIX.info lines; headers are "@@ NAME" */
+
+/* one row per line of PREFIX.all: the status (new, installed, upgrade, available) with its colour
+ * code, padded to the widest, then the description */
+static int browse_load(const char *prefix)
+{
+	lset all, inst, upg, nw;
+	char **st, **de;
+	int i, n = 0, w = 0;
+
+	if (lset_read(&all, prefix, "all", 1) || lset_read(&inst, prefix, "inst", 1) ||
+	    lset_read(&upg, prefix, "upg", 1) || lset_read(&nw, prefix, "new", 0) ||
+	    lset_read(&infoset, prefix, "info", 1))
+		return 2;
+	opt.entries = calloc((size_t)all.n + 1, sizeof *opt.entries);
+	rowstate = calloc((size_t)all.n + 1, 1);
+	st = calloc((size_t)all.n + 1, sizeof *st);
+	de = calloc((size_t)all.n + 1, sizeof *de);
+	if (!opt.entries || !rowstate || !st || !de)
+		return 2;
+	for (i = 0; i < all.n; i++) {
+		const char *line = all.v[i], *sep = strstr(line, " - "), *rest, *t, *u;
+		char *name, status[256];
+		int len;
+
+		if (!sep)
+			continue;
+		name = malloc((size_t)(sep - line) + 1);
+		st[n] = malloc(256);
+		if (!name || !st[n])
+			return 2;
+		memcpy(name, line, (size_t)(sep - line));
+		name[sep - line] = 0;
+		rest = sep + 3;
+		de[n] = (char *)(strstr(rest, " - ") ? strstr(rest, " - ") + 3 : "");
+		rowstate[n] = 'a';
+		snprintf(status, sizeof status, "available %.*s", upto_sep(rest), rest);
+		if (lset_find(&nw, name)) {
+			rowstate[n] = 'n';
+			snprintf(status, sizeof status, "\\Z6new %.*s", upto_sep(rest), rest);
+		}
+		if ((t = lset_find(&inst, name)) != NULL) {
+			rowstate[n] = 'i';
+			snprintf(status, sizeof status, "\\Z2installed %.*s", upto_sep(t), t);
+			if ((u = lset_find(&upg, name)) != NULL) {
+				rowstate[n] = 'u';
+				snprintf(status, sizeof status, "\\Z3upgrade %.*s to %s", upto_sep(u), u,
+				         after_last_sep(u));
+			}
+		}
+		strcpy(st[n], status);
+		opt.entries[n].tag = name;
+		len = (int)strlen(status) - (status[0] == '\\' ? 3 : 0); /* a colour code takes no column */
+		if (len > w)
+			w = len;
+		n++;
+	}
+	for (i = 0; i < n; i++) {
+		int len = (int)strlen(st[i]) - (st[i][0] == '\\' ? 3 : 0), pad = w - len;
+		char *item = malloc(strlen(st[i]) + (size_t)pad + strlen(de[i]) + 8), *p;
+
+		if (!item)
+			return 2;
+		strcpy(item, st[i]);
+		p = item + strlen(item);
+		if (*de[i]) {
+			while (pad-- > 0)
+				*p++ = ' ';
+			sprintf(p, "   %s", de[i]);
+		}
+		opt.entries[i].item = item;
+	}
+	opt.nentries = n;
+	if (n == 0) {
+		fputs("upkg-ui: no add-ons in the lists\n", stderr);
+		return 1;
+	}
+	{
+		char *bt = malloc(32);
+		if (!bt)
+			return 2;
+		sprintf(bt, "%d add-ons", n);
+		opt.backtitle = bt;
+	}
+	/* the info records: a header line "@@ NAME" starts one */
+	return 0;
+}
+
+static void clear_lines(void)
+{
+	int i;
+	for (i = 0; i < nlines; i++)
+		free(lines[i]);
+	nlines = rows_lines = nrows = tbtop = follow = 0;
+}
+
+/* run one view of the browse on the same screen; returns the widget's exit code */
+static int view(int kind, const char *prompt, const char *buttons)
+{
+	opt.kind = kind;
+	opt.prompt = prompt;
+	opt.buttons = buttons;
+	nbtn = bsel = bchosen = 0;
+	if (kind != K_MENU && init_buttons())
+		return 2;
+	return run();
+}
+
+static int message(const char *fmt, const char *tag)
+{
+	char text[256];
+	snprintf(text, sizeof text, fmt, tag);
+	return view(K_MSGBOX, text, NULL);
+}
+
+/* the info box of tag with the buttons that apply; returns the exit code of the box, and the
+ * chosen button's key (i, u, r) in *key, 0 for Back */
+static int info_view(const char *tag, char state, int *key)
+{
+	const char *btn = state == 'u' ? "Upgrade,Remove,Back" : state == 'i' ? "Remove,Back" : "Install,Back";
+	int i, found = 0, rc;
+
+	clear_lines();
+	for (i = 0; i < infoset.n; i++) {
+		if (strncmp(infoset.v[i], "@@ ", 3)) {
+			if (found)
+				add_line(infoset.v[i]);
+		} else {
+			found = !strcmp(infoset.v[i] + 3, tag);
+		}
+	}
+	if (nlines == 0) {
+		char text[256];
+		snprintf(text, sizeof text, "No information for %s.", tag);
+		add_line(text);
+	}
+	*key = 0;
+	rc = view(K_TEXTBOX, "", btn);
+	if (rc == 0) {
+		const char *b = blabel[bchosen];
+		*key = !strcmp(b, "Install") ? 'i' : !strcmp(b, "Upgrade") ? 'u' : !strcmp(b, "Remove") ? 'r' : 0;
+	}
+	return rc;
+}
+
+
+/* ---- browse: the commands, run from inside the list ---- */
+
+static const char *upkg_cmd(void)
+{
+	const char *u = getenv("UPKG");
+	return u && *u ? u : "upkg";
+}
+
+/* true when the feed's control for tag has "UP-Term-Interactive: yes" (the package asks questions
+ * of its own; tools/pkgs.py writes the field): the opkg lists of UPKG_LISTS_DIR, which "upkg info"
+ * does not print the field from */
+static int interactive(const char *tag)
+{
+	const char *dir = getenv("UPKG_LISTS_DIR");
+	DIR *d = opendir(dir && *dir ? dir : "/UP-Term/pkg/upkg/lists");
+	struct dirent *e;
+	int yes = 0;
+
+	if (!d)
+		return 0;
+	while (!yes && (e = readdir(d)) != NULL) {
+		size_t n = strlen(e->d_name);
+		char path[1024], line[1024], cur[512] = "";
+		FILE *f;
+
+		if ((n > 5 && !strcmp(e->d_name + n - 5, ".prev")) || (n > 4 && !strcmp(e->d_name + n - 4, ".sig")))
+			continue;
+		snprintf(path, sizeof path, "%s/%s", dir && *dir ? dir : "/UP-Term/pkg/upkg/lists", e->d_name);
+		f = fopen(path, "r");
+		if (!f)
+			continue;
+		while (!yes && fgets(line, sizeof line, f)) {
+			line[strcspn(line, "\r\n")] = 0;
+			if (!strncmp(line, "Package: ", 9))
+				snprintf(cur, sizeof cur, "%s", line + 9);
+			else if (!strcmp(line, "UP-Term-Interactive: yes") && !strcmp(cur, tag))
+				yes = 1;
+		}
+		fclose(f);
+	}
+	closedir(d);
+	return yes;
+}
+
+/* the lists again after a command changed the add-ons: one "upkg list-browse PREFIX" */
+static int refresh_lists(void)
+{
+	char cmd[1024];
+	snprintf(cmd, sizeof cmd, "%s list-browse '%s' >/dev/null 2>&1", upkg_cmd(), opt.file);
+	return system(cmd);
+}
+
+static void result_line(char *out, size_t n, const char *verb, const char *tag, int status)
+{
+	int rc = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+	if (rc == 0)
+		snprintf(out, n, "[OK] upkg %s %s", verb, tag);
+	else
+		snprintf(out, n, "[ERROR] upkg %s %s (exit %d)", verb, tag, rc);
+}
+
+/* install, remove or upgrade tag: the child's output scrolls in the programbox and waits for OK;
+ * a package with questions of its own runs on the real terminal with curses suspended (never
+ * active while its postinst draws). Then the lists are read again. Returns 0, or
+ * EXIT_NO_TERMINAL */
+static int run_action(int key, const char *tag)
+{
+	const char *verb = key == 'i' ? "install" : key == 'r' ? "remove" : "upgrade";
+	static char prompt[256];
+	char cmd[1024], res[512], junk[64];
+	int status;
+
+	if (interactive(tag)) {
+		snprintf(cmd, sizeof cmd, "%s %s '%s'", upkg_cmd(), verb, tag);
+		def_prog_mode();
+		endwin();
+		fputs("\033[H\033[2J", stdout);
+		fflush(stdout);
+		status = system(cmd);
+		result_line(res, sizeof res, verb, tag, status);
+		printf("%s\nPress Return to go back to the list.\n", res);
+		fflush(stdout);
+		clearerr(keyfp);
+		if (!fgets(junk, sizeof junk, keyfp))
+			return EXIT_NO_TERMINAL;
+		refresh_lists();
+		reset_prog_mode();
+		clearok(curscr, TRUE);
+		refresh();
+		return 0;
+	}
+	snprintf(cmd, sizeof cmd, "%s %s '%s' 2>&1", upkg_cmd(), verb, tag);
+	snprintf(prompt, sizeof prompt, "upkg %s %s", verb, tag);
+	clear_lines();
+	pdone = 0;
+	opt.kind = K_PROGRAM;
+	opt.prompt = prompt;
+	opt.buttons = NULL;
+	nbtn = bsel = bchosen = 0;
+	init_buttons();
+	{
+		FILE *p = popen(cmd, "r");
+		if (p) {
+			read_lines(p);
+			status = pclose(p);
+		} else {
+			status = 1 << 8;
+		}
+	}
+	result_line(res, sizeof res, verb, tag, status);
+	add_line(res);
+	refresh_lists();
+	program_done();
+	return view(K_PROGRAM, prompt, NULL) == EXIT_NO_TERMINAL ? EXIT_NO_TERMINAL : 0;
+}
+
+static int browse_load(const char *prefix);
+
+/* reload the files and put the cursor back on tag */
+static int browse_reload(const char *tag)
+{
+	char *keep = strdup(tag);
+	int rc, i;
+
+	opt.entries = NULL;
+	rc = browse_load(opt.file);
+	if (rc) {
+		free(keep);
+		return rc;
+	}
+	msel = mtop = 0;
+	for (i = 0; keep && i < opt.nentries; i++)
+		if (!strcmp(opt.entries[i].tag, keep))
+			msel = i;
+	free(keep);
+	return 0;
+}
+
+/* the list and its views; 0 with hotkey q (and msel) to quit, else the
+ * exit code of the list (255 Escape) or EXIT_NO_TERMINAL */
+static int browse_loop(void)
+{
+	for (;;) {
+		const char *tag;
+		char state;
+		int rc, key;
+
+		hotkey = 0;
+		rc = view(K_MENU, BROWSE_PROMPT, NULL);
+		if (rc)
+			return rc;
+		tag = opt.entries[msel].tag;
+		state = rowstate[msel];
+		key = hotkey ? hotkey : 'e';
+		if (key == 'q') {
+			hotkey = key;
+			return 0;
+		}
+		if (key == 'e') {
+			rc = info_view(tag, state, &key);
+			if (rc == EXIT_NO_TERMINAL)
+				return rc;
+			if (rc || !key)
+				continue;
+		}
+		if (key == 'i' && (state == 'i' || state == 'u')) {
+			if (message("%s is already installed.", tag) == EXIT_NO_TERMINAL)
+				return EXIT_NO_TERMINAL;
+			continue;
+		}
+		if (key == 'r' && state != 'i' && state != 'u') {
+			if (message("%s is not installed.", tag) == EXIT_NO_TERMINAL)
+				return EXIT_NO_TERMINAL;
+			continue;
+		}
+		if (key == 'u' && state != 'u') {
+			if (message("%s has no newer version.", tag) == EXIT_NO_TERMINAL)
+				return EXIT_NO_TERMINAL;
+			continue;
+		}
+		if (key == 'r') {
+			char text[256];
+			snprintf(text, sizeof text, "Remove %s?", tag);
+			opt.defaultno = 1;
+			rc = view(K_YESNO, text, NULL);
+			if (rc == EXIT_NO_TERMINAL)
+				return rc;
+			if (rc != 0)
+				continue; /* No or Escape: back to the list */
+		}
+		{
+			char *keep = strdup(tag);
+			rc = run_action(key, keep);
+			if (!rc)
+				rc = browse_reload(keep);
+			free(keep);
+			if (rc)
+				return rc;
+		}
+	}
+}
+
 /* ---- arguments ---- */
 
 /* newterm has already sent smcup (the terminfo is only read there): refresh flushes it, rmcup
@@ -745,7 +1190,7 @@ static int usage(const char *why)
 	fputs("usage: upkg-ui [--title T] [--backtitle V] [--defaultno] [--no-items] [--default-item X]\n"
 	      "       [--hotkeys KEYS] [--buttons A,B,C] [--colors] [--keep-tite]\n"
 	      "       (--inputbox PROMPT H W [INIT] | --yesno PROMPT H W | --menu PROMPT H W MH ITEM... |\n"
-	      "        --msgbox PROMPT H W | --textbox FILE H W | --programbox PROMPT H W)\n",
+	      "        --msgbox PROMPT H W | --textbox FILE H W | --programbox PROMPT H W | --browse PREFIX)\n",
 	      stderr);
 	return 2;
 }
@@ -774,7 +1219,15 @@ static int parse(int argc, char **argv)
 			opt.keep_tite = 1;
 		else if (!strcmp(a, "--no-items"))
 			opt.no_items = 1;
-		else if (!strcmp(a, "--inputbox") || !strcmp(a, "--yesno") || !strcmp(a, "--menu") ||
+		else if (!strcmp(a, "--browse") && i + 1 < argc) {
+			if (opt.kind != K_NONE)
+				return usage("only one widget");
+			opt.kind = K_BROWSE;
+			opt.file = argv[++i];
+			opt.prompt = BROWSE_PROMPT;
+			if (i + 1 < argc)
+				return usage("too many arguments");
+		} else if (!strcmp(a, "--inputbox") || !strcmp(a, "--yesno") || !strcmp(a, "--menu") ||
 		         !strcmp(a, "--msgbox") || !strcmp(a, "--textbox") || !strcmp(a, "--programbox")) {
 			int need = !strcmp(a, "--menu") ? 4 : 3; /* PROMPT H W (MH) must follow */
 			int extra = 0;
@@ -833,8 +1286,12 @@ static int parse(int argc, char **argv)
 		return usage("no widget");
 	if (opt.prompt == NULL)
 		return usage("missing arguments");
+	if ((opt.hotkeys || opt.colors) && opt.kind == K_BROWSE)
+		return usage("browse sets its own hotkeys and colors");
 	if (opt.hotkeys && opt.kind != K_MENU)
 		return usage("hotkeys need a menu");
+	if (opt.buttons && opt.kind == K_BROWSE)
+		return usage("browse sets its own buttons");
 	if (opt.buttons && opt.kind != K_MSGBOX && opt.kind != K_TEXTBOX)
 		return usage("buttons need a msgbox or a textbox");
 	if (opt.colors && opt.kind != K_MENU)
@@ -919,26 +1376,36 @@ static FILE *open_keys(void)
 }
 
 /* programbox: the command's lines come on stdin; show each as it arrives, then the OK button */
-static void read_program(void)
+static void read_lines(FILE *in)
 {
 	char chunk[4096];
 
 	follow = 1;
 	draw_all();
 	refresh();
-	while (fgets(chunk, sizeof chunk, stdin)) {
+	while (fgets(chunk, sizeof chunk, in)) {
 		add_line(chunk);
 		draw_all();
 		refresh();
 	}
+}
+
+static void program_done(void)
+{
 	flushinp(); /* keys typed while the command ran must not answer the dialog */
 	follow = 0;
 	pdone = 1;
 }
 
+static void read_program(void)
+{
+	read_lines(stdin);
+	program_done();
+}
+
 int main(int argc, char **argv)
 {
-	int rc = parse(argc, argv), i;
+	int rc = parse(argc, argv), i, browsing = 0;
 	char out[MAX_INPUT * 4];
 	SCREEN *scr;
 
@@ -951,6 +1418,16 @@ int main(int argc, char **argv)
 	setlocale(LC_ALL, "");
 	utf8 = strcasecmp(nl_langinfo(CODESET), "UTF-8") == 0 || strcasecmp(nl_langinfo(CODESET), "UTF8") == 0;
 
+	if (opt.kind == K_BROWSE) {
+		browsing = 1;
+		rc = browse_load(opt.file);
+		if (rc)
+			return rc;
+		opt.kind = K_MENU;
+		opt.colors = 1;
+		opt.hotkeys = "iruq";
+		opt.prompt = BROWSE_PROMPT;
+	}
 	if (opt.kind == K_INPUT) {
 		blen = bpos = (int)wcslen(opt.init);
 		wmemcpy(buf, opt.init, (size_t)blen);
@@ -984,7 +1461,9 @@ int main(int argc, char **argv)
 		curs_set(1);
 	if (opt.kind == K_PROGRAM)
 		read_program();
-	rc = run();
+	rc = browsing ? browse_loop() : run();
+	if (browsing)
+		opt.kind = K_MENU, opt.buttons = NULL;
 	endwin();
 	if (rc == EXIT_NO_TERMINAL) {
 		fputs("upkg-ui: the terminal went away (no more keys)\n", stderr);
