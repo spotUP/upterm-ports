@@ -51,6 +51,8 @@
 # the output of script children (xsystem.c, through a pipe) to the progress box line by line; an add-on with
 # "UP-Term-Interactive: yes" runs in the plain window (ui_suspend, Return prompt, ui_resume); the hash is reloaded after
 # a change. check/browse_tty.sh covers the live box, the interactive route and Enter+Back with 0 children.
+# patches/0026: upkg sets pr_WindowPtr to -1 (Amiga only) so a full or absent volume returns an error, not a DOS requester that
+# takes the keys; the browse box then shows '[ERROR] upkg install <pkg> (exit N)'. check/no_requesters.sh; rig case in vtcon.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

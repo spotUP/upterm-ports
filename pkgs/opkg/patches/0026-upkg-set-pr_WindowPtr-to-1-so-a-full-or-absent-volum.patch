@@ -1,0 +1,80 @@
+From 6ff3db16a9d38204777b7f533e0ddfa33eaa3c61 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Thu, 22 Oct 2026 10:44:52 +0200
+Subject: [PATCH] upkg: set pr_WindowPtr to -1 so a full or absent volume
+ returns an error, not a DOS requester
+
+A browse install on a full System: opened a DOS Retry/Cancel requester that took the keys and
+blocked the writer. With WindowPtr -1 the write fails and the install reports it
+([ERROR] upkg install <pkg> (exit N)). Amiga only; a no-op elsewhere.
+---
+ libopkg/upkg_wrap.c | 16 ++++++++++++++++
+ libopkg/upkg_wrap.h |  7 +++++++
+ src/opkg.c          |  4 ++++
+ 3 files changed, 27 insertions(+)
+
+diff --git a/libopkg/upkg_wrap.c b/libopkg/upkg_wrap.c
+index 1a7efbb..39b2b81 100644
+--- a/libopkg/upkg_wrap.c
++++ b/libopkg/upkg_wrap.c
+@@ -13,8 +13,24 @@
+ #include <unistd.h>
+ #include <sys/ioctl.h>
+ 
++#ifdef __amigaos__
++#include <exec/execbase.h>
++#include <dos/dosextens.h>
++#include <proto/exec.h>
++#endif
++
+ #include "upkg_wrap.h"
+ 
++void upkg_no_requesters(void)
++{
++#ifdef __amigaos__
++    struct Process *me = (struct Process *) FindTask(NULL);
++
++    if (me->pr_Task.tc_Node.ln_Type == NT_PROCESS)
++        upkg_window_ptr_off((void **) &me->pr_WindowPtr);
++#endif
++}
++
+ #define UPKG_DEFAULT_COLUMNS 76 /* a 640x256 hires Workbench shell */
+ #define UPKG_MIN_COLUMNS 20
+ 
+diff --git a/libopkg/upkg_wrap.h b/libopkg/upkg_wrap.h
+index 7df061a..109f054 100644
+--- a/libopkg/upkg_wrap.h
++++ b/libopkg/upkg_wrap.h
+@@ -48,6 +48,13 @@ void upkg_set_sink(upkg_sink_fn fn);
+ int upkg_sink_active(void);
+ void upkg_sink_write(const char *text, size_t len);
+ 
++/* DOS opens a requester (Retry/Cancel) on the Workbench screen when a volume is full or absent, and it takes
++ * the keys and blocks the writer (a browse install on a full System: froze rig 4, 2026-10-22). A process
++ * whose WindowPtr is -1 gets the error return instead. upkg_window_ptr_off is the slot write, visible to the
++ * host check; upkg_no_requesters applies it to this process's pr_WindowPtr (a no-op off the Amiga). */
++static inline void upkg_window_ptr_off(void **slot) { *slot = (void *) -1; }
++void upkg_no_requesters(void);
++
+ /* printf into the wrapper; HANG as for upkg_wrap_puts */
+ int upkg_vfprintf(FILE *fp, int hang, const char *fmt, va_list ap);
+ 
+diff --git a/src/opkg.c b/src/opkg.c
+index 6b12f5e..1f974db 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -616,6 +616,10 @@ int main(int argc, char *argv[])
+      * stack rebooted an A1200. Ask for UPKG_CHILD_STACK unless the user set one. */
+     setenv("IXSTACK", UPKG_CHILD_STACK, 0);
+ 
++    /* A full or absent volume makes DOS open a requester that eats the keys and blocks the
++     * writer; with WindowPtr -1 the write returns an error, which the install reports. */
++    upkg_no_requesters();
++
+     if (opkg_conf_init())
+         goto err0;
+ 
+-- 
+2.50.1 (Apple Git-155)
+
