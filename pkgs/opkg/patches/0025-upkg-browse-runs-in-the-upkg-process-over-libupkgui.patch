@@ -9,12 +9,12 @@ upkg-browse script, list-browse and the browse list files are gone.
 ---
  libopkg/CMakeLists.txt |   8 +
  libopkg/opkg_cmd.c     | 148 ++++-------
- libopkg/upkg_browse.c  | 568 +++++++++++++++++++++++++++++++++++++++++
+ libopkg/upkg_browse.c  | 569 +++++++++++++++++++++++++++++++++++++++++
  libopkg/upkg_browse.h  |  25 ++
  libopkg/upkg_wrap.c    |  41 ++-
  libopkg/upkg_wrap.h    |   8 +
  libopkg/xsystem.c      |  35 +++
- 7 files changed, 728 insertions(+), 105 deletions(-)
+ 7 files changed, 729 insertions(+), 105 deletions(-)
  create mode 100644 libopkg/upkg_browse.c
  create mode 100644 libopkg/upkg_browse.h
 
@@ -241,7 +241,7 @@ new file mode 100644
 index 0000000..0570430
 --- /dev/null
 +++ b/libopkg/upkg_browse.c
-@@ -0,0 +1,568 @@
+@@ -0,0 +1,569 @@
 +/* upkg_browse.c - upkg: `upkg browse`, the add-on list, in this process (UP-Term).
 + *
 + * Replaces the shell script dist/upkg-browse and its upkg-ui child processes: the list, the info
@@ -568,6 +568,7 @@ index 0000000..0570430
 +static void hash_reload(void)
 +{
 +    pkg_hash_deinit();
++    pkg_hash_init(); /* deinit leaves n_buckets 0: the next lookup would divide by zero */
 +    pkg_hash_load_feeds();
 +    pkg_hash_load_status_files();
 +}

@@ -9,6 +9,9 @@
 #   runs a script counts more than zero.
 #   install of a non-interactive add-on from the list runs in this process and its row turns installed
 #   (the package hash in memory is updated after the install).
+#   every browse run must exit 0: the install above is followed by a reload of the package hash, and a hash left
+#   with 0 buckets divides by zero (SIGFPE on m68k; the host build of upkg is compiled with
+#   -fsanitize=integer-divide-by-zero, see recipe.mk, because arm64 does not trap and the run would pass).
 #   the progress box is live: epsilon's postinst prints a line, waits until the probe has seen that line in
 #   the screen output (and notes whether the postinst's second step had run by then), then prints a second
 #   line. A box that shows output only at the end never shows the first line while the script waits.
@@ -59,6 +62,8 @@ run() { # KEYS-FILE -> $w/out, $w/count
     : > "$w/count"
     "$ptyrun" -s 100x30 -t 20 "$1" "$w/out" env LANG=C TERM=vtcon TERMINFO="$root/build/tools/terminfo" \
         "$shim" SPAWN_COUNT_FILE="$w/count" "$upkg" -f "$w/conf" browse >"$w/run.log" 2>&1 || :
+    # ptyrun prints "exit N" for the child: a browse that dies (SIGFPE from a zero hash size, 136; ubsan abort, 134) is a failure
+    grep -q '^exit 0$' "$w/run.log" || fail "browse did not exit 0 (reload after an action?): $(head -3 "$w/run.log")"
 }
 printf '300 \\r\n600 \\e\n600 q\n' > "$w/keys1"
 run "$w/keys1"

@@ -51,6 +51,9 @@
 # the output of script children (xsystem.c, through a pipe) to the progress box line by line; an add-on with
 # "UP-Term-Interactive: yes" runs in the plain window (ui_suspend, Return prompt, ui_resume); the hash is reloaded after
 # a change. check/browse_tty.sh covers the live box, the interactive route and Enter+Back with 0 children.
+# check/browse_tty.sh also catches a stale hash after a reload: the host build of upkg is compiled with
+# -fsanitize=integer-divide-by-zero (no recover), so an install from the list followed by the redraw aborts when
+# hash_reload() leaves n_buckets at 0 (arm64 udiv by zero returns 0 without a trap, m68k raises SIGFPE).
 # patches/0026: upkg sets pr_WindowPtr to -1 (Amiga only) so a full or absent volume returns an error, not a DOS requester that
 # takes the keys; the browse box then shows '[ERROR] upkg install <pkg> (exit N)'. check/no_requesters.sh; rig case in vtcon.
 opkg_VERSION   := 0.9.0
@@ -77,6 +80,6 @@ opkg_HOST_DEPS := xz libarchive upkg-ui ncurses
 opkg_HOST_CONFIGURE := -DWITH_CURL=OFF -DWITH_SSLCURL=OFF -DWITH_GPGME=OFF -DUSE_SOLVER_LIBSOLV=OFF \
 	-DWITH_SHA256=ON -DWITH_XZ=ON -DUSE_ACL=OFF -DUSE_XATTR=OFF -DWITH_LIBOPKG_API=OFF \
 	-DCMAKE_PREFIX_PATH="$(HOSTB)/libarchive/inst;$(HOSTB)/xz/inst;$(HOSTB)/upkg-ui/inst;$(HOST_NCURSES)" \
-	"-DCMAKE_C_FLAGS=-I$(HOSTB)/libarchive/inst/include -I$(HOSTB)/xz/inst/include -DUPKG_SHORT_NAMES" \
+	"-DCMAKE_C_FLAGS=-I$(HOSTB)/libarchive/inst/include -I$(HOSTB)/xz/inst/include -DUPKG_SHORT_NAMES -fsanitize=integer-divide-by-zero -fno-sanitize-recover=integer-divide-by-zero" \
 	-DSYSCONFDIR=/UP-Term/etc -DVARDIR=/UP-Term/pkg/upkg \
-	-DSTATIC_LIBOPKG=ON "-DCMAKE_EXE_LINKER_FLAGS=-lz -lbz2 -liconv $(HOSTB)/xz/inst/lib/liblzma.a"
+	-DSTATIC_LIBOPKG=ON "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=integer-divide-by-zero -lz -lbz2 -liconv $(HOSTB)/xz/inst/lib/liblzma.a"
