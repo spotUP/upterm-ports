@@ -9,6 +9,12 @@
 #   runs a script counts more than zero.
 #   install of a non-interactive add-on from the list runs in this process and its row turns installed
 #   (the package hash in memory is updated after the install).
+#   the progress box is live: epsilon's postinst prints a line, waits until the probe has seen that line in
+#   the screen output (and notes whether the postinst's second step had run by then), then prints a second
+#   line. A box that shows output only at the end never shows the first line while the script waits.
+#   an interactive add-on (feed control "UP-Term-Interactive: yes") runs in the plain window, prints
+#   "Press Return to go back to the list." and the list is drawn again after Return.
+#   Enter then Back leaves 0 child processes.
 #   sh pkgs/opkg/check/browse_tty.sh build/host/opkg/inst/bin/upkg
 set -eu
 upkg=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
@@ -29,8 +35,14 @@ import sys
 w = sys.argv[1]; sys.path.insert(0, sys.argv[2])
 from ipk import ipk, stanza, write_index
 idx = b''
-for name, ver, extra in (('alpha', '1.0', {}), ('beta', '2.0', {}), ('gamma', '1.0', {'./postinst': (b'#!/bin/sh\ntouch %s/post.ran\n' % w.encode(), 0o755)})):
-    ctl = b'Package: %s\nVersion: %s\nArchitecture: m68k-amigaos\nMaintainer: t\nDescription: %s check\n' % (name.encode(), ver.encode(), name.encode())
+W = w.encode()
+live = b'#!/bin/sh\necho LIVEFIRST\ni=0\nwhile [ ! -f %s/seen ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done\n[ -f %s/seen ] && touch %s/second.ran\necho LIVESECOND\n' % (W, W, W)
+plain = b'#!/bin/sh\necho PLAINMARK\n'
+for name, ver, extra, more in (('alpha', '1.0', {}, b''), ('beta', '2.0', {}, b''),
+        ('gamma', '1.0', {'./postinst': (b'#!/bin/sh\ntouch %s/post.ran\n' % W, 0o755)}, b''),
+        ('delta', '1.0', {'./postinst': (plain, 0o755)}, b'UP-Term-Interactive: yes\n'),
+        ('epsilon', '1.0', {'./postinst': (live, 0o755)}, b'')):
+    ctl = b'Package: %s\nVersion: %s\nArchitecture: m68k-amigaos\nMaintainer: t\nDescription: %s check\n%s' % (name.encode(), ver.encode(), name.encode(), more)
     ctls = [('./control', ctl, 0o644)] + [(k, v[0], v[1]) for k, v in extra.items()]
     pkg = ipk(ctls, [('./f_%s' % name, b'x\n', 0o644)])
     fn = '%s_%s_m68k-amigaos.ipk' % (name, ver)
@@ -65,4 +77,39 @@ u remove gamma >/dev/null 2>&1 || :
 printf '300 i\n1500 \\r\n600 q\n' > "$w/keys2"
 run "$w/keys2"
 u list-installed 2>&1 | grep -q '^alpha' || fail "install key did not install alpha: $(u list-installed 2>&1)"
-echo "[OK] upkg browse: rows with statuses, info box and back with 0 child processes (control: $c), install runs in process"
+# (a) live box: epsilon is the 4th... rows alpha beta delta epsilon gamma; Down x3, i, wait for the probe, OK, quit
+: > "$w/count"
+rm -f "$w/seen" "$w/second.ran" "$w/early"
+printf '300 \\eOB\n100 \\eOB\n100 \\eOB\n100 i\n4000 \\r\n800 q\n' > "$w/keys3"
+( n=0; while [ $n -lt 150 ]; do
+    if grep -q LIVEFIRST "$w/out" 2>/dev/null; then
+        [ -f "$w/second.ran" ] && echo late > "$w/early"
+        touch "$w/seen"; break
+    fi
+    sleep 0.1; n=$((n+1))
+  done ) &
+probe=$!
+run "$w/keys3"
+wait $probe || :
+[ -f "$w/seen" ] || fail "live: LIVEFIRST never reached the screen"
+[ ! -f "$w/early" ] || fail "live: the first script line appeared only after the script ended"
+grep -q LIVESECOND "$w/out" || fail "live: the second line is missing"
+grep -q '\[OK\] upkg install epsilon' "$w/out" || fail "live: no closing [OK] line"
+u list-installed 2>&1 | grep -q '^epsilon' || fail "live: epsilon not installed"
+# (b) interactive: delta runs in the plain window, Return prompt, then the list is back
+rm -f "$w/out"
+printf '300 \\eOB\n100 \\eOB\n100 i\n2500 \\r\n1000 q\n' > "$w/keys4"
+run "$w/keys4"
+grep -q PLAINMARK "$w/out" || fail "interactive: no script output in the plain window"
+grep -q 'Press Return to go back to the list' "$w/out" || fail "interactive: no Return prompt"
+grep -q '\[OK\] upkg install delta' "$w/out" || fail "interactive: no [OK] line"
+after=$(awk '/Press Return to go back/{f=1} f' "$w/out")
+printf '%s' "$after" | grep -q 'add-ons' || fail "interactive: the list did not come back after Return"
+u list-installed 2>&1 | grep -q '^delta' || fail "interactive: delta not installed"
+# (c) Enter then Back: 0 children
+: > "$w/count"
+printf '300 \\r\n600 \\e\n600 q\n' > "$w/keys5"
+run "$w/keys5"
+n=$(wc -c <"$w/count" | tr -d ' ')
+[ "$n" = 0 ] || fail "Enter and Back made $n child processes"
+echo "[OK] upkg browse: rows with statuses, info box and back with 0 child processes (control: $c), install runs in process, live progress box, interactive package in the plain window"

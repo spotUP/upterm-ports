@@ -1,4 +1,4 @@
-From 36dd04db83a1c522dfbf1971ac1f4e74133ca129 Mon Sep 17 00:00:00 2001
+From df97ff09bd483cfc6ce7af8e7673f10e65cb0df4 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Thu, 22 Oct 2026 08:54:35 +0200
 Subject: [PATCH 25/25] upkg: browse runs in the upkg process over libupkgui
@@ -9,9 +9,12 @@ upkg-browse script, list-browse and the browse list files are gone.
 ---
  libopkg/CMakeLists.txt |   8 +
  libopkg/opkg_cmd.c     | 148 ++++-------
- libopkg/upkg_browse.c  | 542 +++++++++++++++++++++++++++++++++++++++++
+ libopkg/upkg_browse.c  | 568 +++++++++++++++++++++++++++++++++++++++++
  libopkg/upkg_browse.h  |  25 ++
- 4 files changed, 620 insertions(+), 103 deletions(-)
+ libopkg/upkg_wrap.c    |  41 ++-
+ libopkg/upkg_wrap.h    |   8 +
+ libopkg/xsystem.c      |  35 +++
+ 7 files changed, 728 insertions(+), 105 deletions(-)
  create mode 100644 libopkg/upkg_browse.c
  create mode 100644 libopkg/upkg_browse.h
 
@@ -235,10 +238,10 @@ index 9480f6c..21d623d 100644
      {"list-changed-conffiles", 0,
 diff --git a/libopkg/upkg_browse.c b/libopkg/upkg_browse.c
 new file mode 100644
-index 0000000..b7546aa
+index 0000000..0570430
 --- /dev/null
 +++ b/libopkg/upkg_browse.c
-@@ -0,0 +1,542 @@
+@@ -0,0 +1,568 @@
 +/* upkg_browse.c - upkg: `upkg browse`, the add-on list, in this process (UP-Term).
 + *
 + * Replaces the shell script dist/upkg-browse and its upkg-ui child processes: the list, the info
@@ -264,6 +267,7 @@ index 0000000..b7546aa
 +#include "opkg_cmd.h"
 +#include "opkg_message.h"
 +#include "upkg_wrap.h"
++#include "pkg_hash.h"
 +#include "sprintf_alloc.h"
 +#include "xfuncs.h"
 +#include "upkg_browse.h"
@@ -515,14 +519,57 @@ index 0000000..b7546aa
 +    return ui_message(fmt, tag);
 +}
 +
-+/* Feed the text of FP, from its start, to the program box line by line. */
-+static void feed(FILE *fp)
-+{
-+    char chunk[4096];
++/* The sink of upkg_wrap.c while an action runs: text pieces (upkg's own messages and the output of
++ * package scripts and curl) become lines of the progress box as they complete, so the box shows a
++ * script's first line while the script is still running. */
++static char *partial;
++static size_t plen, pcap;
 +
-+    rewind(fp);
-+    while (fgets(chunk, sizeof chunk, fp))
-+        ui_program_line(chunk);
++static void sink_line(void)
++{
++    if (plen == pcap) {
++        pcap = pcap ? pcap * 2 : 256;
++        partial = xrealloc(partial, pcap);
++    }
++    partial[plen] = '\0';
++    ui_program_line(partial);
++    plen = 0;
++}
++
++static void box_sink(const char *text, size_t len)
++{
++    size_t i;
++
++    for (i = 0; i < len; i++) {
++        char c = text[i];
++
++        if (c == '\r')
++            continue;
++        if (plen + 2 >= pcap) {
++            pcap = pcap ? pcap * 2 : 256;
++            partial = xrealloc(partial, pcap);
++        }
++        partial[plen++] = c;
++        if (c == '\n')
++            sink_line();
++    }
++}
++
++static void box_sink_end(void)
++{
++    if (plen) {
++        partial[plen++] = '\n';
++        sink_line();
++    }
++}
++
++/* After an install, remove or upgrade the hash is rebuilt from the feeds and the status files, as
++ * after a fresh start; the new markers are read from the .prev files again by the list code. */
++static void hash_reload(void)
++{
++    pkg_hash_deinit();
++    pkg_hash_load_feeds();
++    pkg_hash_load_status_files();
 +}
 +
 +static void flush_all(void)
@@ -565,31 +612,12 @@ index 0000000..b7546aa
 +        return 0;
 +    }
 +
-+    {
-+        FILE *cap = tmpfile();
-+        int save1, save2;
-+
-+        ui_program_begin(title);
-+        if (!cap) {
-+            ui_program_line("[ERROR] cannot create a temporary file\n");
-+            rc = 1;
-+            goto done;
-+        }
-+        flush_all();
-+        save1 = dup(1);
-+        save2 = dup(2);
-+        dup2(fileno(cap), 1);
-+        dup2(fileno(cap), 2);
-+        rc = opkg_cmd_exec(cmd, 1, argv);
-+        flush_all();
-+        dup2(save1, 1);
-+        dup2(save2, 2);
-+        close(save1);
-+        close(save2);
-+        feed(cap);
-+        fclose(cap);
-+    }
-+ done:
++    ui_program_begin(title);
++    flush_all();
++    upkg_set_sink(box_sink);
++    rc = opkg_cmd_exec(cmd, 1, argv);
++    upkg_set_sink(NULL);
++    box_sink_end();
 +    if (rc == 0) {
 +        sprintf_alloc(&closing, "[OK] %s\n", title);
 +    } else {
@@ -709,6 +737,7 @@ index 0000000..b7546aa
 +        size_t tl;
 +
 +        if (stale) {
++            hash_reload();
 +            lists_load();
 +            stale = 0;
 +        }
@@ -812,6 +841,156 @@ index 0000000..e7411d4
 +}
 +#endif
 +#endif                          /* UPKG_BROWSE_H */
+diff --git a/libopkg/upkg_wrap.c b/libopkg/upkg_wrap.c
+index 2dac546..1a7efbb 100644
+--- a/libopkg/upkg_wrap.c
++++ b/libopkg/upkg_wrap.c
+@@ -191,10 +191,35 @@ void upkg_wrap_flush(void)
+ 
+ static int atexit_done;
+ 
++static upkg_sink_fn sink;
++
++void upkg_set_sink(upkg_sink_fn fn)
++{
++    sink = fn;
++}
++
++int upkg_sink_active(void)
++{
++    return sink != NULL;
++}
++
++void upkg_sink_write(const char *text, size_t len)
++{
++    if (sink)
++        sink(text, len);
++}
++
+ void upkg_wrap_puts(FILE *fp, int hang, const char *s)
+ {
+-    int w = upkg_wrap_width(fp);
+-    struct wrap_state *st = state_of(fp);
++    int w;
++    struct wrap_state *st;
++
++    if (sink && (fp == stdout || fp == stderr)) {
++        sink(s, strlen(s));
++        return;
++    }
++    w = upkg_wrap_width(fp);
++    st = state_of(fp);
+ 
+     if (!w) {
+         fputs(s, fp);
+@@ -237,6 +262,18 @@ int upkg_vfprintf(FILE *fp, int hang, const char *fmt, va_list ap)
+     char *buf;
+     int n;
+ 
++    if (sink && (fp == stdout || fp == stderr)) {
++        va_copy(ap2, ap);
++        n = vsnprintf(NULL, 0, fmt, ap2);
++        va_end(ap2);
++        if (n >= 0 && (buf = malloc((size_t)n + 1)) != NULL) {
++            vsnprintf(buf, (size_t)n + 1, fmt, ap);
++            sink(buf, (size_t)n);
++            free(buf);
++        }
++        return n;
++    }
++
+     if (!upkg_wrap_width(fp)) {
+         n = vfprintf(fp, fmt, ap);
+         if (state_of(fp))       /* as upkg_wrap_puts: a pipe gets each line when written */
+diff --git a/libopkg/upkg_wrap.h b/libopkg/upkg_wrap.h
+index 6e6c5a9..7df061a 100644
+--- a/libopkg/upkg_wrap.h
++++ b/libopkg/upkg_wrap.h
+@@ -40,6 +40,14 @@ void upkg_wrap_puts(FILE *fp, int hang, const char *s);
+  * before a child process runs. */
+ void upkg_wrap_flush(void);
+ 
++/* A sink takes everything upkg_wrap_puts and upkg_vfprintf would write to stdout or stderr, and the
++ * output of child processes xsystem runs, as text pieces (not whole lines) instead of the terminal.
++ * upkg browse sets one to feed its progress box live; NULL removes it. */
++typedef void (*upkg_sink_fn)(const char *text, size_t len);
++void upkg_set_sink(upkg_sink_fn fn);
++int upkg_sink_active(void);
++void upkg_sink_write(const char *text, size_t len);
++
+ /* printf into the wrapper; HANG as for upkg_wrap_puts */
+ int upkg_vfprintf(FILE *fp, int hang, const char *fmt, va_list ap);
+ 
+diff --git a/libopkg/xsystem.c b/libopkg/xsystem.c
+index 23c21ed..eb19b2b 100644
+--- a/libopkg/xsystem.c
++++ b/libopkg/xsystem.c
+@@ -23,6 +23,7 @@
+ #include <sys/types.h>
+ #include <sys/wait.h>
+ #include <unistd.h>
++#include <fcntl.h>
+ 
+ #include "opkg_message.h"
+ #include "xsystem.h"
+@@ -41,16 +42,38 @@ int xsystem(const char *argv[])
+     int status;
+     pid_t pid;
+     int r;
++    int pfd[2] = { -1, -1 }, nullfd = -1;
+ 
+     upkg_wrap_flush();
++    /* A sink (upkg browse) takes the child's output, line by line as it is written, instead of
++     * the terminal curses owns; the child reads nothing from that terminal. */
++    if (upkg_sink_active()) {
++        if (pipe(pfd) != 0)
++            pfd[0] = pfd[1] = -1;
++        nullfd = open("/dev/null", O_RDONLY);
++    }
+     pid = vfork();
+ 
+     switch (pid) {
+     case -1:
++        if (pfd[0] >= 0) {
++            close(pfd[0]);
++            close(pfd[1]);
++        }
++        if (nullfd >= 0)
++            close(nullfd);
+         opkg_perror(ERROR, "%s: vfork", argv[0]);
+         return -1;
+     case 0:
+         /* child */
++        if (pfd[1] >= 0) {
++            dup2(pfd[1], 1);
++            dup2(pfd[1], 2);
++            if (nullfd >= 0)
++                dup2(nullfd, 0);
++            close(pfd[0]);
++            close(pfd[1]);
++        }
+         execvp(argv[0], (char *const *)argv);
+         _exit(-1);
+     default:
+@@ -58,6 +81,18 @@ int xsystem(const char *argv[])
+         break;
+     }
+ 
++    if (nullfd >= 0)
++        close(nullfd);
++    if (pfd[0] >= 0) {
++        char chunk[512];
++        ssize_t got;
++
++        close(pfd[1]);
++        while ((got = read(pfd[0], chunk, sizeof chunk)) > 0)
++            upkg_sink_write(chunk, (size_t)got);
++        close(pfd[0]);
++    }
++
+     r = waitpid(pid, &status, 0);
+     if (r == -1) {
+         opkg_perror(ERROR, "%s: waitpid", argv[0]);
 -- 
 2.50.1 (Apple Git-155)
 

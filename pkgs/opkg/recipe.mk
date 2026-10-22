@@ -47,7 +47,10 @@
 # a reader of `upkg install | ...` sees progress while it runs. check/pipe_lines.sh (an http feed that stalls).
 # patches/0025: upkg browse is C in libopkg (upkg_browse.c) over libupkgui: it draws its screens in the upkg process
 # from the package hash in memory and runs install, remove and upgrade through opkg_cmd_exec. list-browse and the
-# browse list/dispatch code of 0022 are gone.
+# browse list/dispatch code of 0022 are gone. While an action runs, upkg_set_sink (upkg_wrap.c) sends upkg's messages and
+# the output of script children (xsystem.c, through a pipe) to the progress box line by line; an add-on with
+# "UP-Term-Interactive: yes" runs in the plain window (ui_suspend, Return prompt, ui_resume); the hash is reloaded after
+# a change. check/browse_tty.sh covers the live box, the interactive route and Enter+Back with 0 children.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
