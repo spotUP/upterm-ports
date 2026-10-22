@@ -36,7 +36,7 @@ w = sys.argv[1]; sys.path.insert(0, sys.argv[2])
 from ipk import ipk, stanza, write_index
 idx = b''
 W = w.encode()
-live = b'#!/bin/sh\necho LIVEFIRST\ni=0\nwhile [ ! -f %s/seen ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done\n[ -f %s/seen ] && touch %s/second.ran\necho LIVESECOND\n' % (W, W, W)
+live = b'#!/bin/sh\necho LIVEFIRST\ni=0\nwhile [ ! -f %s/seen ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done\n[ -f %s/seen ] && touch %s/second.ran\n[ -f %s/seen ] || touch %s/timeout\necho LIVESECOND\n' % (W, W, W, W, W)
 plain = b'#!/bin/sh\necho PLAINMARK\n'
 for name, ver, extra, more in (('alpha', '1.0', {}, b''), ('beta', '2.0', {}, b''),
         ('gamma', '1.0', {'./postinst': (b'#!/bin/sh\ntouch %s/post.ran\n' % W, 0o755)}, b''),
@@ -79,7 +79,7 @@ run "$w/keys2"
 u list-installed 2>&1 | grep -q '^alpha' || fail "install key did not install alpha: $(u list-installed 2>&1)"
 # (a) live box: epsilon is the 4th... rows alpha beta delta epsilon gamma; Down x3, i, wait for the probe, OK, quit
 : > "$w/count"
-rm -f "$w/seen" "$w/second.ran" "$w/early"
+rm -f "$w/seen" "$w/second.ran" "$w/early" "$w/timeout"
 printf '300 \\eOB\n100 \\eOB\n100 \\eOB\n100 i\n4000 \\r\n800 q\n' > "$w/keys3"
 ( n=0; while [ $n -lt 150 ]; do
     if grep -q LIVEFIRST "$w/out" 2>/dev/null; then
@@ -93,6 +93,7 @@ run "$w/keys3"
 wait $probe || :
 [ -f "$w/seen" ] || fail "live: LIVEFIRST never reached the screen"
 [ ! -f "$w/early" ] || fail "live: the first script line appeared only after the script ended"
+[ ! -f "$w/timeout" ] || fail "live: the script waited in vain, its first line never reached the screen while it ran"
 grep -q LIVESECOND "$w/out" || fail "live: the second line is missing"
 grep -q '\[OK\] upkg install epsilon' "$w/out" || fail "live: no closing [OK] line"
 u list-installed 2>&1 | grep -q '^epsilon' || fail "live: epsilon not installed"
