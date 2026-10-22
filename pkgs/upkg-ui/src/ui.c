@@ -629,6 +629,7 @@ static int run(void)
 	wint_t c;
 	struct timeval start, t0;
 
+	hotkey = 0; /* ui_hotkey() describes this run only, not a menu shown before it */
 	timeout(TICK_MS);
 	gettimeofday(&start, NULL);
 	for (;;) {
