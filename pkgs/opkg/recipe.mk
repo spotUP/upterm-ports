@@ -45,12 +45,15 @@
 # has (nothing on the first update); browse and list-browse write it as the fourth file PREFIX.new. check/list_new.sh.
 # patches/0024: upkg sets stdout line buffered and the wrap code flushes at every newline when not on a terminal, so
 # a reader of `upkg install | ...` sees progress while it runs. check/pipe_lines.sh (an http feed that stalls).
+# patches/0025: upkg browse is C in libopkg (upkg_browse.c) over libupkgui: it draws its screens in the upkg process
+# from the package hash in memory and runs install, remove and upgrade through opkg_cmd_exec. list-browse and the
+# browse list/dispatch code of 0022 are gone.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
 opkg_LICENSE   := GPL-2.0-or-later (COPYING)
 opkg_CMAKE     := 1
-opkg_DEPS      := ixcompat zlib bzip2 xz libarchive
+opkg_DEPS      := ixcompat zlib bzip2 xz libarchive upkg-ui ncurses
 opkg_CONFIGURE := -DWITH_CURL=OFF -DWITH_SSLCURL=OFF -DWITH_GPGME=OFF -DUSE_SOLVER_LIBSOLV=OFF \
 	-DWITH_SHA256=ON -DWITH_XZ=ON -DWITH_BZIP2=ON -DUSE_ACL=OFF -DUSE_XATTR=OFF \
 	-DSTATIC_LIBOPKG=ON -DWITH_LIBOPKG_API=OFF \
@@ -65,10 +68,10 @@ opkg_BINS      := bin/upkg
 # __stack extends upkg itself; the children get IXSTACK (patches/0014). check_bin checks __stack.
 opkg_STACK     := 262144
 opkg_STACK_VAR := 1
-opkg_HOST_DEPS := xz libarchive
+opkg_HOST_DEPS := xz libarchive upkg-ui ncurses
 opkg_HOST_CONFIGURE := -DWITH_CURL=OFF -DWITH_SSLCURL=OFF -DWITH_GPGME=OFF -DUSE_SOLVER_LIBSOLV=OFF \
 	-DWITH_SHA256=ON -DWITH_XZ=ON -DUSE_ACL=OFF -DUSE_XATTR=OFF -DWITH_LIBOPKG_API=OFF \
-	-DCMAKE_PREFIX_PATH="$(HOSTB)/libarchive/inst;$(HOSTB)/xz/inst" \
+	-DCMAKE_PREFIX_PATH="$(HOSTB)/libarchive/inst;$(HOSTB)/xz/inst;$(HOSTB)/upkg-ui/inst;$(HOST_NCURSES)" \
 	"-DCMAKE_C_FLAGS=-I$(HOSTB)/libarchive/inst/include -I$(HOSTB)/xz/inst/include -DUPKG_SHORT_NAMES" \
 	-DSYSCONFDIR=/UP-Term/etc -DVARDIR=/UP-Term/pkg/upkg \
 	-DSTATIC_LIBOPKG=ON "-DCMAKE_EXE_LINKER_FLAGS=-lz -lbz2 -liconv $(HOSTB)/xz/inst/lib/liblzma.a"
