@@ -1,11 +1,11 @@
 #!/bin/sh
-# hotstale.sh INST-DIR: host check that ui_hotkey() describes the LAST ui_run only. A menu shown
+# hotstale.sh UPKG-UI: host check that ui_hotkey() describes the LAST ui_run only. A menu shown
 # twice (ui_prepare + ui_run, no ui_view) used to keep the first run's hotkey, so the Enter that
 # accepted the second run still read as the typed key (amarchy-menu: "st" then Enter gave
 # "Filter: stt"). Keys 's' then Enter: run 1 must report 's', run 2 must report 0 (Enter).
-#   sh pkgs/upkg-ui/check/hotstale.sh build/host/upkg-ui/inst
+#   sh pkgs/upkg-ui/check/hotstale.sh build/host/upkg-ui/inst/bin/upkg-ui
 set -eu
-inst=$(cd "$1" && pwd)
+inst=$(cd "$(dirname "$1")/.." && pwd)   # the loop hands every check inst/bin/upkg-ui, as for keyfd.sh
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
 nc=$root/build/host/ncurses/inst
