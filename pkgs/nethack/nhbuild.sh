@@ -11,8 +11,11 @@ mode=$1 obj=$2
 cd "$obj"
 case $mode in
 m68k)
-	# 1. makedefs for the Mac: the headers (date.h, onames.h, pm.h, vis_tab.h) and the text data
-	make -C util makedefs CC=cc LINK=cc CFLAGS="-O -include sys/cdefs.h -I../include -Wno-everything" LFLAGS= > util.host.log 2>&1 || { tail -20 util.host.log; exit 1; }
+	# 1. makedefs for the Mac: the headers (date.h, onames.h, pm.h, vis_tab.h) and the text data.
+	# -DNOMAIL as in the game's hints file: onames.h counts the objects, and objects.c has one fewer
+	# (no mail scroll) with NOMAIL; without it every object index after SCR_MAIL is off by one on the
+	# Amiga (init-prob error for class 13)
+	make -C util makedefs CC=cc LINK=cc CFLAGS="-O -include sys/cdefs.h -I../include -Wno-everything -DNOMAIL" LFLAGS= > util.host.log 2>&1 || { tail -20 util.host.log; exit 1; }
 	mv util/makedefs util/makedefs.mac
 	rm -f util/*.o src/*.o
 	cp util/makedefs.mac util/makedefs
@@ -20,7 +23,17 @@ m68k)
 	( cd util && ./makedefs -v && ./makedefs -o && ./makedefs -p && ./makedefs -z ) > gen.log 2>&1 || { tail -20 gen.log; exit 1; }
 	# the Mac makedefs stays: the m68k tools do not link it again
 	sed -i.bak 's/^\t\$(CC) \$(LFLAGS) -o makedefs \$(MAKEOBJS)$/\tcp makedefs.mac makedefs/' util/Makefile
-	# 3. the m68k tools and the game (-o makedefs: the Mac copy stays)
+	# 3. date.h baked on the rig by the m68k makedefs (bake.sh); newer than every source, so make keeps it
+	# and the src Makefile's date.h rule (the Mac makedefs -v) must not run again. It goes in BEFORE the
+	# tools: dgn_comp and lev_comp write its VERSION_SANITY values into dungeon and the levels, and the
+	# Mac makedefs -v computes them with 8-byte longs (game: Configuration incompatibility for file dungeon)
+	if [ -f "$3/date.h" ]; then
+		cp "$3/date.h" include/date.h
+		sed -i.bak 's|^\t\.\./util/makedefs -v$|\t@echo "date.h: baked on the rig"|' src/Makefile
+		grep -q 'date.h: baked on the rig' src/Makefile || { echo "nhbuild.sh: src/Makefile date.h rule not found" >&2; exit 1; }
+		touch include/date.h
+	fi
+	# 4. the m68k tools and the game (-o makedefs: the Mac copy stays)
 	make -C util lev_comp dgn_comp dlb > util.m68k.log 2>&1 || { grep -E -B2 'error|undefined' util.m68k.log | head -40; exit 1; }
 	# makedefs for the Amiga too: bake.sh runs it there (makedefs -q writes raw structs); the Mac one stays
 	# as util/makedefs, the m68k one is util/makedefs.m68k
@@ -28,14 +41,6 @@ m68k)
 	make -C util -f Makefile.bak makedefs > util.m68k.makedefs.log 2>&1 || { grep -E -B2 'error|undefined' util.m68k.makedefs.log | head -40; exit 1; }
 	mv util/makedefs util/makedefs.m68k
 	cp util/makedefs.mac util/makedefs
-	# 4. date.h baked on the rig by the m68k makedefs (bake.sh); newer than every source, so make keeps it
-	# and the src Makefile's date.h rule (the Mac makedefs -v) must not run again
-	if [ -f "$3/date.h" ]; then
-		cp "$3/date.h" include/date.h
-		sed -i.bak 's|^\t\.\./util/makedefs -v$|\t@echo "date.h: baked on the rig"|' src/Makefile
-		grep -q 'date.h: baked on the rig' src/Makefile || { echo "nhbuild.sh: src/Makefile date.h rule not found" >&2; exit 1; }
-		touch include/date.h
-	fi
 	make -C src nethack > src.m68k.log 2>&1 || { grep -E -B2 'error|undefined' src.m68k.log | head -40; exit 1; }
 	;;
 host)
