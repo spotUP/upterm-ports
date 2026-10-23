@@ -64,6 +64,8 @@ static attr_t make_attr(int fg, int bg)
 
 static void init_theme(void)
 {
+	int i;
+
 	if (has_colors()) {
 		start_color();
 		a_chrome = make_attr(6, 0);
@@ -71,11 +73,9 @@ static void init_theme(void)
 		a_dim = make_attr(8, 0);
 		a_acc = make_attr(13, 0);
 		a_sel = make_attr(0, 5);
-		if (ui_opt.colors) {
-			int i;
-			for (i = 0; i < 8; i++)
-				a_col[i] = make_attr(i, 0);
-		}
+		/* always: a program that starts curses once (`upkg browse`) sets ui_opt.colors later, per menu */
+		for (i = 0; i < 8; i++)
+			a_col[i] = make_attr(i, 0);
 	} else {
 		a_chrome = a_ink = 0;
 		a_dim = A_DIM;
