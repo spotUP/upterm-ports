@@ -1,0 +1,1 @@
+nethack-quit	NETHACK_SEED=7 NETHACKOPTIONS=name:Agent,role:valkyrie,race:human,gender:female,align:neutral,!autopickup,!news,!legacy,!mail nethack

@@ -32,4 +32,4 @@ nethack_HOST_CONFIGURE_CMD = cp -R $(nethack_SRC)/. $(nethack_HOBJ)/ && cd $(net
 nethack_HOST_BUILD_CMD = NH_INC=$(HOST_NCURSES)/include NH_NCURSES=$(HOST_NCURSES) NH_PREFIX=$(nethack_HOBJ)/inst \
 	sh $(ROOT)/pkgs/nethack/nhbuild.sh host $(nethack_HOBJ) $(nethack_HOBJ)/inst
 nethack_DATA := share/nethack
-nethack_RIG_DATA := share/nethack/nhdat share/nethack/license share/nethack/symbols share/nethack/record share/nethack/perm share/nethack/logfile share/nethack/xlogfile
+nethack_RIG_DATA := share/nethack/nhdat share/nethack/license share/nethack/symbols share/nethack/sysconf share/nethack/record share/nethack/perm share/nethack/logfile share/nethack/xlogfile

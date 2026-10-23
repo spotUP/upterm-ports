@@ -43,7 +43,7 @@ host)
 	make all > make.host.log 2>&1 || { grep -E -B2 'error:|undefined|\*\*\*' make.host.log | head -40; exit 1; }
 	mkdir -p "$inst/bin" "$inst/share/nethack"
 	cp src/nethack "$inst/bin/nethack"
-	cp dat/nhdat dat/license dat/symbols "$inst/share/nethack/"
+	cp dat/nhdat dat/license dat/symbols sys/unix/sysconf "$inst/share/nethack/"
 	: > "$inst/share/nethack/record"; : > "$inst/share/nethack/perm"; : > "$inst/share/nethack/logfile"; : > "$inst/share/nethack/xlogfile"
 	;;
 install)
@@ -52,7 +52,7 @@ install)
 	mkdir -p "$root/bin" "$root/share/nethack"
 	cp src/nethack "$root/bin/nethack"
 	[ -f "$data/nhdat" ] || { echo "nhbuild.sh: $data/nhdat is missing: run pkgs/nethack/bake.sh on a rig" >&2; exit 1; }
-	cp "$data/nhdat" dat/license dat/symbols "$root/share/nethack/"
+	cp "$data/nhdat" dat/license dat/symbols sys/unix/sysconf "$root/share/nethack/"
 	for f in record perm logfile xlogfile; do : > "$root/share/nethack/$f"; done
 	;;
 esac
