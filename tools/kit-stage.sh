@@ -21,8 +21,14 @@
 # ixcompat.installed): libraries too, since the programs link them. A
 # recipe's <p>_KIT_HOLD (a reason) keeps a package out of the kit.
 set -eu
-KIT=$B/kit/userland
-KSRC=$B/kit/userland-src
+# Atomic: everything is staged into userland.new / userland-src.new and swapped in
+# only when every package staged and the final checks passed; a failing package
+# leaves the old kit untouched (mutt's licence file name, 2026-10-23, left a
+# half-staged userland and a later `make dist` failed on a missing bin/perl).
+FINAL=$B/kit/userland
+FINALSRC=$B/kit/userland-src
+KIT=$FINAL.new
+KSRC=$FINALSRC.new
 . "$ROOT/tools/recipe-var.sh"
 
 # A package that is installed but not checked was rebuilt and its check did
@@ -41,6 +47,7 @@ if [ -n "$unchecked" ]; then
 fi
 
 rm -rf "$KIT" "$KSRC"
+trap 'rm -rf "$KIT" "$KSRC"' EXIT
 mkdir -p "$KIT/bin" "$KIT/licenses" "$KSRC/ports"
 
 for p in $PKGS; do
@@ -111,5 +118,9 @@ for b in "$KIT"/bin/*; do
 	found=$(echo "$owners" | awk -v n="$n" '$1 == n { p = $2 } END { print p }')
 	grep -q "^$found	" "$KIT/SOURCES.txt" || { echo "kit-stage: $n has no SOURCES.txt row" >&2; exit 1; }
 done
+rm -rf "$FINAL" "$FINALSRC"
+mv "$KIT" "$FINAL"
+mv "$KSRC" "$FINALSRC"
+KIT=$FINAL
 echo "kit-stage: $(ls "$KIT/bin" | wc -l | tr -d ' ') programs, $(find "$KIT/share/man" -type f | wc -l | tr -d ' ') pages, $(wc -l < "$KIT/SOURCES.txt" | tr -d ' ') packages"
 cat "$KIT/SOURCES.txt"

@@ -18,6 +18,24 @@ fi
 grep -q "installed but not checked: xz" "$T/out" || { echo "test_kit_stage: no message naming xz" >&2; cat "$T/out" >&2; bad=1; }
 [ -f "$T/kit/userland/keep" ] || { echo "test_kit_stage: the old kit was removed" >&2; bad=1; }
 
+# A package that fails while staging (here: its licence file is missing from the
+# source tree) leaves the old userland and userland-src in place, not half staged.
+rm -rf "$T/kit" "$T/state"
+mkdir -p "$T/state" "$T/kit/userland" "$T/kit/userland-src" "$T/x/bin"
+echo old > "$T/kit/userland/keep"
+echo old > "$T/kit/userland-src/keep"
+touch "$T/state/xz.installed" "$T/state/xz.checked" "$T/state/ixcompat.installed"
+for b in $(make -s print-xz_BINS); do echo bin > "$T/x/$b"; done
+mkdir -p "$T/xz" "$T/dl"
+if ROOT=$ROOT B=$T STATE=$T/state SYSROOT=$T PREFIX=/x SRC=$T IXEMUL=$T PKGS=xz \
+	sh "$ROOT/tools/kit-stage.sh" > "$T/out" 2>&1; then
+	echo "test_kit_stage: a missing licence file did not stop kit-stage" >&2; bad=1
+fi
+grep -q "no licence file" "$T/out" || { echo "test_kit_stage: no licence message" >&2; cat "$T/out" >&2; bad=1; }
+[ "$(cat "$T/kit/userland/keep" 2>/dev/null)" = old ] || { echo "test_kit_stage: failed staging replaced the old userland" >&2; bad=1; }
+[ -f "$T/kit/userland-src/keep" ] || { echo "test_kit_stage: failed staging replaced the old userland-src" >&2; bad=1; }
+[ ! -e "$T/kit/userland.new" ] || { echo "test_kit_stage: failed staging left a temporary drawer" >&2; bad=1; }
+
 # kit-stage depends on the packages it stages: with every stamp newer than its
 # sources nothing is rebuilt, and a source that is newer (make -W) rebuilds
 # exactly that package before the kit is staged (stale upkg-ui, 2026-10-21).
