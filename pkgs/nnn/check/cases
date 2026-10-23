@@ -1,0 +1,5 @@
+version	nnn -V
+help-flag	nnn --help | sed -n 1p
+help-h	nnn -h | sed -n 1p
+help-word	nnn help | sed -n 1p
+help-q	nnn ? | sed -n 1p

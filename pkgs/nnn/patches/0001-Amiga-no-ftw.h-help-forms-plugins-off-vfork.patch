@@ -1,0 +1,138 @@
+From f485194ff934890aaf45b0ea5608254a70c60e52 Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 12:16:57 +0200
+Subject: [PATCH] Amiga: no ftw.h, help forms, plugins off, vfork
+
+---
+ src/nnn.c | 52 +++++++++++++++++++++++++---------------------------
+ 1 file changed, 25 insertions(+), 27 deletions(-)
+
+diff --git a/src/nnn.c b/src/nnn.c
+index e5315c1..15c7ff1 100644
+--- a/src/nnn.c
++++ b/src/nnn.c
+@@ -107,7 +107,6 @@
+ #ifndef __USE_XOPEN_EXTENDED
+ #define __USE_XOPEN_EXTENDED 1
+ #endif
+-#include <ftw.h>
+ #include <pwd.h>
+ #include <grp.h>
+ 
+@@ -2575,7 +2574,7 @@ static void enable_signals(void)
+ 
+ static pid_t xfork(uchar_t flag)
+ {
+-	pid_t p = fork();
++	pid_t p = vfork();
+ 
+ 	if (p > 0) {
+ 		/* the parent ignores the interrupt, quit and hangup signals */
+@@ -2583,32 +2582,20 @@ static pid_t xfork(uchar_t flag)
+ 		sigaction(SIGTSTP, &(struct sigaction){.sa_handler = SIG_DFL}, &oldsigtstp);
+ 		sigaction(SIGWINCH, &(struct sigaction){.sa_handler = SIG_IGN}, &oldsigwinch);
+ 	} else if (p == 0) {
+-		/* We create a grandchild to detach */
++		/* UP-Term: no grandchild (fork is gone). A vfork child runs until its exec,
++		 * so the detached child is this one: new session, and the parent does not wait */
+ 		if (flag & F_NOWAIT) {
+-			p = fork();
+-
+-			if (p > 0)
+-				_exit(EXIT_SUCCESS);
+-			else if (p == 0) {
+-				enable_signals();
+-				setsid();
+-				return p;
+-			}
+-
+-			perror("fork");
+-			_exit(EXIT_FAILURE);
++			enable_signals();
++			setsid();
++			return p;
+ 		}
+ 
+ 		/* So they can be used to stop the child */
+ 		enable_signals();
+ 	}
+ 
+-	/* This is the parent waiting for the child to create grandchild */
+-	if (flag & F_NOWAIT)
+-		waitpid(p, NULL, 0);
+-
+ 	if (p == -1)
+-		perror("fork");
++		perror("vfork");
+ 	return p;
+ }
+ 
+@@ -5359,7 +5346,7 @@ static bool get_output(char *command, char *arg1, char *arg2, int fdout, bool pa
+ 	if (arg2)
+ 		argv[index] = arg2;
+ 
+-	pid = fork();
++	pid = vfork();
+ 	if (pid == 0) {
+ 		/* In child */
+ 		close(cmd_in_fd);
+@@ -5425,7 +5412,7 @@ static bool buffer_command_output(char * const cmds[], char *arg1, char *arg2, s
+ 		if (arg2)
+ 			argv[index] = arg2;
+ 
+-		pid_t pid = fork();
++		pid_t pid = vfork();
+ 		if (pid == 0) {
+ 			close(pipefd[0]);
+ 			dup2(pipefd[1], STDOUT_FILENO);
+@@ -6558,6 +6545,10 @@ static bool run_plugin(char **path, const char *file, char *runfile, char **last
+ 	bool cmd_as_plugin = FALSE;
+ 	char *nextpath;
+ 
++	/* UP-Term: plugins need fork() (the plugin child writes to a fifo the parent reads): off */
++	(void)runfile;
++	return FALSE;
++
+ 	if (!g_state.pluginit) {
+ 		plctrl_init();
+ 		g_state.pluginit = 1;
+@@ -8046,17 +8037,18 @@ static void preview_pane(const char *path)
+ 		if (pipe(pipefd) == -1)
+ 			return;
+ 
+-		pid_t pid = fork();
++		/* UP-Term: the vfork child only dup2s and execs; the numbers are formatted before */
++		char widthbuf[16], heightbuf[16];
++		snprintf(widthbuf, sizeof(widthbuf), "%d", previewwidth);
++		snprintf(heightbuf, sizeof(heightbuf), "%d", xlines - 2);
++
++		pid_t pid = vfork();
+ 		if (pid == 0) {
+ 			close(pipefd[0]);
+ 			dup2(pipefd[1], STDOUT_FILENO);
+ 			dup2(pipefd[1], STDERR_FILENO);
+ 			close(pipefd[1]);
+ 
+-			char widthbuf[16], heightbuf[16];
+-			snprintf(widthbuf, sizeof(widthbuf), "%d", previewwidth);
+-			snprintf(heightbuf, sizeof(heightbuf), "%d", xlines - 2);
+-
+ 			execlp(previewer, previewer, fpath,
+ 			       widthbuf, heightbuf,
+ 			       (char *)NULL);
+@@ -10272,6 +10264,12 @@ int main(int argc, char *argv[])
+ 	int env_opts_id = env_opts ? (int)xstrlen(env_opts) : -1;
+ 	bool hist_file = FALSE;
+ 
++	/* UP-Term: --help, help and ? print the usage like -h (Unix and Amiga forms) */
++	if (argc == 2 && (!strcmp(argv[1], "--help") || !strcmp(argv[1], "help") || !strcmp(argv[1], "?"))) {
++		usage();
++		return EXIT_SUCCESS;
++	}
++
+ 	while ((opt = (env_opts_id > 0
+ 		       ? env_opts[--env_opts_id]
+ 		       : getopt(argc, argv, "aAb:BcCdDeEfF:gHiJKl:nNop:P:QrRs:St:T:uUVxz0h"))) != -1) {
+-- 
+2.50.1 (Apple Git-155)
+
