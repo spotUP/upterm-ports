@@ -1,0 +1,11 @@
+help-long	lynx --help 2>&1 | head -3
+help-short	lynx -h 2>&1 | head -3
+help-word	lynx help 2>&1 | head -3
+help-question	lynx ? 2>&1 | head -3
+version	lynx -version 2>&1 | head -1
+dump	lynx -cfg=lynx.cfg -dump page.html | sed 's|file://.*/|file://DIR/|'
+dump-nolist	lynx -cfg=lynx.cfg -dump -nolist page.html
+listonly	lynx -cfg=lynx.cfg -dump -listonly page.html | sed 's|file://.*/|file://DIR/|'
+source	lynx -cfg=lynx.cfg -lss=lynx.lss -source plain.txt 2>&1
+dump-text	lynx -cfg=lynx.cfg -dump plain.txt
+missing	lynx -cfg=lynx.cfg -dump nosuchfile.html 2>&1 | head -2; echo rc=$?

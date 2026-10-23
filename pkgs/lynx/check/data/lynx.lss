@@ -1,0 +1,3 @@
+# Minimal style sheet for the check cases (the installed one is under /UP-Term/etc).
+strong: bold
+em: underline
