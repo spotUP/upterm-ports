@@ -51,5 +51,16 @@ CASES.append(None)
 if got != [T + 8, T + 10]:
     failed += 1
     print("[FAIL] switch table bounded by a register mask: %r" % got)
+# mutt 2.2.16 pager: the range check is a cmpa with an immediate:
+#   cmpaw #2,%a6; bhiw default; movew %pc@(T,a6:l:2),d0; jmp %pc@(T,d0:w)
+# Without the cmpa rule the table ran on into the code and a code word
+# became a "case" mid-instruction (a false cpushp report).
+recent = [("cmpaw", "#2,%a6"), ("bhiw", "200 <_f+0x10>"),
+          ("movew", "%pc@(100 <_f+0x20>,%a6:l:2),%d0")]
+got = m68k_scan.switch_targets(T, recent, mem, T + len(TABLE_BYTES))
+CASES.append(None)
+if got != [T + 8, T + 10, T + 12]:
+    failed += 1
+    print("[FAIL] a jump table bounded by cmpa #imm is not reported as cpushp: %r" % got)
 print("test_m68k_scan: %d of %d passed" % (len(CASES) - failed, len(CASES)))
 sys.exit(1 if failed else 0)
