@@ -1,7 +1,7 @@
 # hexedit 1.6 (pixel/hexedit): the text-mode hex editor, C and ncursesw.
 # GitHub publishes only the tag archive (no pre-built configure), so the configure
 # step runs autoconf + autoheader on a copy of the tree (autogen.sh's two commands).
-# The configure script looks for -lcurses / -lncurses: a directory of symlinks to
+# The configure script looks for -lcurses / -lncurses: a private lib directory with a copy of
 # libncursesw.a answers it. Colours (--color) are on: ncursesw has use_default_colors.
 hexedit_VERSION   := 1.6
 hexedit_URL       := https://github.com/pixel/hexedit/archive/refs/tags/$(hexedit_VERSION).tar.gz
