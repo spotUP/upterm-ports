@@ -1,0 +1,7 @@
+help-flag	picocom --help | sed -n 1p
+help-h	picocom -h | sed -n 1p
+help-word	picocom help | sed -n 1p
+help-q	picocom ? | sed -n 1p
+bad-option	picocom --nosuchoption 2>&1 | sed -n 1p
+no-device	picocom -q /nonexistent-device 2>&1 | grep -o "FATAL: cannot open /nonexistent-device"
+no-device-exit	picocom -q /nonexistent-device 2>/dev/null

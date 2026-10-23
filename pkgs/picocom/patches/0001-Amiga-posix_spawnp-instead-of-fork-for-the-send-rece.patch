@@ -1,0 +1,180 @@
+From d9752683bfced03d5814c523062ff7c1a34307b5 Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 15:41:38 +0200
+Subject: [PATCH] Amiga: posix_spawnp instead of fork for the send/receive
+ commands; help and ? print the usage
+
+---
+ picocom.c | 116 +++++++++++++++++++++++++++++-------------------------
+ 1 file changed, 62 insertions(+), 54 deletions(-)
+
+diff --git a/picocom.c b/picocom.c
+index 36fba37..b781edc 100644
+--- a/picocom.c
++++ b/picocom.c
+@@ -24,6 +24,8 @@
+  */
+ 
+ #include <stdlib.h>
++#include <spawn.h>
++extern char **environ;
+ #include <stdio.h>
+ #include <string.h>
+ #include <ctype.h>
+@@ -1092,86 +1094,86 @@ run_cmd(int fd, const char *cmd, const char *args_extra)
+     sigaddset(&sigm, SIGINT);
+     sigprocmask(SIG_BLOCK, &sigm, &sigm_old);
+ 
+-    pid = fork();
+-    if ( pid < 0 ) {
+-        sigprocmask(SIG_SETMASK, &sigm_old, NULL);
+-        fd_printf(STO, "*** cannot fork: %s ***\r\n", strerror(errno));
+-        return -1;
+-    } else if ( pid ) {
+-        /* father: picocom */
+-        int status, r;
+-
+-        /* reset the mask */
+-        sigprocmask(SIG_SETMASK, &sigm_old, NULL);
+-        /* wait for child to finish */
+-        do {
+-            r = waitpid(pid, &status, 0);
+-        } while ( r < 0 && errno == EINTR );
+-        /* reset terminal (back to raw mode) */
+-        term_apply(STI, 0);
+-        /* re-enable SIGINT */
+-        sigaction(SIGINT, &old_action, NULL);
+-        /* check and report child return status */
+-        if ( WIFEXITED(status) ) {
+-            fd_printf(STO, "\r\n*** exit status: %d ***\r\n",
+-                      WEXITSTATUS(status));
+-            return WEXITSTATUS(status);
+-        } else if ( WIFSIGNALED(status) ) {
+-            fd_printf(STO, "\r\n*** killed by signal: %d ***\r\n",
+-                      WTERMSIG(status));
+-            return -1;
+-        } else {
+-            fd_printf(STO, "\r\n*** abnormal termination: 0x%x ***\r\n", r);
+-            return -1;
+-        }
+-    } else {
+-        /* child: external program */
++    /* UP-Term: ixemul has no fork(); posix_spawnp starts the program. What the
++       forked child did before exec is done here: the terminal goes back to
++       canonical mode (term_reset keeps it managed, term_apply below puts raw
++       mode back), the serial fd is blocking, and the child gets default INT and
++       TERM handlers and the old signal mask through the spawn attributes. */
++    {
+         long fl;
+         int argc;
+         char *argv[RUNCMD_ARGS_MAX + 1];
+-        int r;
++        int r, status;
++        posix_spawn_file_actions_t fa;
++        posix_spawnattr_t at;
++        sigset_t dfl;
+ 
+-        /* unmanage terminal, and reset it to canonical mode */
+         term_drain(STI);
+-        term_remove(STI);
+-        /* unmanage serial port fd, without reset */
+-        term_erase(fd);
+-        /* set serial port fd to blocking mode */
++        term_reset(STI);
+         fl = fcntl(fd, F_GETFL);
+         fl &= ~O_NONBLOCK;
+         fcntl(fd, F_SETFL, fl);
+-        /* connect stdin and stdout to serial port */
+-        close(STI);
+-        close(STO);
+-        dup2(fd, STI);
+-        dup2(fd, STO);
+ 
+-        /* build command arguments vector */
+         argc = 0;
+         r = split_quoted(cmd, &argc, argv, RUNCMD_ARGS_MAX);
+         if ( r < 0 ) {
+             fd_printf(STE, "Cannot parse command\n");
+-            exit(RUNCMD_EXEC_FAIL);
++            goto fail;
+         }
+         r = split_quoted(args_extra, &argc, argv, RUNCMD_ARGS_MAX);
+         if ( r < 0 ) {
+             fd_printf(STE, "Cannot parse extra args\n");
+-            exit(RUNCMD_EXEC_FAIL);
++            goto fail;
+         }
+         if ( argc < 1 ) {
+             fd_printf(STE, "No command given\n");
+-            exit(RUNCMD_EXEC_FAIL);
++            goto fail;
+         }
+         argv[argc] = NULL;
+ 
+-        /* run extenral command */
+         fd_printf(STE, "$ %s %s\n", cmd, args_extra);
+-        establish_child_signal_handlers();
++        sigemptyset(&dfl);
++        sigaddset(&dfl, SIGINT);
++        sigaddset(&dfl, SIGTERM);
++        posix_spawn_file_actions_init(&fa);
++        posix_spawn_file_actions_adddup2(&fa, fd, STI);
++        posix_spawn_file_actions_adddup2(&fa, fd, STO);
++        posix_spawnattr_init(&at);
++        posix_spawnattr_setsigdefault(&at, &dfl);
++        posix_spawnattr_setsigmask(&at, &sigm_old);
++        posix_spawnattr_setflags(&at, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
++        r = posix_spawnp(&pid, argv[0], &fa, &at, argv, environ);
++        posix_spawn_file_actions_destroy(&fa);
++        posix_spawnattr_destroy(&at);
++        if ( r != 0 ) {
++            fd_printf(STE, "exec: %s\n", strerror(r));
++            goto fail;
++        }
++
+         sigprocmask(SIG_SETMASK, &sigm_old, NULL);
+-        execvp(argv[0], argv);
++        do {
++            r = waitpid(pid, &status, 0);
++        } while ( r < 0 && errno == EINTR );
++        term_apply(STI, 0);
++        sigaction(SIGINT, &old_action, NULL);
++        if ( WIFEXITED(status) ) {
++            fd_printf(STO, "\r\n*** exit status: %d ***\r\n",
++                      WEXITSTATUS(status));
++            return WEXITSTATUS(status);
++        } else if ( WIFSIGNALED(status) ) {
++            fd_printf(STO, "\r\n*** killed by signal: %d ***\r\n",
++                      WTERMSIG(status));
++            return -1;
++        } else {
++            fd_printf(STO, "\r\n*** abnormal termination: 0x%x ***\r\n", r);
++            return -1;
++        }
+ 
+-        fd_printf(STE, "exec: %s\n", strerror(errno));
+-        exit(RUNCMD_EXEC_FAIL);
++    fail:
++        sigprocmask(SIG_SETMASK, &sigm_old, NULL);
++        term_apply(STI, 0);
++        sigaction(SIGINT, &old_action, NULL);
++        return RUNCMD_EXEC_FAIL;
+     }
+ }
+ 
+@@ -1680,6 +1682,12 @@ parse_args(int argc, char *argv[])
+ {
+     int r;
+ 
++    /* UP-Term: "help" and "?" alone print the usage on stdout, exit 0 (Unix and Amiga forms; -h and --help are upstream) */
++    if ( argc == 2 && (strcmp(argv[1], "help") == 0 || strcmp(argv[1], "?") == 0) ) {
++        show_usage(argv[0]);
++        exit(EXIT_SUCCESS);
++    }
++
+     static struct option longOptions[] =
+     {
+         {"receive-cmd", required_argument, 0, 'v'},
+-- 
+2.50.1 (Apple Git-155)
+
