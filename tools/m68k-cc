@@ -21,4 +21,13 @@ for a; do
 	fi
 	set -- "$@" "$a"
 done
+# A link ends with libixcompat.a: the headers rename stat, fstat, lstat and
+# fstatat to __stat50 and so on (ixemul-vtcon, vtcon-4), and the library
+# vectors behind them are reached through the stubs in that archive. After
+# the objects, so the archive is searched only for what is still undefined;
+# a recipe that already lists it earlier keeps working.
+if [ $link = 1 ]; then
+	ixc=$(cd "$(dirname "$0")/.." && pwd)/build/sysroot/UP-Term/lib/libixcompat.a
+	[ -f "$ixc" ] && set -- "$@" "$ixc"
+fi
 exec "$AMIGA/bin/m68k-amigaos-gcc" -mcrt=ixemul "$@"
