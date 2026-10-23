@@ -33,5 +33,11 @@ out=$(make -n B="$M" kit-stage 2>&1 | grep -c 'touch ' || true)
 [ "$out" = 0 ] || { echo "test_kit_stage: kit-stage rebuilds current packages" >&2; bad=1; }
 make -n -W pkgs/upkg-ui/src/chrome.c B="$M" kit-stage 2>&1 | grep -q 'pkgs/upkg-ui/src/\. ' || \
 	{ echo "test_kit_stage: kit-stage ignores a newer upkg-ui source" >&2; bad=1; }
+# lynx reads /UP-Term/etc/lynx.cfg and lynx.lss at run time (strings on the binary):
+# both must be in lynx_DATA or the kit ships a lynx with no configuration.
+lynxdata=$(make -s print-lynx_DATA)
+for f in etc/lynx.cfg etc/lynx.lss; do
+	case " $lynxdata " in *" $f "*) ;; *) echo "test_kit_stage: lynx_DATA lacks $f" >&2; bad=1 ;; esac
+done
 [ $bad = 0 ] && echo "test_kit_stage: ok"
 exit $bad

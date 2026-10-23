@@ -23,6 +23,9 @@ lynx_HOST_CONFIGURE := --with-screen=ncursesw --without-ssl --disable-nls --with
 	CPPFLAGS="-I$(HOST_NCURSES)/include/ncursesw -I$(HOST_NCURSES)/include -DNCURSES_WIDECHAR" \
 	LIBS="-L$(HOST_NCURSES)/lib -lncursesw" am_cv_func_iconv=no
 lynx_BINS      := bin/lynx
+# the binary reads /UP-Term/etc/lynx.cfg and /UP-Term/etc/lynx.lss (strings on bin/lynx: LYNX_CFG_FILE,
+# LYNX_LSS_FILE); without them it starts with no config and no colour styles
+lynx_DATA      := etc/lynx.cfg etc/lynx.lss
 lynx_STACK     := 262144
 lynx_LIBS      := -lncursesw
 lynx_CHECK_DEPS := grep sed
