@@ -118,6 +118,7 @@ for b in "$KIT"/bin/*; do
 	found=$(echo "$owners" | awk -v n="$n" '$1 == n { p = $2 } END { print p }')
 	grep -q "^$found	" "$KIT/SOURCES.txt" || { echo "kit-stage: $n has no SOURCES.txt row" >&2; exit 1; }
 done
+trap - EXIT
 rm -rf "$FINAL" "$FINALSRC"
 mv "$KIT" "$FINAL"
 mv "$KSRC" "$FINALSRC"

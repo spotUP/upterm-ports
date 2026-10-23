@@ -36,6 +36,18 @@ grep -q "no licence file" "$T/out" || { echo "test_kit_stage: no licence message
 [ -f "$T/kit/userland-src/keep" ] || { echo "test_kit_stage: failed staging replaced the old userland-src" >&2; bad=1; }
 [ ! -e "$T/kit/userland.new" ] || { echo "test_kit_stage: failed staging left a temporary drawer" >&2; bad=1; }
 
+# A staging that succeeds leaves the new userland in place (the temporary drawer's
+# cleanup trap once removed it after the swap).
+rm -rf "$T/kit" "$T/state" "$T/xz"
+mkdir -p "$T/state" "$T/xz" "$T/dl"
+touch "$T/state/xz.installed" "$T/state/xz.checked"
+for f in $(make -s print-xz_LICENSE_FILES); do echo lic > "$T/xz/$f"; done
+touch "$T/dl/$(basename "$(make -s print-xz_ARCHIVE)")"
+ROOT=$ROOT B=$T STATE=$T/state SYSROOT=$T PREFIX=/x SRC=$T IXEMUL=$T PKGS=xz \
+	sh "$ROOT/tools/kit-stage.sh" > "$T/out" 2>&1 || { echo "test_kit_stage: good staging failed" >&2; cat "$T/out" >&2; bad=1; }
+[ -f "$T/kit/userland/SOURCES.txt" ] && [ -d "$T/kit/userland-src" ] && [ ! -e "$T/kit/userland.new" ] || \
+	{ echo "test_kit_stage: good staging left no userland" >&2; bad=1; }
+
 # kit-stage depends on the packages it stages: with every stamp newer than its
 # sources nothing is rebuilt, and a source that is newer (make -W) rebuilds
 # exactly that package before the kit is staged (stale upkg-ui, 2026-10-21).
