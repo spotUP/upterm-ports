@@ -56,6 +56,8 @@
 # hash_reload() leaves n_buckets at 0 (arm64 udiv by zero returns 0 without a trap, m68k raises SIGFPE).
 # patches/0026: upkg sets pr_WindowPtr to -1 (Amiga only) so a full or absent volume returns an error, not a DOS requester that
 # takes the keys; the browse box then shows '[ERROR] upkg install <pkg> (exit N)'. check/no_requesters.sh; rig case in vtcon.
+# patches/0027: file_mkdir_hier returns -1 when the parent is the path itself (an absent volume root NOSUCHVOL: recursed until the
+# stack overflowed). check/mkdir_absent_root.sh (shim dirname_self.c).
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
