@@ -29,6 +29,7 @@
 ui_opts ui_opt;
 
 static int utf8, tick;
+static int osd; /* the OSD style (ui_osd): menu only, no frame, masthead, rail or footer */
 static FILE *keyfp; /* the terminal curses reads the keys from (open_keys) */
 
 #define TICK_MS 1000 /* the rail moves once a second */
@@ -159,6 +160,8 @@ static void draw_masthead(void)
 static void paint_rail(void)
 {
 	char f[16];
+	if (osd) /* no rail in the OSD style */
+		return;
 	ch_rail_frame(f, sizeof f, RAIL, tick);
 	text(1, 1, a_chrome, f, (int)strlen(f));
 }
@@ -377,7 +380,8 @@ static void draw_textarea(void)
 
 static int menu_room(int y)
 {
-	int r = LINES - 4 - y;
+	int r = osd ? ch_osd_layout(LINES, COLS, UI_OSD_FILTER_LINES, UI_OSD_GAP_LINES, UI_OSD_PAD).rows
+	            : LINES - 4 - y;
 	return r < 1 ? 1 : r;
 }
 
@@ -422,6 +426,31 @@ static void put(int y, int x, attr_t base, int sel, const char *s, int w)
 	}
 }
 
+/* the OSD menu: the filter line (the prompt, dim), a gap, then the rows with a full-width bar */
+static void draw_menu_osd(void)
+{
+	ch_osd o = ch_osd_layout(LINES, COLS, UI_OSD_FILTER_LINES, UI_OSD_GAP_LINES, UI_OSD_PAD);
+	int i, w = o.bar_w - 2 * o.text_x;
+	int x = o.text_x + (ui_opt.nentries ? ch_widest(&ui_opt.entries[0].tag, ui_opt.nentries, 2, ui_opt.colors) : 0) + 2;
+
+	if (msel < mtop)
+		mtop = msel;
+	if (msel >= mtop + o.rows)
+		mtop = msel - o.rows + 1;
+	spaces(o.filter_row, o.bar_x, o.bar_w, a_ink);
+	text(o.filter_row, o.text_x, a_dim, ui_opt.prompt ? ui_opt.prompt : "", w);
+	for (i = 0; i < o.rows && mtop + i < ui_opt.nentries; i++) {
+		const entry *e = &ui_opt.entries[mtop + i];
+		int sel = mtop + i == msel;
+		attr_t a = sel ? a_sel : a_ink;
+		int y = o.first_row + i;
+		spaces(y, o.bar_x, o.bar_w, a);
+		put(y, o.text_x, a, sel, e->tag, w);
+		if (e->item && *e->item)
+			put(y, x, sel ? a_sel : a_dim, sel, e->item, o.bar_w - o.text_x - x);
+	}
+}
+
 static void draw_menu(int y)
 {
 	int room = menu_room(y), i, w = COLS - 4;
@@ -456,6 +485,11 @@ static const ch_hint H_MENU[] = { { "Up/Down", "Move", 0 }, { "Enter", "Accept",
 static void draw_all(void)
 {
 	erase();
+	if (osd && ui_opt.kind == K_MENU) {
+		widget_row = UI_OSD_HEAD_LINES;
+		draw_menu_osd();
+		return;
+	}
 	frame_box();
 	draw_masthead();
 	hrule(2, G_LT, G_RT);
@@ -832,6 +866,7 @@ int ui_message(const char *fmt, const char *tag)
 int ui_run(void) { return run(); }
 int ui_hotkey(void) { return hotkey; }
 int ui_selected(void) { return msel; }
+void ui_osd(int on) { osd = on; }
 void ui_select(int row) { msel = row; mtop = 0; }
 const char *ui_button(void) { return blabel[bchosen]; }
 FILE *ui_keys(void) { return keyfp; }

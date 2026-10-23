@@ -28,6 +28,19 @@ typedef struct {
 
 extern ui_opts ui_opt;
 
+/* The OSD style (ui_osd): a launcher look for a menu in a borderless window. No masthead, rail,
+ * frame or footer. Row 0 is the filter line, the next UI_OSD_GAP_LINES rows are a gap, then one
+ * menu entry per row; the selected row is a bar across the full width. Text sits UI_OSD_PAD cells
+ * from the left edge. A caller sizing its window for n entries needs
+ * UI_OSD_HEAD_LINES + n rows and its widest "tag  item" line + 2 * UI_OSD_PAD columns. */
+#define UI_OSD_FILTER_LINES 1 /* the filter line */
+#define UI_OSD_GAP_LINES    1 /* blank rows between the filter line and the first entry */
+#define UI_OSD_HEAD_LINES   (UI_OSD_FILTER_LINES + UI_OSD_GAP_LINES)
+#define UI_OSD_PAD          2 /* cells of padding left of the text (and right of it) */
+
+/* Turn the OSD style on or off. Set before the menu is shown; default off (the framed look). */
+void ui_osd(int on);
+
 /* the terminal: locale, keys, curses, theme; 0, EXIT_NO_TERMINAL or 2 (a message on stderr,
  * prefixed with who). ui_stop ends curses. */
 int ui_start(const char *who);
