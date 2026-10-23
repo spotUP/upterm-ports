@@ -104,12 +104,11 @@ cp "$KIT/SOURCES.txt" "$KSRC/"
 
 # every shipped program has its package's row (a GPL binary without its
 # source would be a licence violation: plan risk 7)
+# (each package's BINS read once: one make per package, not one per program and package)
+owners=$(for p in $PKGS; do for x in $(var "$p" BINS); do echo "$(basename "$x") $p"; done; done)
 for b in "$KIT"/bin/*; do
 	n=$(basename "$b")
-	found=
-	for p in $PKGS; do
-		for x in $(var "$p" BINS); do [ "$(basename "$x")" = "$n" ] && found=$p; done
-	done
+	found=$(echo "$owners" | awk -v n="$n" '$1 == n { p = $2 } END { print p }')
 	grep -q "^$found	" "$KIT/SOURCES.txt" || { echo "kit-stage: $n has no SOURCES.txt row" >&2; exit 1; }
 done
 echo "kit-stage: $(ls "$KIT/bin" | wc -l | tr -d ' ') programs, $(find "$KIT/share/man" -type f | wc -l | tr -d ' ') pages, $(wc -l < "$KIT/SOURCES.txt" | tr -d ' ') packages"
