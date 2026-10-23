@@ -1,0 +1,6 @@
+version	nethack --version | grep -o "NetHack Version 3.6.7"
+help-flag	nethack --help | sed -n 1p
+help-h	nethack -h | sed -n 1p
+help-word	nethack help | sed -n 1p
+help-q	nethack ? | sed -n 1p
+help-exit	nethack --help > /dev/null
