@@ -1,0 +1,44 @@
+From b9152e2a2bd160cb54c8cab952c61aa0ce0146ca Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 14:34:00 +0200
+Subject: [PATCH] Amiga: vfork instead of fork, help and ? print the usage
+
+---
+ src/io.c  | 3 ++-
+ src/tig.c | 6 ++++++
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/io.c b/src/io.c
+index 1e87273..e0e3e0e 100644
+--- a/src/io.c
++++ b/src/io.c
+@@ -380,7 +380,8 @@ io_exec(struct io *io, enum io_type type, const char *dir, char * const env[], c
+ 		pipefds[1] = custom;
+ 	}
+ 
+-	if ((io->pid = fork())) {
++	/* UP-Term: fork() is gone; the vfork child only dup2s, chdirs and execs */
++	if ((io->pid = vfork())) {
+ 		if (io->pid == -1)
+ 			io->error = errno;
+ 		if (pipefds[!(type == IO_WR)] != -1)
+diff --git a/src/tig.c b/src/tig.c
+index 2cc55dc..6233104 100644
+--- a/src/tig.c
++++ b/src/tig.c
+@@ -478,6 +478,12 @@ parse_options(int argc, const char *argv[], bool pager_mode)
+ 
+ 	request = pager_mode ? REQ_VIEW_PAGER : REQ_VIEW_MAIN;
+ 
++	/* UP-Term: help and ? print the usage like -h (Unix and Amiga forms) */
++	if (argc == 2 && (!strcmp(argv[1], "help") || !strcmp(argv[1], "?"))) {
++		printf("%s\n", usage_string);
++		exit(EXIT_SUCCESS);
++	}
++
+ 	/* Options that must come before any subcommand. */
+ 	for (i = 1; i < argc; i++) {
+ 		const char *opt = argv[i];
+-- 
+2.50.1 (Apple Git-155)
+

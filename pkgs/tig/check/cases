@@ -1,0 +1,5 @@
+version	tig --version | sed -n 1p
+help-flag	tig --help | sed -n 1p
+help-h	tig -h | sed -n 1p
+help-word	tig help | sed -n 1p
+help-q	tig ? | sed -n 1p

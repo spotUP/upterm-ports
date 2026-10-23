@@ -1,0 +1,3 @@
+log-quit	sh run.sh
+show-quit	sh run.sh
+status-quit	sh run.sh status
