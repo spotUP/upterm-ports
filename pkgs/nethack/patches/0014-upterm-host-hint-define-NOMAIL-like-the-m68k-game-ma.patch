@@ -1,0 +1,27 @@
+From c67e6042ec88f8df4e22320f65e9d90a82701192 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Fri, 23 Oct 2026 18:30:22 +0200
+Subject: [PATCH 14/14] upterm-host hint: define NOMAIL like the m68k game;
+ makedefs -s kept the ?MAIL engraving the Amiga data lacks, so random
+ engravings differed per seed
+
+---
+ sys/unix/hints/upterm-host | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sys/unix/hints/upterm-host b/sys/unix/hints/upterm-host
+index 86af926..1ee42eb 100644
+--- a/sys/unix/hints/upterm-host
++++ b/sys/unix/hints/upterm-host
+@@ -11,7 +11,7 @@ VARDIR=$(HACKDIR)
+ POSTINSTALL=
+ # the system headers use __has_attribute(warn_unused_result), which tradstdc.h defines empty: include them first
+ CFLAGS=-O -include sys/cdefs.h -include stdio.h -include stdlib.h -include string.h -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw  -Wno-everything
+-CFLAGS+=-DNOTPARMDECL -DDLB -DNOSHELL -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
++CFLAGS+=-DNOTPARMDECL -DNOMAIL -DDLB -DNOSHELL -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
+ LINK=$(CC)
+ LFLAGS=
+ WINSRC = $(WINTTYSRC) $(WINCURSESSRC)
+-- 
+2.50.1 (Apple Git-155)
+

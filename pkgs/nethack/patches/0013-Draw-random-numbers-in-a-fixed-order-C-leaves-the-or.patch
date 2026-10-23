@@ -1,0 +1,148 @@
+From 4c3bd370acff3f81c645665e1b39b1f019571554 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Fri, 23 Oct 2026 18:25:44 +0200
+Subject: [PATCH 13/14] Draw random numbers in a fixed order: C leaves the
+ order of function arguments and of a subtraction's operands open (clang left
+ to right, gcc m68k right to left), so somex/somey in mkgold, mkobj_at,
+ mkstairs, statues and boxes, and the ring spe, gave a different game for one
+ seed on the Mac and the Amiga
+
+---
+ src/mklev.c  | 37 +++++++++++++++++++++++++++++--------
+ src/mkmaze.c | 17 +++++++++++------
+ src/mkobj.c  |  9 +++++++--
+ 3 files changed, 47 insertions(+), 16 deletions(-)
+
+diff --git a/src/mklev.c b/src/mklev.c
+index 7493042..32b72fc 100644
+--- a/src/mklev.c
++++ b/src/mklev.c
+@@ -706,7 +706,13 @@ makelevel()
+     /* construct stairs (up and down in different rooms if possible) */
+     croom = &rooms[rn2(nroom)];
+     if (!Is_botlevel(&u.uz))
+-        mkstairs(somex(croom), somey(croom), 0, croom); /* down */
++    {
++        /* UP-Term: argument order is unspecified (clang left to right, gcc m68k right
++           to left): x before y on every build, so one seed gives one game */
++        int dx = somex(croom), dy = somey(croom);
++
++        mkstairs(dx, dy, 0, croom); /* down */
++    }
+     if (nroom > 1) {
+         troom = croom;
+         croom = &rooms[rn2(nroom - 1)];
+@@ -822,7 +828,11 @@ makelevel()
+         while (!rn2(x))
+             mktrap(0, 0, croom, (coord *) 0);
+         if (!rn2(3))
+-            (void) mkgold(0L, somex(croom), somey(croom));
++        {
++            int gx = somex(croom), gy = somey(croom);
++
++            (void) mkgold(0L, gx, gy);
++        }
+         if (Is_rogue_level(&u.uz))
+             goto skip_nonrogue;
+         if (!rn2(10))
+@@ -839,17 +849,24 @@ makelevel()
+ 
+         /* put statues inside */
+         if (!rn2(20))
++        {
++            int cx = somex(croom), cy = somey(croom);
++
+             (void) mkcorpstat(STATUE, (struct monst *) 0,
+-                              (struct permonst *) 0, somex(croom),
+-                              somey(croom), CORPSTAT_INIT);
++                              (struct permonst *) 0, cx, cy, CORPSTAT_INIT);
++        }
+         /* put box/chest inside;
+          *  40% chance for at least 1 box, regardless of number
+          *  of rooms; about 5 - 7.5% for 2 boxes, least likely
+          *  when few rooms; chance for 3 or more is negligible.
+          */
+         if (!rn2(nroom * 5 / 2))
+-            (void) mksobj_at((rn2(3)) ? LARGE_BOX : CHEST, somex(croom),
+-                             somey(croom), TRUE, FALSE);
++        {
++            int boxtyp = rn2(3) ? LARGE_BOX : CHEST;
++            int bx = somex(croom), by = somey(croom);
++
++            (void) mksobj_at(boxtyp, bx, by, TRUE, FALSE);
++        }
+ 
+         /* maybe make some graffiti */
+         if (!rn2(27 + 3 * abs(depth(&u.uz)))) {
+@@ -869,14 +886,18 @@ makelevel()
+ 
+  skip_nonrogue:
+         if (!rn2(3)) {
+-            (void) mkobj_at(0, somex(croom), somey(croom), TRUE);
++            int ox = somex(croom), oy = somey(croom);
++
++            (void) mkobj_at(0, ox, oy, TRUE);
+             tryct = 0;
+             while (!rn2(5)) {
+                 if (++tryct > 100) {
+                     impossible("tryct overflow4");
+                     break;
+                 }
+-                (void) mkobj_at(0, somex(croom), somey(croom), TRUE);
++                ox = somex(croom);
++                oy = somey(croom);
++                (void) mkobj_at(0, ox, oy, TRUE);
+             }
+         }
+     }
+diff --git a/src/mkmaze.c b/src/mkmaze.c
+index ed38053..2b89629 100644
+--- a/src/mkmaze.c
++++ b/src/mkmaze.c
+@@ -559,12 +559,17 @@ fixup_special()
+             }
+         }
+ 
+-        if (rn2(2))
+-            otmp = mk_tt_object(STATUE, somex(croom), somey(croom));
+-        else /* Medusa statues don't contain books */
+-            otmp =
+-                mkcorpstat(STATUE, (struct monst *) 0, (struct permonst *) 0,
+-                           somex(croom), somey(croom), CORPSTAT_NONE);
++        if (rn2(2)) {
++            /* UP-Term: x before y on every build (argument order is unspecified) */
++            int tx = somex(croom), ty = somey(croom);
++
++            otmp = mk_tt_object(STATUE, tx, ty);
++        } else { /* Medusa statues don't contain books */
++            int tx = somex(croom), ty = somey(croom);
++
++            otmp = mkcorpstat(STATUE, (struct monst *) 0, (struct permonst *) 0,
++                              tx, ty, CORPSTAT_NONE);
++        }
+         if (otmp) {
+             while (pm_resistance(&mons[otmp->corpsenm], MR_STONE)
+                    || poly_when_stoned(&mons[otmp->corpsenm])) {
+diff --git a/src/mkobj.c b/src/mkobj.c
+index 17265ff..949d1bb 100644
+--- a/src/mkobj.c
++++ b/src/mkobj.c
+@@ -1035,8 +1035,13 @@ boolean artif;
+                         otmp->spe = rn2(2) ? rne(3) : -rne(3);
+                 }
+                 /* make useless +0 rings much less common */
+-                if (otmp->spe == 0)
+-                    otmp->spe = rn2(4) - rn2(3);
++                if (otmp->spe == 0) {
++                    /* UP-Term: C leaves the order of the two operands open (clang left to
++                       right, gcc m68k right to left): two statements, one stream on every build */
++                    int spe_plus = rn2(4);
++
++                    otmp->spe = spe_plus - rn2(3);
++                }
+                 /* negative rings are usually cursed */
+                 if (otmp->spe < 0 && rn2(5))
+                     curse(otmp);
+-- 
+2.50.1 (Apple Git-155)
+
