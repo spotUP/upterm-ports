@@ -1,0 +1,133 @@
+From 75a9fd1fd05c4c38db3c9b8117380cce1e9c10f0 Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 14:50:06 +0200
+Subject: [PATCH 1/2] Amiga: vfork instead of fork, help and ? print the usage,
+ byte-wide fgetwc
+
+---
+ background.c  | 2 +-
+ filter.c      | 2 +-
+ handler.c     | 5 +++++
+ main.c        | 4 ++++
+ mutt_tunnel.c | 2 +-
+ sendlib.c     | 4 ++--
+ system.c      | 4 ++--
+ 7 files changed, 16 insertions(+), 7 deletions(-)
+
+diff --git a/background.c b/background.c
+index 1c13013..28b8db5 100644
+--- a/background.c
++++ b/background.c
+@@ -137,7 +137,7 @@ static pid_t mutt_background_run (const char *cmd)
+   /* must ignore SIGINT and SIGQUIT */
+   mutt_block_signals_system ();
+ 
+-  if ((thepid = fork ()) == 0)
++  if ((thepid = vfork ()) == 0)
+   {
+     /* give up controlling terminal */
+     setsid ();
+diff --git a/filter.c b/filter.c
+index 0dab2f9..bef5d87 100644
+--- a/filter.c
++++ b/filter.c
+@@ -82,7 +82,7 @@ mutt_create_filter_fd (const char *cmd, FILE **in, FILE **out, FILE **err,
+ 
+   mutt_block_signals_system ();
+ 
+-  if ((thepid = fork ()) == 0)
++  if ((thepid = vfork ()) == 0)
+   {
+     mutt_unblock_signals_system (0);
+     mutt_reset_child_signals ();
+diff --git a/handler.c b/handler.c
+index cedf352..e17136d 100644
+--- a/handler.c
++++ b/handler.c
+@@ -38,6 +38,11 @@
+ #include "rfc3676.h"
+ #include "pager.h"
+ 
++/* UP-Term: ixemul has no fgetwc/ungetwc; its locale is C (ISO 8859-1), one byte is one character */
++#include <wchar.h>
++#define fgetwc(f) ((wint_t) (getc (f) & 0xFFFFFFFFu))
++#define ungetwc(c, f) ((wint_t) ungetc ((int) (c), (f)))
++
+ #define BUFI_SIZE 1000
+ #define BUFO_SIZE 2000
+ 
+diff --git a/main.c b/main.c
+index bcc17b3..7f42077 100644
+--- a/main.c
++++ b/main.c
+@@ -706,6 +706,10 @@ int main (int argc, char **argv, char **environ)
+       *dstp = safe_strdup(*srcp);
+   }
+ 
++  /* UP-Term: help and ? print the usage like -h (Unix and Amiga forms) */
++  if (argc == 2 && (!strcmp (argv[1], "help") || !strcmp (argv[1], "?")))
++    mutt_usage ();
++
+   for (optind = 1; optind < double_dash; )
+   {
+     /* We're getopt'ing POSIXLY, so we'll be here every time getopt()
+diff --git a/mutt_tunnel.c b/mutt_tunnel.c
+index 04dd56f..493a96b 100644
+--- a/mutt_tunnel.c
++++ b/mutt_tunnel.c
+@@ -93,7 +93,7 @@ static int tunnel_socket_open (CONNECTION *conn)
+   }
+ 
+   mutt_block_signals_system ();
+-  if ((pid = fork ()) == 0)
++  if ((pid = vfork ()) == 0)
+   {
+     mutt_unblock_signals_system (0);
+     mutt_reset_child_signals ();
+diff --git a/sendlib.c b/sendlib.c
+index ef0ca29..31ef5b1 100644
+--- a/sendlib.c
++++ b/sendlib.c
+@@ -2549,7 +2549,7 @@ send_msg (const char *path, char **args, const char *msg, char **tempfile)
+     mutt_buffer_pool_release (&tmp);
+   }
+ 
+-  if ((pid = fork ()) == 0)
++  if ((pid = vfork ()) == 0)
+   {
+     struct sigaction act, oldalrm;
+ 
+@@ -2578,7 +2578,7 @@ send_msg (const char *path, char **args, const char *msg, char **tempfile)
+ #endif
+ 
+     /* now the second fork() */
+-    if ((pid = fork ()) == 0)
++    if ((pid = vfork ()) == 0)
+     {
+       /* "msg" will be opened as stdin */
+       if (open (msg, O_RDONLY, 0) < 0)
+diff --git a/system.c b/system.c
+index 29ff197..11c72a2 100644
+--- a/system.c
++++ b/system.c
+@@ -67,7 +67,7 @@ int _mutt_system (const char *cmd, int flags)
+     sigaction (SIGCONT, &act, &oldcont);
+   }
+ 
+-  if ((thepid = fork ()) == 0)
++  if ((thepid = vfork ()) == 0)
+   {
+     act.sa_flags = 0;
+ 
+@@ -78,7 +78,7 @@ int _mutt_system (const char *cmd, int flags)
+       /* give up controlling terminal */
+       setsid ();
+ 
+-      switch (fork ())
++      switch (vfork ())
+       {
+ 	case 0:
+ #if defined(OPEN_MAX)
+-- 
+2.50.1 (Apple Git-155)
+

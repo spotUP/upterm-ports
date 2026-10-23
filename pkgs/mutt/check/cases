@@ -1,0 +1,5 @@
+version	mutt -v | sed -n 1p
+help-flag	mutt --help | sed -n 1p
+help-h	mutt -h | sed -n 1p
+help-word	mutt help | sed -n 1p
+help-q	mutt ? | sed -n 1p

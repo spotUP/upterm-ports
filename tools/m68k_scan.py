@@ -82,7 +82,8 @@ def switch_targets(T, recent, mem, end):
     count = masked = None
     rev = list(reversed(recent))
     for i, (base, ops) in enumerate(rev):
-        if base.startswith("cmpi"):
+        if base.startswith("cmpi") or (base.startswith("cmpa") and BOUND.match(ops)):
+            # cmpa: mutt pager "cmpaw #224,a6; bhi default; movew %pc@(T,a6:l:2),d0"
             m = BOUND.match(ops)
             if m:
                 count = int(m.group(1)) + 1

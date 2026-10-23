@@ -1,0 +1,29 @@
+From 347da7de758cc42f661baeaed851cd8a539f931e Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Fri, 23 Oct 2026 14:57:46 +0200
+Subject: [PATCH 2/2] Amiga: safe_open uses a plain exclusive open
+
+---
+ muttlib.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/muttlib.c b/muttlib.c
+index 5e2080f..57ffadd 100644
+--- a/muttlib.c
++++ b/muttlib.c
+@@ -2562,6 +2562,12 @@ int safe_open (const char *path, int flags)
+   BUFFER *safe_file = NULL;
+   BUFFER *safe_dir = NULL;
+ 
++#ifdef __amigaos__
++  /* Single-user system without hard links or symlink races: the wrap
++   * directory plus link() dance cannot work here. Plain exclusive open. */
++  return open (path, flags, 0600);
++#endif
++
+   if (flags & O_EXCL)
+   {
+     safe_file = mutt_buffer_pool_get ();
+-- 
+2.50.1 (Apple Git-155)
+

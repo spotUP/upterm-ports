@@ -1,0 +1,2 @@
+index-quit	sh run.sh
+read-quit	sh run.sh
