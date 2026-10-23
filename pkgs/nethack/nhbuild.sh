@@ -1,7 +1,7 @@
 #!/bin/sh
 # nhbuild.sh MODE OBJDIR [ARGS]: the NetHack build steps of recipe.mk (NetHack has no configure; the
 # Makefiles come from sys/unix/setup.sh and a hints file).
-#   m68k OBJ              game and data tools for the Amiga; makedefs for the Mac builds the generated
+#   m68k OBJ [DATA]       game and data tools for the Amiga; makedefs for the Mac builds the generated
 #                         headers and text, then the m68k objects replace its objects
 #   host OBJ INST         the whole game on the Mac into INST
 #   install OBJ ROOT DATA bin/nethack and the playground ROOT/share/nethack (nhdat from DATA, baked
@@ -28,6 +28,14 @@ m68k)
 	make -C util -f Makefile.bak makedefs > util.m68k.makedefs.log 2>&1 || { grep -E -B2 'error|undefined' util.m68k.makedefs.log | head -40; exit 1; }
 	mv util/makedefs util/makedefs.m68k
 	cp util/makedefs.mac util/makedefs
+	# 4. date.h baked on the rig by the m68k makedefs (bake.sh); newer than every source, so make keeps it
+	# and the src Makefile's date.h rule (the Mac makedefs -v) must not run again
+	if [ -f "$3/date.h" ]; then
+		cp "$3/date.h" include/date.h
+		sed -i.bak 's|^\t\.\./util/makedefs -v$|\t@echo "date.h: baked on the rig"|' src/Makefile
+		grep -q 'date.h: baked on the rig' src/Makefile || { echo "nhbuild.sh: src/Makefile date.h rule not found" >&2; exit 1; }
+		touch include/date.h
+	fi
 	make -C src nethack > src.m68k.log 2>&1 || { grep -E -B2 'error|undefined' src.m68k.log | head -40; exit 1; }
 	;;
 host)
@@ -40,6 +48,7 @@ host)
 	;;
 install)
 	root=$3 data=$4
+	[ -f "$data/date.h" ] && cmp -s "$data/date.h" include/date.h || { echo "nhbuild.sh: the game was not built with the baked date.h: bake.sh, then make nethack again" >&2; exit 1; }
 	mkdir -p "$root/bin" "$root/share/nethack"
 	cp src/nethack "$root/bin/nethack"
 	[ -f "$data/nhdat" ] || { echo "nhbuild.sh: $data/nhdat is missing: run pkgs/nethack/bake.sh on a rig" >&2; exit 1; }

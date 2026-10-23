@@ -25,7 +25,7 @@ nethack_NH_ENV = NH_CC="$(ROOT)/tools/m68k-cc" NH_AR=$(CROSS)ar NH_RANLIB=$(CROS
 	CONFIG_SITE=$(ROOT)/mk/config.site
 nethack_CONFIGURE_CMD = cp -R $(nethack_SRC)/. $(nethack_OBJ)/ && cd $(nethack_OBJ)/sys/unix && \
 	$(nethack_NH_ENV) sh setup.sh hints/m68k-amigaos
-nethack_BUILD_CMD = $(nethack_NH_ENV) sh $(ROOT)/pkgs/nethack/nhbuild.sh m68k $(nethack_OBJ)
+nethack_BUILD_CMD = $(nethack_NH_ENV) sh $(ROOT)/pkgs/nethack/nhbuild.sh m68k $(nethack_OBJ) $(ROOT)/pkgs/nethack/data
 nethack_INSTALL_CMD = sh $(ROOT)/pkgs/nethack/nhbuild.sh install $(nethack_OBJ) $(SYSROOT)$(PREFIX) $(ROOT)/pkgs/nethack/data
 nethack_HOST_CONFIGURE_CMD = cp -R $(nethack_SRC)/. $(nethack_HOBJ)/ && cd $(nethack_HOBJ)/sys/unix && \
 	NH_INC=$(HOST_NCURSES)/include NH_NCURSES=$(HOST_NCURSES) NH_PREFIX=$(nethack_HOBJ)/inst sh setup.sh hints/upterm-host

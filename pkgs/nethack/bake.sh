@@ -12,7 +12,7 @@
 #
 # Steps, upstream's order (dat/Makefile + sys/unix/Makefile.top): makedefs -d -r -q -h -s -v -e,
 # dgn_comp dungeon.pdf, lev_comp on every .des, dlb cf nhdat $(DATDLB). Outputs, fetched into data/:
-# nhdat, symbols, and STAMP (source version and hashes of every input and output). Rerunnable: the
+# nhdat, symbols, date.h (the game is compiled against it: make nethack again after a bake) and STAMP (source version and hashes of every input and output). Rerunnable: the
 # stage drawer is deleted and made again, the same inputs give the same STAMP.
 # Env: UPTERM_VTCON (the vtcon checkout, default ../vtcon), UPTERM_RIG (the rig number), BAKE_LOGS.
 set -eu
@@ -79,6 +79,11 @@ grep -q '^\[bake done\]' "$stage/bake.log" 2>/dev/null || { echo "bake.sh: the b
 # 3. fetch and stamp
 mkdir -p "$data"
 cp "$stage/dat/nhdat" "$stage/dat/symbols" "$data/"
+# date.h from the m68k makedefs -v: the port name (global.h picks "Unix" for the m68k build, not "MacOSX") and the
+# VERSION_SANITY values (struct sizes with the m68k 4-byte long) are the target's; the Mac makedefs
+# writes the Mac's. nhbuild.sh copies it over include/date.h before the game is compiled.
+[ -s "$stage/include/date.h" ] || { echo "bake.sh: no include/date.h" >&2; exit 1; }
+cp "$stage/include/date.h" "$data/date.h"
 sha() { shasum -a 256 | cut -d' ' -f1; }
 {
 	echo "nethack $(make -s -C "$ports" print-nethack_VERSION)"
