@@ -10,6 +10,9 @@ nnn_LICENSE_FILES := LICENSE
 nnn_DEPS      := ixcompat ncurses
 nnn_BINS      := bin/nnn
 nnn_STACK     := 262144
+# programs started by ptyrun (vfork+exec) ignore the $STACK: cookie; without __stack nnn ran on the
+# tiny inherited stack and corrupted the heap ("free: start of block corrupt!" guest requester)
+nnn_STACK_VAR := 1
 nnn_OPTS      := O_NORL=1 O_NOLC=1 O_NOSSN=1 O_NOX11=1 O_NOFIFO=1 O_NOBATCH=1
 nnn_CONFIGURE_CMD = cp -R $(nnn_SRC)/. $(nnn_OBJ)/
 # the Makefile asks pkg-config for ncursesw and links -lpthread: both answered here
