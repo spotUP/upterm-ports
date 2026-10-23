@@ -1,7 +1,7 @@
-From e5e8351189fe47da3e15945c990e970d983bb3b3 Mon Sep 17 00:00:00 2001
+From 5e60e79d6b6cc0f30dc4fc89fabc5a48b1027566 Mon Sep 17 00:00:00 2001
 From: spotUP <spotUP@users.noreply.github.com>
 Date: Fri, 23 Oct 2026 15:36:58 +0200
-Subject: [PATCH 7/8] m68k hints: ncurses declares tparm
+Subject: [PATCH 07/12] m68k hints: ncurses declares tparm
 
 ---
  sys/unix/hints/m68k-amigaos | 2 +-

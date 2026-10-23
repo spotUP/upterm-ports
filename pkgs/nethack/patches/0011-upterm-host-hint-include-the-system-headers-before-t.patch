@@ -1,0 +1,27 @@
+From 4adce924fe2ddf6857d1dbeff88c537ea2f021d1 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Fri, 23 Oct 2026 17:39:45 +0200
+Subject: [PATCH 11/12] upterm-host hint: include the system headers before
+ tradstdc.h empties warn_unused_result
+
+---
+ sys/unix/hints/upterm-host | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/sys/unix/hints/upterm-host b/sys/unix/hints/upterm-host
+index cc6aca9..5ff8173 100644
+--- a/sys/unix/hints/upterm-host
++++ b/sys/unix/hints/upterm-host
+@@ -9,7 +9,8 @@ SHELLDIR=$(PREFIX)/bin
+ INSTDIR=$(HACKDIR)
+ VARDIR=$(HACKDIR)
+ POSTINSTALL=
+-CFLAGS=-O -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw  -Wno-everything
++# the system headers use __has_attribute(warn_unused_result), which tradstdc.h defines empty: include them first
++CFLAGS=-O -include sys/cdefs.h -include stdio.h -include stdlib.h -include string.h -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw  -Wno-everything
+ CFLAGS+=-DDLB -DNOSHELL -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
+ LINK=$(CC)
+ LFLAGS=
+-- 
+2.50.1 (Apple Git-155)
+

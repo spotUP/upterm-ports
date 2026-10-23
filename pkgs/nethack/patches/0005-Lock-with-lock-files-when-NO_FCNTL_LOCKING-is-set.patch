@@ -1,7 +1,7 @@
-From a497d330b06dbebad782aaadcbfc85824af294fb Mon Sep 17 00:00:00 2001
+From 8aac80d5a22561b8c8a9c54ce556e1e0fe19a9d4 Mon Sep 17 00:00:00 2001
 From: spotUP <spotUP@users.noreply.github.com>
 Date: Fri, 23 Oct 2026 15:35:42 +0200
-Subject: [PATCH 5/8] Lock with lock files when NO_FCNTL_LOCKING is set
+Subject: [PATCH 05/12] Lock with lock files when NO_FCNTL_LOCKING is set
 
 ---
  include/unixconf.h          | 2 +-

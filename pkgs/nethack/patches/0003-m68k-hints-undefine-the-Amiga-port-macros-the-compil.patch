@@ -1,7 +1,7 @@
-From 16f080623b9e2d2bae255cefc6128901240ed85e Mon Sep 17 00:00:00 2001
+From e0bf15173eaaf33363fbf20c49e9d28da422d7d8 Mon Sep 17 00:00:00 2001
 From: spotUP <spotUP@users.noreply.github.com>
 Date: Fri, 23 Oct 2026 15:32:38 +0200
-Subject: [PATCH 3/8] m68k hints: undefine the Amiga port macros the compiler
+Subject: [PATCH 03/12] m68k hints: undefine the Amiga port macros the compiler
  predefines
 
 ---

@@ -1,8 +1,8 @@
-From 97de855fbbe31c954f6af4aa10daa12a19cd1a8d Mon Sep 17 00:00:00 2001
+From f2224d82106fd40927aadb21ca12305936baac83 Mon Sep 17 00:00:00 2001
 From: spotUP <spotUP@users.noreply.github.com>
 Date: Fri, 23 Oct 2026 15:29:50 +0200
-Subject: [PATCH 1/8] Add m68k-amigaos and upterm-host hints, -h/--help/help/?
- and NETHACK_SEED
+Subject: [PATCH 01/12] Add m68k-amigaos and upterm-host hints,
+ -h/--help/help/? and NETHACK_SEED
 
 ---
  src/rnd.c                   |  7 ++++---

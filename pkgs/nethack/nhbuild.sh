@@ -32,7 +32,7 @@ m68k)
 	;;
 host)
 	inst=$3
-	make > make.host.log 2>&1 || { grep -E -B2 'error:|undefined|\*\*\*' make.host.log | head -40; exit 1; }
+	make all > make.host.log 2>&1 || { grep -E -B2 'error:|undefined|\*\*\*' make.host.log | head -40; exit 1; }
 	mkdir -p "$inst/bin" "$inst/share/nethack"
 	cp src/nethack "$inst/bin/nethack"
 	cp dat/nhdat dat/license dat/symbols "$inst/share/nethack/"

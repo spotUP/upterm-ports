@@ -1,7 +1,7 @@
-From 02816d56e05b5f24974d4999e4d7a88148660a91 Mon Sep 17 00:00:00 2001
+From 2f593e0973dbd72075c2e77e8457da17ba401b55 Mon Sep 17 00:00:00 2001
 From: spotUP <spotUP@users.noreply.github.com>
 Date: Fri, 23 Oct 2026 15:38:16 +0200
-Subject: [PATCH 8/8] Hints: set the curses libraries in the POST section
+Subject: [PATCH 08/12] Hints: set the curses libraries in the POST section
 
 ---
  sys/unix/hints/m68k-amigaos | 8 +++++---

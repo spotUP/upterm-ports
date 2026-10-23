@@ -1,0 +1,26 @@
+From 941a26e36928d125732451a46cded13bc1095fda Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Fri, 23 Oct 2026 17:34:45 +0200
+Subject: [PATCH 10/12] m68k hints: no mail (NOMAIL); the mail reader forks and
+ execs, ixemul has no fork
+
+---
+ sys/unix/hints/m68k-amigaos | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sys/unix/hints/m68k-amigaos b/sys/unix/hints/m68k-amigaos
+index 398be12..ae855c4 100644
+--- a/sys/unix/hints/m68k-amigaos
++++ b/sys/unix/hints/m68k-amigaos
+@@ -18,7 +18,7 @@ AR=$(NH_AR)
+ RANLIB=$(NH_RANLIB)
+ CFLAGS=$(NH_CFLAGS) -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw -UAMIGA -UMCH_AMIGA -U__MCH_AMIGA__ -DNOTPARMDECL
+ # bundled game data, no compression helper, no '!' shell (it forks), no fcntl record locking in ixemul (lock files instead)
+-CFLAGS+=-DDLB -DNOSHELL -DNO_COMPRESS -DNO_FCNTL_LOCKING -DNO_FILE_LINKS -DLOCKDIR=\"$(HACKDIR)\" -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
++CFLAGS+=-DDLB -DNOSHELL -DNO_COMPRESS -DNOMAIL -DNO_FCNTL_LOCKING -DNO_FILE_LINKS -DLOCKDIR=\"$(HACKDIR)\" -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
+ LINK=$(CC)
+ LFLAGS=
+ WINSRC = $(WINTTYSRC) $(WINCURSESSRC)
+-- 
+2.50.1 (Apple Git-155)
+

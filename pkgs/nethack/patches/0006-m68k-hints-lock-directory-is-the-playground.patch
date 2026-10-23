@@ -1,7 +1,7 @@
-From 4d54c312997d604c05a7362ac41e0e7d3fdfc378 Mon Sep 17 00:00:00 2001
+From 4dbd497b63c66a40b7fab3bcaac059fa48a7ee36 Mon Sep 17 00:00:00 2001
 From: spotUP <spotUP@users.noreply.github.com>
 Date: Fri, 23 Oct 2026 15:36:10 +0200
-Subject: [PATCH 6/8] m68k hints: lock directory is the playground
+Subject: [PATCH 06/12] m68k hints: lock directory is the playground
 
 ---
  sys/unix/hints/m68k-amigaos | 2 +-

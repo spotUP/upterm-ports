@@ -1,7 +1,7 @@
-From 9a146b75e7c14116279a5c0abadaef26a037e024 Mon Sep 17 00:00:00 2001
+From 3f039d514b3eb4aebb85cbd5dd677adbfdd86fc3 Mon Sep 17 00:00:00 2001
 From: spotUP <spotUP@users.noreply.github.com>
 Date: Fri, 23 Oct 2026 15:31:32 +0200
-Subject: [PATCH 2/8] Hints files: mark the PRE section
+Subject: [PATCH 02/12] Hints files: mark the PRE section
 
 ---
  sys/unix/hints/m68k-amigaos | 1 +

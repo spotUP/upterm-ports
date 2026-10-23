@@ -1,7 +1,7 @@
-From 34a70449993f9a29301a73013a2e0c33f0659f98 Mon Sep 17 00:00:00 2001
+From 27dd5f126c9d3bb274665894b5c153f4a05cffbe Mon Sep 17 00:00:00 2001
 From: spotUP <x@y>
 Date: Fri, 23 Oct 2026 17:30:16 +0200
-Subject: [PATCH 9/9] m68k hints: no save file compression (it forks
+Subject: [PATCH 09/12] m68k hints: no save file compression (it forks
  /usr/bin/compress; ixemul has no fork)
 
 ---
