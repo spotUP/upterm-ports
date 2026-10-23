@@ -1,0 +1,55 @@
+From 02816d56e05b5f24974d4999e4d7a88148660a91 Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 15:38:16 +0200
+Subject: [PATCH 8/8] Hints: set the curses libraries in the POST section
+
+---
+ sys/unix/hints/m68k-amigaos | 8 +++++---
+ sys/unix/hints/upterm-host  | 8 +++++---
+ 2 files changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/sys/unix/hints/m68k-amigaos b/sys/unix/hints/m68k-amigaos
+index 7b32b87..791da42 100644
+--- a/sys/unix/hints/m68k-amigaos
++++ b/sys/unix/hints/m68k-amigaos
+@@ -23,11 +23,13 @@ LINK=$(CC)
+ LFLAGS=
+ WINSRC = $(WINTTYSRC) $(WINCURSESSRC)
+ WINOBJ = $(WINTTYOBJ) $(WINCURSESOBJ)
+-WINLIB = $(WINTTYLIB) $(WINCURSESLIB)
+-WINTTYLIB=$(NH_LIBS)
+-WINCURSESLIB=$(NH_LIBS)
+ CHOWN=true
+ CHGRP=true
+ VARDIRPERM = 0755
+ VARFILEPERM = 0644
+ GAMEPERM = 0755
++#-POST
++# the stock Makefile.src sets WINCURSESLIB = -lncurses after the PRE section
++WINTTYLIB=$(NH_LIBS)
++WINCURSESLIB=
++WINLIB=$(WINTTYLIB)
+diff --git a/sys/unix/hints/upterm-host b/sys/unix/hints/upterm-host
+index 6f9ba0f..cc6aca9 100644
+--- a/sys/unix/hints/upterm-host
++++ b/sys/unix/hints/upterm-host
+@@ -15,11 +15,13 @@ LINK=$(CC)
+ LFLAGS=
+ WINSRC = $(WINTTYSRC) $(WINCURSESSRC)
+ WINOBJ = $(WINTTYOBJ) $(WINCURSESOBJ)
+-WINLIB = $(WINTTYLIB) $(WINCURSESLIB)
+-WINTTYLIB=-L$(NH_NCURSES)/lib -lncursesw
+-WINCURSESLIB=-L$(NH_NCURSES)/lib -lncursesw
+ CHOWN=true
+ CHGRP=true
+ VARDIRPERM = 0755
+ VARFILEPERM = 0644
+ GAMEPERM = 0755
++#-POST
++# the stock Makefile.src sets WINCURSESLIB = -lncurses after the PRE section
++WINTTYLIB=-L$(NH_NCURSES)/lib -lncursesw
++WINCURSESLIB=
++WINLIB=$(WINTTYLIB)
+-- 
+2.50.1 (Apple Git-155)
+

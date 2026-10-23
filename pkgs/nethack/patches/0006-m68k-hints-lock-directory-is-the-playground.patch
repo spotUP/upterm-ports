@@ -1,0 +1,25 @@
+From 4d54c312997d604c05a7362ac41e0e7d3fdfc378 Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 15:36:10 +0200
+Subject: [PATCH 6/8] m68k hints: lock directory is the playground
+
+---
+ sys/unix/hints/m68k-amigaos | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sys/unix/hints/m68k-amigaos b/sys/unix/hints/m68k-amigaos
+index 4bf0528..05c1edc 100644
+--- a/sys/unix/hints/m68k-amigaos
++++ b/sys/unix/hints/m68k-amigaos
+@@ -18,7 +18,7 @@ AR=$(NH_AR)
+ RANLIB=$(NH_RANLIB)
+ CFLAGS=$(NH_CFLAGS) -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw -UAMIGA -UMCH_AMIGA -U__MCH_AMIGA__
+ # bundled game data, no compression helper, no '!' shell (it forks), no fcntl record locking in ixemul (lock files instead)
+-CFLAGS+=-DDLB -DNOSHELL -DNO_FCNTL_LOCKING -DNO_FILE_LINKS -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
++CFLAGS+=-DDLB -DNOSHELL -DNO_FCNTL_LOCKING -DNO_FILE_LINKS -DLOCKDIR=\"$(HACKDIR)\" -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
+ LINK=$(CC)
+ LFLAGS=
+ WINSRC = $(WINTTYSRC) $(WINCURSESSRC)
+-- 
+2.50.1 (Apple Git-155)
+

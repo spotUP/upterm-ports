@@ -1,0 +1,25 @@
+From 1f0db61d2516a668c596d43336ea73ee42c3cefd Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 15:33:40 +0200
+Subject: [PATCH 4/8] m68k hints: drop the redundant UNIX define
+
+---
+ sys/unix/hints/m68k-amigaos | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sys/unix/hints/m68k-amigaos b/sys/unix/hints/m68k-amigaos
+index 89355fd..5934403 100644
+--- a/sys/unix/hints/m68k-amigaos
++++ b/sys/unix/hints/m68k-amigaos
+@@ -16,7 +16,7 @@ POSTINSTALL=
+ CC=$(NH_CC)
+ AR=$(NH_AR)
+ RANLIB=$(NH_RANLIB)
+-CFLAGS=$(NH_CFLAGS) -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw -UAMIGA -UMCH_AMIGA -U__MCH_AMIGA__ -DUNIX
++CFLAGS=$(NH_CFLAGS) -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw -UAMIGA -UMCH_AMIGA -U__MCH_AMIGA__
+ # bundled game data, no compression helper, no '!' shell (it forks), no ^Z (no job control)
+ CFLAGS+=-DDLB -DNOSHELL -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
+ LINK=$(CC)
+-- 
+2.50.1 (Apple Git-155)
+

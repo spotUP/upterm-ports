@@ -1,0 +1,40 @@
+From 16f080623b9e2d2bae255cefc6128901240ed85e Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 15:32:38 +0200
+Subject: [PATCH 3/8] m68k hints: undefine the Amiga port macros the compiler
+ predefines
+
+---
+ sys/unix/hints/m68k-amigaos | 2 +-
+ sys/unix/hints/upterm-host  | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/sys/unix/hints/m68k-amigaos b/sys/unix/hints/m68k-amigaos
+index c0b8461..89355fd 100644
+--- a/sys/unix/hints/m68k-amigaos
++++ b/sys/unix/hints/m68k-amigaos
+@@ -16,7 +16,7 @@ POSTINSTALL=
+ CC=$(NH_CC)
+ AR=$(NH_AR)
+ RANLIB=$(NH_RANLIB)
+-CFLAGS=$(NH_CFLAGS) -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw -DNOTPARMDECL
++CFLAGS=$(NH_CFLAGS) -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw -UAMIGA -UMCH_AMIGA -U__MCH_AMIGA__ -DUNIX
+ # bundled game data, no compression helper, no '!' shell (it forks), no ^Z (no job control)
+ CFLAGS+=-DDLB -DNOSHELL -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
+ LINK=$(CC)
+diff --git a/sys/unix/hints/upterm-host b/sys/unix/hints/upterm-host
+index a4b4ef7..6f9ba0f 100644
+--- a/sys/unix/hints/upterm-host
++++ b/sys/unix/hints/upterm-host
+@@ -9,7 +9,7 @@ SHELLDIR=$(PREFIX)/bin
+ INSTDIR=$(HACKDIR)
+ VARDIR=$(HACKDIR)
+ POSTINSTALL=
+-CFLAGS=-O -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw -DNOTPARMDECL -Wno-everything
++CFLAGS=-O -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw  -Wno-everything
+ CFLAGS+=-DDLB -DNOSHELL -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
+ LINK=$(CC)
+ LFLAGS=
+-- 
+2.50.1 (Apple Git-155)
+

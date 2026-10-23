@@ -1,0 +1,41 @@
+From a497d330b06dbebad782aaadcbfc85824af294fb Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 15:35:42 +0200
+Subject: [PATCH 5/8] Lock with lock files when NO_FCNTL_LOCKING is set
+
+---
+ include/unixconf.h          | 2 +-
+ sys/unix/hints/m68k-amigaos | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/include/unixconf.h b/include/unixconf.h
+index c126d68..c7ad73b 100644
+--- a/include/unixconf.h
++++ b/include/unixconf.h
+@@ -245,7 +245,7 @@
+ /* fcntl(2) is a POSIX-portable call for manipulating file descriptors.
+  * Comment out the USE_FCNTL if for some reason you have a strange
+  * OS/filesystem combination for which fcntl(2) does not work. */
+-#ifdef POSIX_TYPES
++#if defined(POSIX_TYPES) && !defined(NO_FCNTL_LOCKING)
+ #define USE_FCNTL
+ #endif
+ 
+diff --git a/sys/unix/hints/m68k-amigaos b/sys/unix/hints/m68k-amigaos
+index 5934403..4bf0528 100644
+--- a/sys/unix/hints/m68k-amigaos
++++ b/sys/unix/hints/m68k-amigaos
+@@ -17,8 +17,8 @@ CC=$(NH_CC)
+ AR=$(NH_AR)
+ RANLIB=$(NH_RANLIB)
+ CFLAGS=$(NH_CFLAGS) -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw -UAMIGA -UMCH_AMIGA -U__MCH_AMIGA__
+-# bundled game data, no compression helper, no '!' shell (it forks), no ^Z (no job control)
+-CFLAGS+=-DDLB -DNOSHELL -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
++# bundled game data, no compression helper, no '!' shell (it forks), no fcntl record locking in ixemul (lock files instead)
++CFLAGS+=-DDLB -DNOSHELL -DNO_FCNTL_LOCKING -DNO_FILE_LINKS -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
+ LINK=$(CC)
+ LFLAGS=
+ WINSRC = $(WINTTYSRC) $(WINCURSESSRC)
+-- 
+2.50.1 (Apple Git-155)
+

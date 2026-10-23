@@ -1,0 +1,149 @@
+From 97de855fbbe31c954f6af4aa10daa12a19cd1a8d Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 15:29:50 +0200
+Subject: [PATCH 1/8] Add m68k-amigaos and upterm-host hints, -h/--help/help/?
+ and NETHACK_SEED
+
+---
+ src/rnd.c                   |  7 ++++---
+ sys/unix/hints/m68k-amigaos | 32 ++++++++++++++++++++++++++++++++
+ sys/unix/hints/upterm-host  | 24 ++++++++++++++++++++++++
+ sys/unix/unixmain.c         | 17 +++++++++++++++++
+ 4 files changed, 77 insertions(+), 3 deletions(-)
+ create mode 100644 sys/unix/hints/m68k-amigaos
+ create mode 100644 sys/unix/hints/upterm-host
+
+diff --git a/src/rnd.c b/src/rnd.c
+index 0ca649f..706e6ff 100644
+--- a/src/rnd.c
++++ b/src/rnd.c
+@@ -41,19 +41,20 @@ init_isaac64(seed, fn)
+ unsigned long seed;
+ int FDECL((*fn), (int));
+ {
+-    unsigned char new_rng_state[sizeof seed];
++    /* UP-Term: four seed bytes on every machine, so a seed gives one game on a 32 and a 64 bit long */
++    unsigned char new_rng_state[4];
+     unsigned i;
+     int rngindx = whichrng(fn);
+ 
+     if (rngindx < 0)
+         panic("Bad rng function passed to init_isaac64().");
+ 
+-    for (i = 0; i < sizeof seed; i++) {
++    for (i = 0; i < sizeof new_rng_state; i++) {
+         new_rng_state[i] = (unsigned char) (seed & 0xFF);
+         seed >>= 8;
+     }
+     isaac64_init(&rnglist[rngindx].rng_state, new_rng_state,
+-                 (int) sizeof seed);
++                 (int) sizeof new_rng_state);
+ }
+ 
+ static int
+diff --git a/sys/unix/hints/m68k-amigaos b/sys/unix/hints/m68k-amigaos
+new file mode 100644
+index 0000000..7be22ec
+--- /dev/null
++++ b/sys/unix/hints/m68k-amigaos
+@@ -0,0 +1,32 @@
++#
++# Hints file for the UP-Term cross build: m68k-amigaos, ixemul-vtcon libc, ncursesw.
++# Used by upterm-ports (pkgs/nethack/recipe.mk); the environment supplies
++#   NH_CC NH_CFLAGS NH_LIBS NH_AR NH_RANLIB NH_INC NH_NCURSES
++# so no path of the build machine is written here.
++# The data tools (makedefs, lev_comp, dgn_comp) are built for the build machine by the
++# recipe (HOSTCC), the game and the m68k copies of the tools by this file.
++#
++PREFIX=/UP-Term
++HACKDIR=$(PREFIX)/share/nethack
++SHELLDIR=$(PREFIX)/bin
++INSTDIR=$(HACKDIR)
++VARDIR=$(HACKDIR)
++POSTINSTALL=
++CC=$(NH_CC)
++AR=$(NH_AR)
++RANLIB=$(NH_RANLIB)
++CFLAGS=$(NH_CFLAGS) -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw -DNOTPARMDECL
++# bundled game data, no compression helper, no '!' shell (it forks), no ^Z (no job control)
++CFLAGS+=-DDLB -DNOSHELL -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
++LINK=$(CC)
++LFLAGS=
++WINSRC = $(WINTTYSRC) $(WINCURSESSRC)
++WINOBJ = $(WINTTYOBJ) $(WINCURSESOBJ)
++WINLIB = $(WINTTYLIB) $(WINCURSESLIB)
++WINTTYLIB=$(NH_LIBS)
++WINCURSESLIB=$(NH_LIBS)
++CHOWN=true
++CHGRP=true
++VARDIRPERM = 0755
++VARFILEPERM = 0644
++GAMEPERM = 0755
+diff --git a/sys/unix/hints/upterm-host b/sys/unix/hints/upterm-host
+new file mode 100644
+index 0000000..693f19e
+--- /dev/null
++++ b/sys/unix/hints/upterm-host
+@@ -0,0 +1,24 @@
++#
++# Hints file for the UP-Term expected outputs: the same source on the build machine, against
++# the macOS ncursesw of upterm-ports (environment: NH_INC NH_NCURSES NH_PREFIX).
++#
++PREFIX=$(NH_PREFIX)
++HACKDIR=$(PREFIX)/share/nethack
++SHELLDIR=$(PREFIX)/bin
++INSTDIR=$(HACKDIR)
++VARDIR=$(HACKDIR)
++POSTINSTALL=
++CFLAGS=-O -I../include -I$(NH_INC) -I$(NH_INC)/ncursesw -DNOTPARMDECL -Wno-everything
++CFLAGS+=-DDLB -DNOSHELL -DHACKDIR=\"$(HACKDIR)\" -DDUMPLOG -DCURSES_GRAPHICS
++LINK=$(CC)
++LFLAGS=
++WINSRC = $(WINTTYSRC) $(WINCURSESSRC)
++WINOBJ = $(WINTTYOBJ) $(WINCURSESOBJ)
++WINLIB = $(WINTTYLIB) $(WINCURSESLIB)
++WINTTYLIB=-L$(NH_NCURSES)/lib -lncursesw
++WINCURSESLIB=-L$(NH_NCURSES)/lib -lncursesw
++CHOWN=true
++CHGRP=true
++VARDIRPERM = 0755
++VARFILEPERM = 0644
++GAMEPERM = 0755
+diff --git a/sys/unix/unixmain.c b/sys/unix/unixmain.c
+index 1e78801..a6ecaba 100644
+--- a/sys/unix/unixmain.c
++++ b/sys/unix/unixmain.c
+@@ -110,6 +110,18 @@ char *argv[];
+     if (!dir)
+         dir = nh_getenv("HACKDIR");
+ 
++    /* UP-Term: -h, --help, help and ? print the usage on stdout, exit 0 (Unix and Amiga forms) */
++    if (argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")
++                      || !strcmp(argv[1], "help") || !strcmp(argv[1], "?"))) {
++        printf("%s",
++               "Usage: nethack [-d dir] [-n] [-D|-X] [-u name] [-p role] [-r race] [-dec|-ibm]\n"
++               "       nethack -s [-v] [-p role] [-r race] [maxrank | name ...]\n"
++               "       nethack --version | --showpaths | --help\n"
++               "Options in the NETHACKOPTIONS variable or a .nethackrc file; NETHACKDIR names\n"
++               "the playground; NETHACK_SEED=n makes the random number sequence repeatable.\n");
++        exit(EXIT_SUCCESS);
++    }
++
+     if (argc > 1) {
+         if (argcheck(argc, argv, ARG_VERSION) == 2)
+             exit(EXIT_SUCCESS);
+@@ -781,6 +793,11 @@ sys_random_seed()
+     unsigned long seed = 0L;
+     unsigned long pid = (unsigned long) getpid();
+     boolean no_seed = TRUE;
++    /* UP-Term: NETHACK_SEED=n repeats a game (the checks compare the Mac and the Amiga) */
++    const char *envseed = getenv("NETHACK_SEED");
++
++    if (envseed && *envseed)
++        return strtoul(envseed, (char **) 0, 10) & 0xffffffffUL;
+ #ifdef DEV_RANDOM
+     FILE *fptr;
+ 
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,37 @@
+From 9a146b75e7c14116279a5c0abadaef26a037e024 Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 15:31:32 +0200
+Subject: [PATCH 2/8] Hints files: mark the PRE section
+
+---
+ sys/unix/hints/m68k-amigaos | 1 +
+ sys/unix/hints/upterm-host  | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/sys/unix/hints/m68k-amigaos b/sys/unix/hints/m68k-amigaos
+index 7be22ec..c0b8461 100644
+--- a/sys/unix/hints/m68k-amigaos
++++ b/sys/unix/hints/m68k-amigaos
+@@ -6,6 +6,7 @@
+ # The data tools (makedefs, lev_comp, dgn_comp) are built for the build machine by the
+ # recipe (HOSTCC), the game and the m68k copies of the tools by this file.
+ #
++#-PRE
+ PREFIX=/UP-Term
+ HACKDIR=$(PREFIX)/share/nethack
+ SHELLDIR=$(PREFIX)/bin
+diff --git a/sys/unix/hints/upterm-host b/sys/unix/hints/upterm-host
+index 693f19e..a4b4ef7 100644
+--- a/sys/unix/hints/upterm-host
++++ b/sys/unix/hints/upterm-host
+@@ -2,6 +2,7 @@
+ # Hints file for the UP-Term expected outputs: the same source on the build machine, against
+ # the macOS ncursesw of upterm-ports (environment: NH_INC NH_NCURSES NH_PREFIX).
+ #
++#-PRE
+ PREFIX=$(NH_PREFIX)
+ HACKDIR=$(PREFIX)/share/nethack
+ SHELLDIR=$(PREFIX)/bin
+-- 
+2.50.1 (Apple Git-155)
+
