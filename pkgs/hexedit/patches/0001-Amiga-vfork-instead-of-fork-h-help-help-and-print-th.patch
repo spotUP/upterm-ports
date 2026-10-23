@@ -1,0 +1,46 @@
+From c65d463b6bce9e8d943ee44b1435488baed6b37b Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 15:19:48 +0200
+Subject: [PATCH 1/2] Amiga: vfork instead of fork, -h, --help, help and ?
+ print the usage on stdout
+
+---
+ hexedit.c  | 7 +++++++
+ interact.c | 3 ++-
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/hexedit.c b/hexedit.c
+index 6ab2ed7..29ae349 100644
+--- a/hexedit.c
++++ b/hexedit.c
+@@ -56,6 +56,13 @@ int main(int argc, char **argv)
+   progName = basename(argv[0]);
+   argv++; argc--;
+ 
++  /* UP-Term: -h, --help, help and ? print the usage on stdout, exit 0 (Unix and Amiga forms) */
++  if (argc == 1 && (streq(*argv, "-h") || streq(*argv, "--help") || streq(*argv, "help") || streq(*argv, "?")))
++    {
++      printf(usage, progName);
++      exit(0);
++    }
++
+   for (; argc > 0; argv++, argc--) 
+     {
+       if (streq(*argv, "-s") || streq(*argv, "--sector"))
+diff --git a/interact.c b/interact.c
+index 5eb1fc4..41d6d0f 100644
+--- a/interact.c
++++ b/interact.c
+@@ -313,7 +313,8 @@ static void help(void)
+   args[1] = "hexedit";
+   args[2] = NULL;
+   endwin();
+-  if (fork() == 0) {
++  /* UP-Term: fork() is gone; the vfork child only execs */
++  if (vfork() == 0) {
+     execvp(args[0], args);
+     exit(1);
+   }
+-- 
+2.50.1 (Apple Git-155)
+

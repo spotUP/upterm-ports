@@ -1,0 +1,4 @@
+help-flag	hexedit --help | sed -n 1p
+help-h	hexedit -h | sed -n 1p
+help-word	hexedit help | sed -n 1p
+help-q	hexedit ? | sed -n 1p

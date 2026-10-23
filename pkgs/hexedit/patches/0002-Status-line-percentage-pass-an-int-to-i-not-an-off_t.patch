@@ -1,0 +1,27 @@
+From 79f538f99b5336e4f75de041db073192a713cc40 Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 15:23:46 +0200
+Subject: [PATCH 2/2] Status line percentage: pass an int to %i, not an off_t
+ (wrong on big-endian)
+
+---
+ display.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/display.c b/display.c
+index 807b1ae..a91f341 100644
+--- a/display.c
++++ b/display.c
+@@ -189,7 +189,8 @@ void display(void)
+   printw("-%c%c  %s       --0x%llX", i, i, baseName, (long long) base + cursor);
+   fsize = getfilesize();
+   if (MAX(fileSize, lastEditedLoc)) printw("/0x%llX", fsize);
+-  printw("--%i%%", fsize == 0 ? 0 : 100 * (base + cursor + fsize/200) / fsize );
++  /* UP-Term: the argument is off_t (64 bit) but %i reads an int: on a big-endian CPU it got the high word, always 0 */
++  printw("--%i%%", (int) (fsize == 0 ? 0 : 100 * (base + cursor + fsize/200) / fsize));
+   if (mode == bySector) printw("--sector %lld", (long long) ((base + cursor) / SECTOR_SIZE));
+ 
+   move(cursor / lineLength, computeCursorXCurrentPos());
+-- 
+2.50.1 (Apple Git-155)
+

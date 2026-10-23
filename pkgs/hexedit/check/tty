@@ -1,0 +1,2 @@
+open-quit	hexedit hello.bin
+edit-save	hexedit hello.bin	hello.bin
