@@ -22,6 +22,12 @@ m68k)
 	sed -i.bak 's/^\t\$(CC) \$(LFLAGS) -o makedefs \$(MAKEOBJS)$/\tcp makedefs.mac makedefs/' util/Makefile
 	# 3. the m68k tools and the game (-o makedefs: the Mac copy stays)
 	make -C util lev_comp dgn_comp dlb > util.m68k.log 2>&1 || { grep -E -B2 'error|undefined' util.m68k.log | head -40; exit 1; }
+	# makedefs for the Amiga too: bake.sh runs it there (makedefs -q writes raw structs); the Mac one stays
+	# as util/makedefs, the m68k one is util/makedefs.m68k
+	rm -f util/makedefs util/makedefs.o
+	make -C util -f Makefile.bak makedefs > util.m68k.makedefs.log 2>&1 || { grep -E -B2 'error|undefined' util.m68k.makedefs.log | head -40; exit 1; }
+	mv util/makedefs util/makedefs.m68k
+	cp util/makedefs.mac util/makedefs
 	make -C src nethack > src.m68k.log 2>&1 || { grep -E -B2 'error|undefined' src.m68k.log | head -40; exit 1; }
 	;;
 host)
@@ -29,7 +35,7 @@ host)
 	make > make.host.log 2>&1 || { grep -E -B2 'error:|undefined|\*\*\*' make.host.log | head -40; exit 1; }
 	mkdir -p "$inst/bin" "$inst/share/nethack"
 	cp src/nethack "$inst/bin/nethack"
-	cp dat/nhdat dat/license "$inst/share/nethack/"
+	cp dat/nhdat dat/license dat/symbols "$inst/share/nethack/"
 	: > "$inst/share/nethack/record"; : > "$inst/share/nethack/perm"; : > "$inst/share/nethack/logfile"; : > "$inst/share/nethack/xlogfile"
 	;;
 install)
@@ -37,7 +43,7 @@ install)
 	mkdir -p "$root/bin" "$root/share/nethack"
 	cp src/nethack "$root/bin/nethack"
 	[ -f "$data/nhdat" ] || { echo "nhbuild.sh: $data/nhdat is missing: run pkgs/nethack/bake.sh on a rig" >&2; exit 1; }
-	cp "$data/nhdat" dat/license "$root/share/nethack/"
+	cp "$data/nhdat" dat/license dat/symbols "$root/share/nethack/"
 	for f in record perm logfile xlogfile; do : > "$root/share/nethack/$f"; done
 	;;
 esac

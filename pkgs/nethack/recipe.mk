@@ -21,7 +21,7 @@ nethack_STACK_VAR := 1
 #   m68k <obj> <src>: host makedefs for the generated headers and text, m68k game and tools
 #   host <obj> <src>: the whole game on the Mac (expected outputs)
 nethack_NH_ENV = NH_CC="$(ROOT)/tools/m68k-cc" NH_AR=$(CROSS)ar NH_RANLIB=$(CROSS)ranlib \
-	NH_CFLAGS="$(CPU) -O2" NH_INC=$(SYSINC) NH_LIBS="-L$(SYSLIB) -lncursesw $(SYSLIB)/libixcompat.a" \
+	NH_CFLAGS="$(CPU) -O2" NH_INC=$(SYSINC) NH_LIBS="$(OBJ)/nethack.stack.o -L$(SYSLIB) -lncursesw $(SYSLIB)/libixcompat.a" \
 	CONFIG_SITE=$(ROOT)/mk/config.site
 nethack_CONFIGURE_CMD = cp -R $(nethack_SRC)/. $(nethack_OBJ)/ && cd $(nethack_OBJ)/sys/unix && \
 	$(nethack_NH_ENV) sh setup.sh hints/m68k-amigaos
@@ -32,3 +32,4 @@ nethack_HOST_CONFIGURE_CMD = cp -R $(nethack_SRC)/. $(nethack_HOBJ)/ && cd $(net
 nethack_HOST_BUILD_CMD = NH_INC=$(HOST_NCURSES)/include NH_NCURSES=$(HOST_NCURSES) NH_PREFIX=$(nethack_HOBJ)/inst \
 	sh $(ROOT)/pkgs/nethack/nhbuild.sh host $(nethack_HOBJ) $(nethack_HOBJ)/inst
 nethack_DATA := share/nethack
+nethack_RIG_DATA := share/nethack/nhdat share/nethack/license share/nethack/symbols share/nethack/record share/nethack/perm share/nethack/logfile share/nethack/xlogfile
