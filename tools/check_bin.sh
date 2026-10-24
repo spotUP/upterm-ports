@@ -6,6 +6,7 @@
 #   fork     no fork(): ixemul has none (vfork only), so a _fork symbol
 #            means a fork() call that fails at run time
 #   stack    the $STACK: cookie, when the recipe asks for one (STACK = bytes)
+#   ncurses  a binary linking ncurses needs __stack and STACK >= 262144
 #   cpu      no 68030+ instructions (MMU, move16, cache ops) and no FPU
 #            ones in the code (tools/m68k_scan.py follows the flow, so
 #            tables in the code hunk do not count): 68020 soft float
@@ -21,6 +22,14 @@ shift 2
 fails=0
 ok()  { echo "[OK]   $pkg $name: $1"; }
 bad() { echo "[FAIL] $pkg $name: $1"; fails=$((fails+1)); }
+# stack_var BINARY: the value of the program's __stack variable, empty when there is none.
+# nm alone proves nothing: ixemul's libc links its own default __stack (stack.o) into every program.
+stack_var() {
+	addr=$("${X}objdump" -t "$1" 2>/dev/null | awk '$NF == "___stack" && $2 == "g" { print $1; exit }')
+	[ -n "$addr" ] || return 0
+	"${X}objdump" -s -j .data --start-address=$((16#$addr)) --stop-address=$((16#$addr + 4)) "$1" 2>/dev/null |
+		awk '/^ [0-9a-f]+ [0-9a-f]+/ { print "0x" $2; exit }' | { read -r h; [ -n "$h" ] && printf '%d\n' "$h"; }
+}
 mkdir -p "$(dirname "$TSV")"
 [ -f "$TSV" ] || printf 'package\tbinary\tfile\ttext\tdata\tbss\n' > "$TSV"
 [ $# -gt 0 ] || { echo "[FAIL] $pkg: no binaries named (<pkg>_BINS)"; exit 1; }
@@ -48,9 +57,21 @@ for bin; do
 		else bad "no \$STACK: $stack cookie (found: $(strings -a "$bin" | grep -o '\$STACK: *[0-9]*' | head -1))"; fi
 	fi
 	# __stack: a program started by vfork + exec (upkg's curl and scripts, ptyrun) ignores the cookie
+	sv=$(stack_var "$bin")
 	if [ -n "${STACK_VAR:-}" ]; then
-		if "${X}nm" "$bin" 2>/dev/null | awk '$3 == "___stack" || $3 == "__stack"' | grep -q .; then ok "__stack defined"
-		else bad "no __stack variable (recipe sets STACK_VAR)"; fi
+		if [ -n "$sv" ] && [ "$sv" = "$stack" ]; then ok "__stack = $sv"
+		else bad "__stack is '${sv:-undefined}', recipe sets STACK_VAR (want $stack; ixemul's default __stack does not count)"; fi
+	fi
+	# ncurses program without __stack crashes when started from a shell: a program started by
+	# vfork + exec (vsh, ptyrun, upkg) ignores the $STACK: cookie and gets 16 KB, which the
+	# terminfo/tparm expansion overruns (Alert 81000005). A binary that links ncurses
+	# (tparm, setupterm, initscr, newterm) needs __stack and a STACK of at least 262144.
+	if "${X}nm" "$bin" 2>/dev/null | awk '$3 ~ /^_?(tparm|setupterm|initscr|newterm)$/' | grep -q .; then
+		if [ -n "$sv" ] && [ "$sv" -ge 262144 ]; then ok "ncurses program has __stack $sv"
+		else bad "ncurses program without __stack crashes when started from a shell (__stack '${sv:-undefined}', want >= 262144; recipe needs <p>_STACK_VAR := 1)"; fi
+		if [ -z "$stack" ] || [ "$stack" -lt 262144 ] 2>/dev/null; then
+			bad "ncurses program with STACK '${stack:-none}' below 262144 crashes when started from a shell"
+		fi
 	fi
 	# a flow-following scan: hunk executables keep const data in the code
 	# hunk, which a linear disassembly decodes as anything (m68k_scan.py)

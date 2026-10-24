@@ -13,7 +13,9 @@ ncdu_HOST_DEPS := ncurses
 ncdu_HOST_CONFIGURE := --with-ncursesw PKG_CONFIG=true CPPFLAGS="-I$(HOST_NCURSES)/include/ncursesw -I$(HOST_NCURSES)/include" NCURSES_CFLAGS="-I$(HOST_NCURSES)/include/ncursesw -I$(HOST_NCURSES)/include" \
 	NCURSES_LIBS="-L$(HOST_NCURSES)/lib -lncursesw"
 ncdu_BINS      := bin/ncdu
-ncdu_STACK     := 65536
+ncdu_STACK     := 262144
+# started by vfork+exec (vsh, ptyrun), which ignore the $STACK: cookie: define __stack too
+ncdu_STACK_VAR := 1
 ncdu_LIBS      := -lncursesw
 
 ncdu_CHECK_DEPS := grep sed

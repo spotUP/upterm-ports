@@ -8,7 +8,9 @@ upkg-ui_VERSION   := 1.1
 upkg-ui_LICENSE   := own
 upkg-ui_DEPS      := ixcompat ncurses
 upkg-ui_BINS      := bin/upkg-ui
-upkg-ui_STACK     := 65536
+upkg-ui_STACK     := 262144
+# started by vfork+exec (vsh, ptyrun), which ignore the $STACK: cookie: define __stack too
+upkg-ui_STACK_VAR := 1
 upkg-ui_HOST_DEPS := ncurses
 upkg-ui_CHECK_SH_BIN := bin/upkg-ui
 upkg-ui_CONFIGURE_CMD = mkdir -p $(upkg-ui_OBJ)

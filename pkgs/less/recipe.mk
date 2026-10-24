@@ -14,4 +14,6 @@ less_LIBS      := -lncursesw
 less_BINS      := bin/less
 # provisional, grep's value: the regex code recurses
 less_STACK     := 262144
+# started by vfork+exec (vsh, ptyrun), which ignore the $STACK: cookie: define __stack too
+less_STACK_VAR := 1
 less_LICENSE_FILES := COPYING LICENSE

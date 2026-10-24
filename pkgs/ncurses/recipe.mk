@@ -24,3 +24,10 @@ ncurses_HOST_CONFIGURE := --enable-widec --without-cxx --without-cxx-binding --w
 # pkgs/ncurses/check/*.sh run against the host build (frame_write: one write per doupdate)
 ncurses_CHECK_SH_BIN := bin/tput
 ncurses_BINS    := bin/tput bin/tset bin/reset bin/clear bin/infocmp bin/tic bin/toe bin/tabs
+# tput, tset, clear... expand terminfo through tparm; started by vfork+exec (vsh, scripts) they ignore
+# the $STACK: cookie and get 16 KB, which tparm overruns (Alert 81000005): cookie and __stack both
+ncurses_STACK     := 262144
+ncurses_STACK_VAR := 1
+# configure records LDFLAGS in ncursesw6-config --libs, so the cookie object would reach every package
+# that asks the script for its libraries (lynx: multiple definition of __stack): strip it
+ncurses_POST_INSTALL = sed -i.bak 's| -Wl,[^ ]*ncurses\.stack\.o||' $(SYSROOT)$(PREFIX)/bin/ncurses*-config && rm -f $(SYSROOT)$(PREFIX)/bin/ncurses*-config.bak

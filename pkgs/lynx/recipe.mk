@@ -27,5 +27,7 @@ lynx_BINS      := bin/lynx
 # LYNX_LSS_FILE); without them it starts with no config and no colour styles
 lynx_DATA      := etc/lynx.cfg etc/lynx.lss
 lynx_STACK     := 262144
+# started by vfork+exec (vsh, ptyrun), which ignore the $STACK: cookie: define __stack too
+lynx_STACK_VAR := 1
 lynx_LIBS      := -lncursesw
 lynx_CHECK_DEPS := grep sed
