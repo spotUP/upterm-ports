@@ -1,7 +1,7 @@
-From 0b770aaf97f0da414a026ce875dfd3987f9557f6 Mon Sep 17 00:00:00 2001
+From 3f22b371af7208d46082073b01a4dce2845900bf Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Sun, 25 Oct 2026 17:03:54 +0100
-Subject: [PATCH 1/2] No fork: fork sites take their failure path; --help, help
+Subject: [PATCH 1/3] No fork: fork sites take their failure path; --help, help
  and ? print usage on stdout, exit 0
 
 ---

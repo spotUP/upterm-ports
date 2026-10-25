@@ -1,7 +1,7 @@
-From 0eb72d73efd493408b3fec973f7104194ba62445 Mon Sep 17 00:00:00 2001
+From 59c2d1d4116f22e907fc0a8e765b1e305ad20482 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Sun, 25 Oct 2026 17:12:27 +0100
-Subject: [PATCH 2/2] munge_term_env_var: return 0 when TERM is neither xterm
+Subject: [PATCH 2/3] munge_term_env_var: return 0 when TERM is neither xterm
  nor xterm-256color
 
 ---

@@ -1,0 +1,30 @@
+From 04e3c98d7a8eb0cd1d9bdc59958f8ad954306b7f Mon Sep 17 00:00:00 2001
+From: upterm-ports <upterm-ports@localhost>
+Date: Sun, 25 Oct 2026 18:48:33 +0100
+Subject: [PATCH 3/3] Top-level Makefile: .NOTPARALLEL, the sub-makes share
+ objects in source/
+
+---
+ Makefile.in | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/Makefile.in b/Makefile.in
+index 02d1204..8287b1a 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -182,6 +182,12 @@ MFLAGS = \
+ 
+ all: Makefile .config.h $(_VERSION_) @EXTRAS@ dll done
+ 
++# Every target here is a sub-make in source/ or dll/, and wserv and scr-bx both
++# build bcompat.o and bircsig.o there: run in parallel, one sub-make links while
++# the other is still writing them ("bcompat.o: No such file or directory").
++# Serialise this level only; each sub-make keeps its own parallel jobs.
++.NOTPARALLEL:
++
+ .config.h:
+ 	@if test ! -f $(topdir)/.config.h ; then touch $(topdir)/.config.h; fi
+ 
+-- 
+2.50.1 (Apple Git-155)
+

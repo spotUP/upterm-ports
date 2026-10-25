@@ -27,6 +27,7 @@ test:
 	sh tools/test_recipe_var.sh
 	sh tools/test_check_bin.sh
 	sh tools/test_kit_stage.sh
+	sh tools/test_bitchx_parallel.sh
 	cc -Wall -Wextra -o build/test_chrome pkgs/upkg-ui/src/test_chrome.c pkgs/upkg-ui/src/chrome.c && build/test_chrome
 
 sizes:
