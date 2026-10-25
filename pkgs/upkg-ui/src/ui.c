@@ -380,7 +380,7 @@ static void draw_textarea(void)
 
 static int menu_room(int y)
 {
-	int r = osd ? ch_osd_layout(LINES, COLS, UI_OSD_FILTER_LINES, UI_OSD_GAP_LINES, UI_OSD_PAD).rows
+	int r = osd ? ch_osd_layout(LINES, COLS, UI_OSD_TOP_LINES, UI_OSD_FILTER_LINES, UI_OSD_GAP_LINES, UI_OSD_BOTTOM_LINES, UI_OSD_PAD).rows
 	            : LINES - 4 - y;
 	return r < 1 ? 1 : r;
 }
@@ -429,7 +429,7 @@ static void put(int y, int x, attr_t base, int sel, const char *s, int w)
 /* the OSD menu: the filter line (the prompt, dim), a gap, then the rows with a full-width bar */
 static void draw_menu_osd(void)
 {
-	ch_osd o = ch_osd_layout(LINES, COLS, UI_OSD_FILTER_LINES, UI_OSD_GAP_LINES, UI_OSD_PAD);
+	ch_osd o = ch_osd_layout(LINES, COLS, UI_OSD_TOP_LINES, UI_OSD_FILTER_LINES, UI_OSD_GAP_LINES, UI_OSD_BOTTOM_LINES, UI_OSD_PAD);
 	int i, w = o.bar_w - 2 * o.text_x;
 	int x = o.text_x + (ui_opt.nentries ? ch_widest(&ui_opt.entries[0].tag, ui_opt.nentries, 2, ui_opt.colors) : 0) + 2;
 
@@ -446,8 +446,10 @@ static void draw_menu_osd(void)
 		int y = o.first_row + i;
 		spaces(y, o.bar_x, o.bar_w, a);
 		put(y, o.text_x, a, sel, e->tag, w);
-		if (e->item && *e->item)
-			put(y, x, sel ? a_sel : a_dim, sel, e->item, o.bar_w - o.text_x - x);
+		if (e->item && *e->item) {
+			int iw = ch_vis_len(e->item, ui_opt.colors), ix = o.item_end - iw;
+			put(y, ix < x ? x : ix, sel ? a_sel : a_dim, sel, e->item, o.item_end - (ix < x ? x : ix));
+		}
 	}
 }
 

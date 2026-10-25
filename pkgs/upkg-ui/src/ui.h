@@ -29,13 +29,18 @@ typedef struct {
 extern ui_opts ui_opt;
 
 /* The OSD style (ui_osd): a launcher look for a menu in a borderless window. No masthead, rail,
- * frame or footer. Row 0 is the filter line, the next UI_OSD_GAP_LINES rows are a gap, then one
- * menu entry per row; the selected row is a bar across the full width. Text sits UI_OSD_PAD cells
- * from the left edge. A caller sizing its window for n entries needs
- * UI_OSD_HEAD_LINES + n rows and its widest "tag  item" line + 2 * UI_OSD_PAD columns. */
+ * frame or footer. UI_OSD_TOP_LINES blank rows come first, then the filter line, the next
+ * UI_OSD_GAP_LINES rows are a gap, then one menu entry per row, then UI_OSD_BOTTOM_LINES blank
+ * rows; the selected row is a bar across the full width. Text sits UI_OSD_PAD cells from the left
+ * edge and an entry's item (a group's ">") is right-aligned, UI_OSD_PAD cells from the right edge.
+ * A caller sizing its window for n entries needs UI_OSD_HEAD_LINES + n + UI_OSD_BOTTOM_LINES rows
+ * and its widest "tag  item" line + 2 * UI_OSD_PAD columns. */
+#define UI_OSD_PAD_LINES    2 /* blank rows of vertical padding: as tall as UI_OSD_PAD cells are wide in Topaz 8 (8x8 cells) */
+#define UI_OSD_TOP_LINES    UI_OSD_PAD_LINES /* above the filter line */
 #define UI_OSD_FILTER_LINES 1 /* the filter line */
 #define UI_OSD_GAP_LINES    1 /* blank rows between the filter line and the first entry */
-#define UI_OSD_HEAD_LINES   (UI_OSD_FILTER_LINES + UI_OSD_GAP_LINES)
+#define UI_OSD_BOTTOM_LINES UI_OSD_PAD_LINES /* below the last entry row */
+#define UI_OSD_HEAD_LINES   (UI_OSD_TOP_LINES + UI_OSD_FILTER_LINES + UI_OSD_GAP_LINES)
 #define UI_OSD_PAD          2 /* cells of padding left of the text (and right of it) */
 
 /* Turn the OSD style on or off. Set before the menu is shown; default off (the framed look). */

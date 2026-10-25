@@ -71,14 +71,16 @@ int ch_vis_len(const char *s, int colors);
  * whatever each tag's length. */
 int ch_widest(const char *const *s, int n, int stride, int colors);
 
-/* The rows and columns of the OSD menu style (no frame): the filter line at row 0, `gap` blank
- * rows, then `rows` entry rows to the bottom of the screen (at least 1). The selection bar runs
- * bar_x..bar_x+bar_w over the whole width; text starts at text_x. head = filter lines + gap. */
+/* The rows and columns of the OSD menu style (no frame): `top` blank rows, the filter line, `gap`
+ * blank rows, then `rows` entry rows, then `bottom` blank rows at the end of the screen (rows is at
+ * least 1). The selection bar runs bar_x..bar_x+bar_w over the whole width; text starts at text_x;
+ * an entry's item is right-aligned so that it ends at item_end (exclusive), pad cells from the
+ * right edge. */
 typedef struct {
 	int filter_row, first_row, rows;
-	int bar_x, bar_w, text_x;
+	int bar_x, bar_w, text_x, item_end;
 } ch_osd;
 
-ch_osd ch_osd_layout(int lines, int cols, int filter, int gap, int pad);
+ch_osd ch_osd_layout(int lines, int cols, int top, int filter, int gap, int bottom, int pad);
 
 #endif

@@ -159,16 +159,18 @@ int main(void)
 		eqi("widest none", ch_widest(pairs, 0, 2, 0), 0);
 	}
 
-	/* OSD layout: filter line row 0, one gap row, entries from row 2, bar over the full width */
+	/* OSD layout: a blank row, the filter line, one gap row, entries, a blank row; bar over the
+	 * full width; items end pad cells from the right edge */
 	{
-		ch_osd o = ch_osd_layout(12, 40, 1, 1, 2);
-		eqi("osd filter row", o.filter_row, 0);
-		eqi("osd first entry row", o.first_row, 2);
+		ch_osd o = ch_osd_layout(16, 40, 2, 1, 1, 2, 2);
+		eqi("osd filter row", o.filter_row, 2);
+		eqi("osd first entry row", o.first_row, 4);
 		eqi("osd entry rows", o.rows, 10);
 		eqi("osd bar x", o.bar_x, 0);
 		eqi("osd bar width", o.bar_w, 40);
 		eqi("osd text x", o.text_x, 2);
-		eqi("osd tiny screen keeps one row", ch_osd_layout(1, 40, 1, 1, 2).rows, 1);
+		eqi("osd item end", o.item_end, 38);
+		eqi("osd tiny screen keeps one row", ch_osd_layout(1, 40, 2, 1, 1, 2, 2).rows, 1);
 	}
 
 	printf("test_chrome: %d checks, %d failed\n", checks, fails);

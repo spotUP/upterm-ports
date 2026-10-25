@@ -270,16 +270,17 @@ int ch_widest(const char *const *s, int n, int stride, int colors)
 	return w;
 }
 
-ch_osd ch_osd_layout(int lines, int cols, int filter, int gap, int pad)
+ch_osd ch_osd_layout(int lines, int cols, int top, int filter, int gap, int bottom, int pad)
 {
 	ch_osd o;
-	o.filter_row = 0;
-	o.first_row = filter + gap;
-	o.rows = lines - o.first_row;
+	o.filter_row = top;
+	o.first_row = top + filter + gap;
+	o.rows = lines - o.first_row - bottom;
 	if (o.rows < 1)
 		o.rows = 1;
 	o.bar_x = 0;
 	o.bar_w = cols;
 	o.text_x = pad;
+	o.item_end = cols - pad;
 	return o;
 }
