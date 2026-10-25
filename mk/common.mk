@@ -86,6 +86,12 @@ CHECK_PATH = $($(1)_HOBJ)/inst/bin$(foreach d,$($(1)_CHECK_DEPS),:$(HOSTB)/$(d)/
 #   <p>_CHECK_SH_BIN  host program (relative to the host install) handed to every pkgs/<p>/check/*.sh
 #   <p>_NO_KIT      non-empty: kit-stage leaves the package out (built and checked only)
 #   <p>_POST_INSTALL  shell run after make install (optional)
+#   <p>_LHA_URLS / <p>_LHA_SHA256S  a prebuilt payload: parallel lists of lha archives (the
+#                   author's binaries, installed unmodified). <p>_URL/_SHA256 are not
+#                   used; fetch.sh verifies each archive, the unpack step runs `lha x`
+#                   of each into build/src/<p> (no git tree, no patches), and the
+#                   recipe's own <p>_CONFIGURE_CMD, <p>_BUILD_CMD and <p>_INSTALL_CMD
+#                   place the files (pkgs/vbcc/recipe.mk)
 #   <p>_OWN         our own program: the source is pkgs/<p>/src (no download, no
 #                   <p>_URL/SHA256), copied to build/src/<p> as the unpack step
 # and may replace a step: <p>_CONFIGURE_CMD, <p>_BUILD_CMD, <p>_INSTALL_CMD,
@@ -113,12 +119,15 @@ $(1): $(STATE)/$(1).checked
 
 $(STATE)/$(1).fetched: pkgs/$(1)/recipe.mk
 	@mkdir -p $(STATE)
-	$$(if $$($(1)_OWN),,$(ROOT)/tools/fetch.sh $$($(1)_URL) $$($(1)_SHA256) $$($(1)_ARCHIVE))
+	$$(if $$($(1)_OWN)$$($(1)_LHA_URLS),,$(ROOT)/tools/fetch.sh $$($(1)_URL) $$($(1)_SHA256) $$($(1)_ARCHIVE))
+	$$(foreach i,$$(shell seq 1 $$(words $$($(1)_LHA_URLS))),$(ROOT)/tools/fetch.sh $$(word $$(i),$$($(1)_LHA_URLS)) \
+		$$(word $$(i),$$($(1)_LHA_SHA256S)) $(DL)/$$(notdir $$(word $$(i),$$($(1)_LHA_URLS)));)
 	@touch $$@
 
 $(STATE)/$(1).unpacked: $(STATE)/$(1).fetched $$(wildcard pkgs/$(1)/patches/*.patch) $$(if $$($(1)_OWN),$$(wildcard pkgs/$(1)/src/*))
+	$$(if $$($(1)_LHA_URLS),$(ROOT)/tools/unpack-lha.sh $$($(1)_SRC) $$(foreach u,$$($(1)_LHA_URLS),$(DL)/$$(notdir $$(u))), \
 	$$(if $$($(1)_OWN),rm -rf $$($(1)_SRC) && mkdir -p $$($(1)_SRC) && cp -R $(ROOT)/pkgs/$(1)/src/. $$($(1)_SRC)/, \
-		$(ROOT)/tools/unpack.sh $$($(1)_ARCHIVE) $$($(1)_SRC) $(ROOT)/pkgs/$(1)/patches > /dev/null)
+		$(ROOT)/tools/unpack.sh $$($(1)_ARCHIVE) $$($(1)_SRC) $(ROOT)/pkgs/$(1)/patches > /dev/null))
 	@touch $$@
 
 $(STATE)/$(1).configured: $(STATE)/$(1).unpacked pkgs/$(1)/recipe.mk mk/config.site \
