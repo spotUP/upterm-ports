@@ -182,6 +182,10 @@ def via_upkg(a):
             lines = [l.strip() for l in got.splitlines()]
             missing = [w for w in WANT if w not in lines]
             ck(not missing, "compile and run lines", "missing: %s; output tail: %s" % (", ".join(missing), got[-600:]))
+            # the compile script assigned vincludeos3:/vlibos3: into the drawer (the owner puts these in his own
+            # startup, not the package): they lock include and lib, so no Delete of the drawer can succeed
+            for n in ("vincludeos3:", "vlibos3:", "NDKINC:"):
+                run("Assign >NIL: %s REMOVE" % n)
             rc, out = ur.upkg("vbccrm", "remove up-vbcc", 600)
             ck(rc == 0, "upkg remove up-vbcc: exit 0", out)
             ck(not ur.exists("UP-Term:vbcc"), "remove: UP-Term:vbcc is gone")
