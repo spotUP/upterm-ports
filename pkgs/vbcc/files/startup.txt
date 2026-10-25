@@ -1,0 +1,11 @@
+; UP-Term vbcc: the lines for S:User-Startup (or the kit's startup), VBCCDIR is the
+; drawer the package was installed into (UP-Term:vbcc).
+Assign VBCC: UP-Term:vbcc
+Path VBCC:bin ADD
+SetEnv VBCC VBCC:
+; the NDK headers (not part of the package, see README.md): the owner's Include_H drawer
+Assign NDKINC: <the NDK's Include_H drawer>
+; the stock config aos68k of the target archive asks for these two (vbcc manual 2.1)
+Assign vincludeos3: VBCC:targets/m68k-amigaos/include
+Assign vincludeos3: NDKINC: ADD
+Assign vlibos3: VBCC:targets/m68k-amigaos/lib
