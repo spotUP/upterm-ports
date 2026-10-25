@@ -1,0 +1,124 @@
+From 27b3f32fb85bd3f7bf298ec35d25d56dd5899008 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Sun, 25 Oct 2026 19:42:48 +0100
+Subject: [PATCH] opkg: a failed status file write or close makes the command
+ exit non-zero
+
+write_status_files_if_changed ignored the result of opkg_conf_write_status_files and pkg_write_changed_filelists, so a full disk (fclose reports ENOSPC) left a truncated status file and exit 0. It now returns -1 and every caller folds it into the command result; ferror is checked as well as fclose.
+---
+ libopkg/opkg_cmd.c  | 31 +++++++++++++++++++++----------
+ libopkg/opkg_conf.c |  5 ++++-
+ 2 files changed, 25 insertions(+), 11 deletions(-)
+
+diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
+index 21d623d..1354ac2 100644
+--- a/libopkg/opkg_cmd.c
++++ b/libopkg/opkg_cmd.c
+@@ -90,17 +90,24 @@ static void print_pkg(FILE *fp, pkg_t * pkg)
+ 
+ int opkg_state_changed;
+ 
+-static void write_status_files_if_changed(void)
++/* Returns -1 when the status file or a changed file list could not be written or closed (a full disk shows up
++ * at fclose); the command must then exit non-zero, or a caller trusts a status file that is truncated. */
++static int write_status_files_if_changed(void)
+ {
++    int ret = 0;
++
+     if (opkg_state_changed && !opkg_config->noaction) {
+         opkg_msg(INFO, "Writing status file.\n");
+-        opkg_conf_write_status_files();
+-        pkg_write_changed_filelists();
++        if (opkg_conf_write_status_files() != 0)
++            ret = -1;
++        if (pkg_write_changed_filelists() != 0)
++            ret = -1;
+         if (!opkg_config->offline_root)
+             sync();
+     } else {
+         opkg_msg(DEBUG, "Nothing to be done.\n");
+     }
++    return ret;
+ }
+ 
+ static void sigint_handler(int sig)
+@@ -454,7 +461,8 @@ static int opkg_install_cmd(int argc, char **argv)
+     if (r != 0)
+         err = -1;
+ 
+-    write_status_files_if_changed();
++    if (write_status_files_if_changed() != 0)
++        err = -1;
+ 
+     return err;
+ }
+@@ -474,7 +482,8 @@ static int opkg_upgrade_cmd(int argc, char **argv)
+     if (r != 0)
+         err = -1;
+ 
+-    write_status_files_if_changed();
++    if (write_status_files_if_changed() != 0)
++        err = -1;
+ 
+     return err;
+ }
+@@ -499,7 +508,8 @@ static int opkg_distupgrade_cmd(int argc, char **argv)
+     if (r != 0)
+         err = -1;
+ 
+-    write_status_files_if_changed();
++    if (write_status_files_if_changed() != 0)
++        err = -1;
+ #endif
+     return err;
+ }
+@@ -952,7 +962,8 @@ static int opkg_configure_cmd(int argc, char **argv)
+ 
+     err = opkg_configure_packages(pkg_name);
+ 
+-    write_status_files_if_changed();
++    if (write_status_files_if_changed() != 0)
++        err = -1;
+ 
+     return err;
+ }
+@@ -974,7 +985,8 @@ static int opkg_remove_cmd(int argc, char **argv)
+ 
+     err = opkg_solver_remove(argc, argv);
+ 
+-    write_status_files_if_changed();
++    if (write_status_files_if_changed() != 0)
++        err = -1;
+     return err;
+ }
+ 
+@@ -1052,8 +1064,7 @@ static int opkg_flag_cmd(int argc, char **argv)
+                  flags);
+     }
+ 
+-    write_status_files_if_changed();
+-    return 0;
++    return write_status_files_if_changed();
+ }
+ 
+ static int opkg_files_cmd(int argc, char **argv)
+diff --git a/libopkg/opkg_conf.c b/libopkg/opkg_conf.c
+index 3197e8a..8ee081f 100644
+--- a/libopkg/opkg_conf.c
++++ b/libopkg/opkg_conf.c
+@@ -599,8 +599,11 @@ int opkg_conf_write_status_files(void)
+     list_for_each_entry(iter, &opkg_config->pkg_dest_list.head, node) {
+         dest = (pkg_dest_t *) iter->data;
+         if (dest->status_fp) {
++            /* A write error on a full disk can be reported only by ferror or by the flush in fclose. */
++            int werr = ferror(dest->status_fp);
++
+             r = fclose(dest->status_fp);
+-            if (r == EOF) {
++            if (r == EOF || werr) {
+                 opkg_perror(ERROR, "Couldn't close %s", dest->status_file_name);
+                 ret = -1;
+             }
+-- 
+2.50.1 (Apple Git-155)
+

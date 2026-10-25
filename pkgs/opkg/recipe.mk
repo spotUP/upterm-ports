@@ -58,6 +58,9 @@
 # takes the keys; the browse box then shows '[ERROR] upkg install <pkg> (exit N)'. check/no_requesters.sh; rig case in vtcon.
 # patches/0027: file_mkdir_hier returns -1 when the parent is the path itself (an absent volume root NOSUCHVOL: recursed until the
 # stack overflowed). check/mkdir_absent_root.sh (shim dirname_self.c).
+# patches/0028: write_status_files_if_changed returns -1 when the status file or a changed file list fails to write or close
+# (ENOSPC shows at fclose; ferror is checked too) and every caller folds it into its result, so the command exits non-zero.
+# check/status_write_rc.sh (RLIMIT_FSIZE stands in for a full disk).
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
