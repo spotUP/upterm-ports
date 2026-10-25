@@ -122,15 +122,27 @@ def via_upkg(a):
         try:
             fx.take()
             ir.prepare(None)
+            # a user who runs upkg picked curl in the Installer (upkg downloads through it; the rig's system
+            # disk carries AmiSSL); the rig is a 68060
+            (ur.VTC / "runinstall").write_text(
+                "Execute VTC:distkit/Files/install.dos VTC:distkit/Files NOCONSOLE NODEVICE CURL CPU060\n")
             ir.base_install(ck)
+            # prepare() assigned LIBS: as Install sees it, without the rig's AmiSSL drawer: curl needs
+            # amisslmaster.library even for the http feed (the same step as upkg_browse_rig.py)
+            for line in ir.rig_libs():
+                ir.run(line)
             base = True
             ur.VTC.joinpath("upkg-rig.conf").write_text(ur.conf_for((VTCON / "dist/upkg.conf").read_text(), rel.url))
             ir.run("Copy VTC:upkg-rig.conf %s" % ur.CONF)
             rel.set(feed, (feed / "Packages").read_text())
             rc, out = ur.upkg("vbccupd", "update")
             ck(rc == 0, "upkg update: exit 0", out)
+            if os.environ.get("VBCC_STACK"):
+                _slow = ir.run_slow
+                ir.run_slow = lambda n, c, t=600: _slow(n, "Stack %s\n%s" % (os.environ["VBCC_STACK"], c), t)
             rc, out = ur.upkg("vbccinst", "install up-vbcc", 900)
             ck(rc == 0, "upkg install up-vbcc: exit 0", out)
+            (paths.RIG / "vbcc-upkg-install.txt").write_text(out, encoding="latin-1")
             ck(ur.exists("UP-Term:vbcc/bin/vc"), "UP-Term:vbcc/bin/vc landed")
             ck(ur.exists("UP-Term:pkg/up-vbcc/VERSIONS"), "the record UP-Term:pkg/up-vbcc/VERSIONS is there")
             block = user_startup_block("vbcc")

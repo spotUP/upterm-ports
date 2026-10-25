@@ -60,3 +60,21 @@ The vtcon vendor copies (`vendor/ndk-3.2r4-Include_H`, `ndk-3.2r4-netinclude`) c
 - Rerun `UPTERM_RIG=<own rig> python3 pkgs/vbcc/check/vbcc_rig.py --upkg <vtcon worktree>` on a rig with working network (check upkg_rig.py passes there first), then with `--no-drawer` for the fail-before.
 - `repos.lock` in the `upterm` meta-repo must pin both new commits (not done).
 - Worktrees remain: upterm-ports .claude/worktrees/vbcc-kit (port/vbcc-kit) and vtcon .claude/worktrees/vbcc-kit (addon/vbcc-kit); remove after merge. build/ in the vtcon worktree is untracked.
+
+## 2026-10-26 reachability run on rig 8 (vtcon-05): upkg install still not proven
+
+Verdict: `vbcc_rig.py --upkg` FAIL, 4 of 13 checks (rc 1). `--no-drawer` run not done: it is meaningless until the pass run installs.
+Rig 8 was free (the `grep -c rig8` count of 2 was the shell's own command line; ps listing without self matched nothing).
+IXEMUL/IXNET paths in the brief did not exist; used build/rig/ixemul.library and build/rig/ixnet.library.
+
+Root cause of the earlier "curl returned -1" (rig harness, not the vbcc commits), two parts, both fixed in pkgs/vbcc/check/vbcc_rig.py:
+1. The base was installed without the Installer's CURL option, so UP-Term:bin/curl was absent ("curl returned -1 (is curl installed and in PATH?)"). Fix: runinstall line gets CURL CPU060 (as upkg_browse_rig.py does).
+2. After that: "curl returned 20", on the rig console `"usergroup.library" could not be opened.` (ir.prepare assigns LIBS: without the rig's AmiSSL/AmiTCP drawers). Fix: `for line in ir.rig_libs(): ir.run(line)` after base_install, also as upkg_browse_rig.py. UPTERM_RIG_FLAGS="--max --os 32" must be exported so rig_libs() uses SYS: (without it the lines name DH0:).
+Result after both: `[OK] upkg update: exit 0`, base Install OK, remove checks OK.
+
+New, open failure: `upkg install up-vbcc` dies on the rig with the console line
+  Illegal instruction - UP-Term:bin/upkg -f T:upkg-rig.conf install up-vbcc
+(vsh script prints [exit 0], so the harness's "exit 0" check is vacuous; the real signal is the missing files.) Nothing lands: no UP-Term:vbcc/bin/vc, no record, no ;BEGIN vbcc block; then `upkg remove` says "up-vbcc is not installed".
+Tried: `Stack 262144` before the install (VBCC_STACK env in vbcc_rig.py): same Illegal instruction. Unknown whether it is specific to the 3.0 MB up-vbcc ipk or general to upkg install on this 68060 rig: control = same harness with up-vim or up-nvim from build/ipk (not run, budget).
+Logs: scratchpad vbcc-reach-pass{,2,3,4,5,6}.log, vbcc-reach-install.txt, vbcc-reach-install2.txt.
+Next: control install of a small add-on; then Stack/guru probe of upkg install; check ipk size/xz decompress as cause.
