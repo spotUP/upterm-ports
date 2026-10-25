@@ -8,6 +8,9 @@
 #     share/man/manN/              the pages of those programs (<name>.N*),
 #                                  and <p>_MANS
 #     <p>_DATA                     more installed paths (nano's syntax files)
+#     <p>_DRAWER                   a prebuilt drawer (vbcc): $(SYSROOT)$(PREFIX)/<drawer> copied whole to
+#                                  <drawer>/, <p>_LICENSE_FILES taken from inside it, the lha archives of
+#                                  <p>_LHA_URLS as its source
 #     etc/... from pkgs/<p>/kit/   files the ports add (nano's nanorc)
 #     licenses/<p>/                <p>_LICENSE_FILES from the source tree
 #     SOURCES.txt                  package, version, URL, sha256, licence
@@ -84,6 +87,11 @@ for p in $PKGS; do
 	for d in $(var "$p" DATA); do
 		mkdir -p "$KIT/$(dirname "$d")" && cp -R "$SYSROOT$PREFIX/$d" "$KIT/$(dirname "$d")/"
 	done
+	drawer=$(var "$p" DRAWER)
+	if [ -n "$drawer" ]; then
+		[ -d "$SYSROOT$PREFIX/$drawer" ] || { echo "kit-stage: $p: no drawer $drawer in $SYSROOT$PREFIX" >&2; exit 1; }
+		mkdir -p "$KIT/$(dirname "$drawer")" && cp -R "$SYSROOT$PREFIX/$drawer" "$KIT/$(dirname "$drawer")/"
+	fi
 	[ -d "$ROOT/pkgs/$p/kit" ] && cp -R "$ROOT/pkgs/$p/kit/." "$KIT/"
 	mkdir -p "$KSRC/$p"
 	if [ -n "$(var "$p" OWN)" ]; then
@@ -95,15 +103,26 @@ for p in $PKGS; do
 	fi
 	lic=$(var "$p" LICENSE_FILES)
 	[ -n "$lic" ] || lic=COPYING
+	licdir=$SRC/$p
+	[ -z "$drawer" ] || licdir=$SYSROOT$PREFIX/$drawer
 	mkdir -p "$KIT/licenses/$p"
 	for f in $lic; do
-		[ -f "$SRC/$p/$f" ] || { echo "kit-stage: $p: no licence file $f in $SRC/$p" >&2; exit 1; }
-		cp "$SRC/$p/$f" "$KIT/licenses/$p/"
+		[ -f "$licdir/$f" ] || { echo "kit-stage: $p: no licence file $f in $licdir" >&2; exit 1; }
+		cp "$licdir/$f" "$KIT/licenses/$p/"
 	done
-	cp "$B/dl/$(basename "$(var "$p" ARCHIVE)")" "$KSRC/$p/"
+	url=$(var "$p" URL)
+	sha=$(var "$p" SHA256)
+	if [ -n "$(var "$p" LHA_URLS)" ]; then
+		# a prebuilt payload: the author's archives (unmodified) are the source
+		for u in $(var "$p" LHA_URLS); do cp "$B/dl/$(basename "$u")" "$KSRC/$p/"; done
+		url=$(var "$p" LHA_URLS | tr ' ' ',')
+		sha=$(var "$p" LHA_SHA256S | tr ' ' ',')
+	else
+		cp "$B/dl/$(basename "$(var "$p" ARCHIVE)")" "$KSRC/$p/"
+	fi
 	cp -R "$ROOT/pkgs/$p/." "$KSRC/$p/"
-	printf '%s\t%s\t%s\t%s\t%s\n' "$p" "$(var "$p" VERSION)" "$(var "$p" URL)" \
-		"$(var "$p" SHA256)" "$(var "$p" LICENSE)" >> "$KIT/SOURCES.txt"
+	printf '%s\t%s\t%s\t%s\t%s\n' "$p" "$(var "$p" VERSION)" "$url" \
+		"$sha" "$(var "$p" LICENSE)" >> "$KIT/SOURCES.txt"
 done
 cp "$ROOT/Makefile" "$ROOT/RULES.md" "$KSRC/ports/"
 cp -R "$ROOT/mk" "$ROOT/tools" "$KSRC/ports/"
@@ -114,9 +133,14 @@ cp "$KIT/SOURCES.txt" "$KSRC/"
 # (each package's BINS read once: one make per package, not one per program and package)
 owners=$(for p in $PKGS; do for x in $(var "$p" BINS); do echo "$(basename "$x") $p"; done; done)
 for b in "$KIT"/bin/*; do
+	[ -e "$b" ] || continue
 	n=$(basename "$b")
 	found=$(echo "$owners" | awk -v n="$n" '$1 == n { p = $2 } END { print p }')
 	grep -q "^$found	" "$KIT/SOURCES.txt" || { echo "kit-stage: $n has no SOURCES.txt row" >&2; exit 1; }
+done
+for p in $PKGS; do
+	d=$(var "$p" DRAWER)
+	[ -z "$d" ] || [ ! -d "$KIT/$d" ] || grep -q "^$p	" "$KIT/SOURCES.txt" || { echo "kit-stage: drawer $d has no SOURCES.txt row" >&2; exit 1; }
 done
 trap - EXIT
 rm -rf "$FINAL" "$FINALSRC"

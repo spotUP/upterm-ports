@@ -84,6 +84,9 @@ CHECK_PATH = $($(1)_HOBJ)/inst/bin$(foreach d,$($(1)_CHECK_DEPS),:$(HOSTB)/$(d)/
 #   <p>_LIBS        extra libraries before -lixcompat
 #   <p>_LICENSE     for SOURCES.txt
 #   <p>_CHECK_SH_BIN  host program (relative to the host install) handed to every pkgs/<p>/check/*.sh
+#   <p>_DRAWER     a prebuilt drawer under $(SYSROOT)$(PREFIX) (vbcc): kit-stage copies it whole to
+#                   <drawer>/ of the kit, takes <p>_LICENSE_FILES from inside it and the <p>_LHA_URLS
+#                   archives as source. A package with a drawer is an add-on in vtcon (dist/slim.txt)
 #   <p>_NO_KIT      non-empty: kit-stage leaves the package out (built and checked only)
 #   <p>_POST_INSTALL  shell run after make install (optional)
 #   <p>_LHA_URLS / <p>_LHA_SHA256S  a prebuilt payload: parallel lists of lha archives (the

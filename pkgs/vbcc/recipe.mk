@@ -13,8 +13,9 @@ vbcc_LHA_SHA256S := 0a75cf9da15d1613554e43b09c6db59e0a05d945e358f1b95d5b32d9c637
 	ec734d7115359cdb5d1c70349284ecbd5712ef47e8bc28d4150117c6f8c73289
 vbcc_LICENSE   := vbcc, vasm, vlink: redistributable unmodified, non-commercial use (commercial use of m68k AmigaOS output allowed)
 vbcc_DEPS      :=
-# kit-stage copies <p>_BINS and licences from a source tree; a prebuilt drawer is not that shape yet
-vbcc_NO_KIT    := 1
+# kit-stage copies the whole drawer (vtcon: dist/slim.txt makes it the up-vbcc add-on, not part of the base)
+vbcc_DRAWER    := vbcc
+vbcc_LICENSE_FILES := README.md
 vbcc_DIR       := $(SYSROOT)$(PREFIX)/vbcc
 vbcc_CONFIGURE_CMD = mkdir -p $(vbcc_OBJ)
 vbcc_BUILD_CMD = sed 's|@VBCC_PREFIX@/|VBCC:|g; s|@NDKINC@|NDKINC:|g' $(ROOT)/pkgs/vbcc/files/upterm68k.cfg.in > $(vbcc_OBJ)/upterm68k
