@@ -664,6 +664,15 @@ static int key_menu(int fn, wint_t c)
 	return -1;
 }
 
+static int (*tick_fn)(void *ctx);
+static void *tick_ctx;
+
+void ui_on_tick(int (*fn)(void *ctx), void *ctx)
+{
+	tick_fn = fn;
+	tick_ctx = ctx;
+}
+
 static int run(void)
 {
 	int redraw = 1, early = 0;
@@ -693,6 +702,8 @@ static int run(void)
 			if (t != tick) { /* the rail's cells only */
 				tick = t;
 				paint_rail();
+				if (tick_fn && tick_fn(tick_ctx))
+					return UI_TICK;
 			}
 			continue;
 		}

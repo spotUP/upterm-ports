@@ -54,6 +54,10 @@ const char *ui_init_buttons(void);
 
 /* run the widget ui_opt describes: 0 accepted, 1 No, 255 Escape, EXIT_NO_TERMINAL */
 int ui_run(void);
+/* fn runs once each tick while a widget waits for a key; a nonzero return ends ui_run with
+ * UI_TICK, keeping ui_selected() and the filter as they were. NULL turns it off. */
+#define UI_TICK 4
+void ui_on_tick(int (*fn)(void *ctx), void *ctx);
 /* the same for a widget of KIND on the screen already up: prompt and buttons replace ui_opt's;
  * 2 when the buttons are bad */
 int ui_view(int kind, const char *prompt, const char *buttons);
