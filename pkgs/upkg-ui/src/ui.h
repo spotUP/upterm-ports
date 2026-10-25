@@ -35,7 +35,7 @@ extern ui_opts ui_opt;
  * edge and an entry's item (a group's ">") is right-aligned, UI_OSD_PAD cells from the right edge.
  * A caller sizing its window for n entries needs UI_OSD_HEAD_LINES + n + UI_OSD_BOTTOM_LINES rows
  * and its widest "tag  item" line + 2 * UI_OSD_PAD columns. */
-#define UI_OSD_PAD_LINES    2 /* blank rows of vertical padding: as tall as UI_OSD_PAD cells are wide in Topaz 8 (8x8 cells) */
+#define UI_OSD_PAD_LINES    1 /* blank rows of vertical padding: a cell is about twice as tall as wide, so one row looks as wide as UI_OSD_PAD (2) cells (measured 16 px by 16 px on the rig) */
 #define UI_OSD_TOP_LINES    UI_OSD_PAD_LINES /* above the filter line */
 #define UI_OSD_FILTER_LINES 1 /* the filter line */
 #define UI_OSD_GAP_LINES    1 /* blank rows between the filter line and the first entry */
