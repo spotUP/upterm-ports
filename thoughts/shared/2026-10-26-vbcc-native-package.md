@@ -78,3 +78,24 @@ New, open failure: `upkg install up-vbcc` dies on the rig with the console line
 Tried: `Stack 262144` before the install (VBCC_STACK env in vbcc_rig.py): same Illegal instruction. Unknown whether it is specific to the 3.0 MB up-vbcc ipk or general to upkg install on this 68060 rig: control = same harness with up-vim or up-nvim from build/ipk (not run, budget).
 Logs: scratchpad vbcc-reach-pass{,2,3,4,5,6}.log, vbcc-reach-install.txt, vbcc-reach-install2.txt.
 Next: control install of a small add-on; then Stack/guru probe of upkg install; check ipk size/xz decompress as cause.
+
+## 2026-10-26 crash hunt on rig 8 (vtcon-05): the "Illegal instruction" does not reproduce on a freshly started rig
+
+Verdicts (rig 8, `--max --os 32`, vbcc_rig.py --upkg, vtcon worktree vbcc-kit d66d89ce):
+- Probe 1 (control, `--control up-bitchx ipk`): with a freshly started rig 8 (`rig.py start`, which printed "refreshed ixp6/ixemul.library 200644 bytes"):
+  control install OK, up-vbcc install OK, vc lands, record and User-Startup block present, all compile-and-run lines OK. A second run WITHOUT the control also installs
+  up-vbcc OK. So content of the 3.0 MB ipk is not the trigger, and neither is the control's presence.
+- Cause (most likely, UNVERIFIED because the old rig state was overwritten by the restart): a stale VTC:ixp6/ixemul.library on rig 8. rig.py stage_ixemul's own docstring records
+  the same symptom (a 19 Oct ixemul made amarchy-menu stop with "Illegal instruction"); `rig.py start` refreshes it every start and the crash is gone after it.
+  The old crashing run had no start between it and the earlier builds. To prove it: put the 19 Oct ixemul into VTC:ixp6 and rerun (not done).
+- Probe 2 (ipk diff, data.tar.gz): up-vbcc 304 entries, longest path 105 chars (7 paths over 100, ustar prefix needed), no symlinks, no hardlinks, no zero-length files;
+  up-bitchx 1004 entries, longest 90, none over 100. The only first-difference is the path length; install works anyway, so it is not the cause.
+  control.tar.gz: same four members (control preinst postinst prerm), preinst 696 vs 700 bytes.
+- Probe 3 (bisect): not needed, the full ipk installs.
+- Probe 4: build/dist/up-term upkg binary carries a `$STACK:` cookie (grep -a, 2 hits); opkg recipe.mk sets opkg_STACK 262144, opkg_STACK_VAR 1 (__stack). Stack 1048576 not tried.
+- Harness fixes (vbcc_rig.py): the install check now fails on "Illegal instruction" in the output (the vsh `echo $?` hid it; the existing vc/record/User-Startup sentinel checks already caught the
+  missing files); `--control <ipk>` option; amisslmaster.library copied from the distkit into VTC:amissl (a fresh cloned system disk has no AmiSSL; without it "upkg update" failed
+  with curl 20 "Couldn't open amisslmaster.library v5"). Run needs VTCON=<vtcon checkout> exported and no `-I` (HERE is not on the path with -I).
+- Still open: `remove: UP-Term:vbcc is gone` and `remove: the record is gone` FAIL (2 of 13) in both passing runs although `upkg remove` exits 0 and the User-Startup block and assign go.
+  Not diagnosed (rig state is restored after the run); next: List UP-Term:vbcc ALL and UP-Term:pkg right after the remove, inside the harness.
+Logs: scratchpad vbcc-ctl2.log, vbcc-noctl.log.

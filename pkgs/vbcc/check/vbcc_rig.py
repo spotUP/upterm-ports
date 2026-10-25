@@ -88,6 +88,17 @@ def feed_for(tree, no_drawer, tmp):
     return tmp / "ipk"
 
 
+def add_control(feed, ipk):
+    """Add a prebuilt ipk to the one-package feed (its stanza is copied from the Packages next to it): the package name."""
+    import re
+    src = (ipk.parent / "Packages").read_text()
+    stanza = next(s for s in src.split("\n\n") if "Filename: %s\n" % ipk.name in s + "\n")
+    shutil.copyfile(ipk, feed / ipk.name)
+    with open(feed / "Packages", "a") as f:
+        f.write("\n" + stanza.strip() + "\n")
+    return re.search(r"^Package: (\S+)", stanza, re.M).group(1)
+
+
 def user_startup_block(name):
     text = ami.read_file("S:User-Startup").decode("latin-1")
     lines, on, got = text.splitlines(), False, []
@@ -107,6 +118,7 @@ def via_upkg(a):
     import install_rig as ir, upkg_rig as ur
     tree = pathlib.Path(a.upkg).resolve()
     feed = feed_for(tree, a.no_drawer, pathlib.Path(tempfile.mkdtemp(prefix="vbccfeed")) / "f")
+    control = add_control(feed, pathlib.Path(a.control).resolve()) if a.control else None
     fails, seen = [], []
 
     def ck(ok, what, detail=""):
@@ -131,6 +143,9 @@ def via_upkg(a):
             # amisslmaster.library even for the http feed (the same step as upkg_browse_rig.py)
             for line in ir.rig_libs():
                 ir.run(line)
+            # a freshly cloned system disk has no AmiSSL: the kit's amisslmaster.library (v5) goes beside the
+            # rig's amissl_v362.library in VTC:amissl, which RIG_LIBS puts in LIBS:
+            ir.run("Copy VTC:distkit/Files/AmiSSL/Libs/AmigaOS3/amisslmaster.library VTC:amissl CLONE QUIET")
             base = True
             ur.VTC.joinpath("upkg-rig.conf").write_text(ur.conf_for((VTCON / "dist/upkg.conf").read_text(), rel.url))
             ir.run("Copy VTC:upkg-rig.conf %s" % ur.CONF)
@@ -140,8 +155,11 @@ def via_upkg(a):
             if os.environ.get("VBCC_STACK"):
                 _slow = ir.run_slow
                 ir.run_slow = lambda n, c, t=600: _slow(n, "Stack %s\n%s" % (os.environ["VBCC_STACK"], c), t)
+            if control:
+                rc, out = ur.upkg("vbccctl", "install " + control, 900)
+                ck(rc == 0 and "Illegal instruction" not in out, "control upkg install %s: exit 0, no crash" % control, out)
             rc, out = ur.upkg("vbccinst", "install up-vbcc", 900)
-            ck(rc == 0, "upkg install up-vbcc: exit 0", out)
+            ck(rc == 0 and "Illegal instruction" not in out, "upkg install up-vbcc: exit 0, no crash", out)
             (paths.RIG / "vbcc-upkg-install.txt").write_text(out, encoding="latin-1")
             ck(ur.exists("UP-Term:vbcc/bin/vc"), "UP-Term:vbcc/bin/vc landed")
             ck(ur.exists("UP-Term:pkg/up-vbcc/VERSIONS"), "the record UP-Term:pkg/up-vbcc/VERSIONS is there")
@@ -188,6 +206,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ndk", default=str(VTCON / "vendor/ndk-3.2r4-Include_H"))
     ap.add_argument("--upkg", help="vtcon tree with build/dist/up-vbcc: check the upkg install of it")
+    ap.add_argument("--control", help="with --upkg: an extra known-good ipk, added to the feed and installed first (crash-hunt control)")
     ap.add_argument("--no-drawer", action="store_true", help="with --upkg: pack the package without the vbcc drawer")
     a = ap.parse_args()
     if a.upkg:
