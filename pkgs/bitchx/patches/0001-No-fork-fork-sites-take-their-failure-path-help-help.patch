@@ -1,0 +1,236 @@
+From 0b770aaf97f0da414a026ce875dfd3987f9557f6 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Sun, 25 Oct 2026 17:03:54 +0100
+Subject: [PATCH 1/2] No fork: fork sites take their failure path; --help, help
+ and ? print usage on stdout, exit 0
+
+---
+ include/irc.h      |  5 +++++
+ source/ai.c        |  2 +-
+ source/commands2.c |  4 ++--
+ source/exec.c      |  6 +++---
+ source/files.c     |  2 +-
+ source/irc.c       | 17 +++++++++++++----
+ source/ircaux.c    |  2 +-
+ source/screen.c    |  2 +-
+ source/tools.c     | 14 +++++++-------
+ 9 files changed, 34 insertions(+), 20 deletions(-)
+
+diff --git a/include/irc.h b/include/irc.h
+index 565056f..5795e5a 100644
+--- a/include/irc.h
++++ b/include/irc.h
+@@ -32,6 +32,11 @@ extern char	thing_star[4];
+ 
+ #include "defs.h"
+ #include "config.h"
++#include <errno.h>
++/* ixemul has no fork(): every fork() site (/exec, extra screens via wserv,
++ * compressed-file reads, file_copy, the crypto/weather/figlet/ai helpers)
++ * takes its existing "fork failed" path. */
++static inline int bx_nofork(void) { errno = ENOSYS; return -1; }
+ #include <stdio.h>
+ #include <ctype.h>
+ #include <sys/types.h>
+diff --git a/source/ai.c b/source/ai.c
+index e45664f..9f6f24b 100644
+--- a/source/ai.c
++++ b/source/ai.c
+@@ -140,7 +140,7 @@ static char *ai_call_claude(const char *prompt)
+ 		return NULL;
+ 	}
+ 
+-	pid = fork();
++	pid = bx_nofork();
+ 	if (pid == -1) {
+ 		close(pipe_in[0]); close(pipe_in[1]);
+ 		close(pipe_out[0]); close(pipe_out[1]);
+diff --git a/source/commands2.c b/source/commands2.c
+index e9966d7..fb3262a 100644
+--- a/source/commands2.c
++++ b/source/commands2.c
+@@ -2683,10 +2683,10 @@ pid_t pid;
+ 	if (create_ipc_socket())
+ 		return;
+ 
+-	switch(pid = fork())
++	switch(pid = bx_nofork())
+ 	{
+ 		case -1:
+-			bitchsay("fork() failed: %s", strerror(errno));
++			bitchsay("bx_nofork() failed: %s", strerror(errno));
+ 			return;
+ 		default:
+ 			do_detach(pid, args);
+diff --git a/source/exec.c b/source/exec.c
+index 985f21a..176c8ae 100644
+--- a/source/exec.c
++++ b/source/exec.c
+@@ -333,7 +333,7 @@ BUILT_IN_COMMAND(execcmd)
+ 		else if (my_strnicmp(flag, "START", len) == 0)
+ 		{
+ #ifndef __EMX__
+-			if(fork() == 0)
++			if(bx_nofork() == 0)
+ 			{
+ 				int i;
+ #endif
+@@ -550,7 +550,7 @@ BUILT_IN_COMMAND(execcmd)
+ 		}
+ 
+ #ifndef __EMXPM__
+-		switch ((pid = fork()))
++		switch ((pid = bx_nofork()))
+ 		{
+ 		case -1:
+ 			say("Couldn't start new process!");
+@@ -890,7 +890,7 @@ static void 	handle_filedesc (Process *proc, int *fd, int hook_nonl, int hook_nl
+ /*
+  * get_child_exit: This looks for dead child processes of the client.
+  * There are two main sources of dead children:  Either an /exec'd process
+- * has exited, or the client has attempted to fork() off a helper process
++ * has exited, or the client has attempted to bx_nofork() off a helper process
+  * (such as wserv or gzip) and that process has choked on itself.  
+  *
+  * When SIGCHLD is recieved, the global variable 'dead_children_processes'
+diff --git a/source/files.c b/source/files.c
+index a382708..4dd2f11 100644
+--- a/source/files.c
++++ b/source/files.c
+@@ -245,7 +245,7 @@ int file_copy(int from,int to)
+ 	if (to < 0)
+ 		return 1;
+ 		
+-	if (!fork())
++	if (!bx_nofork())
+ 	{
+ 	        /* Use the largest buffer we can get    */
+ 		for (bufsiz = 0x4000; bufsiz >= 128; bufsiz >>= 1)
+diff --git a/source/irc.c b/source/irc.c
+index b951671..0411780 100644
+--- a/source/irc.c
++++ b/source/irc.c
+@@ -422,7 +422,7 @@ SIGNAL_HANDLER(irc_exit_old)
+ 
+ volatile int dead_children_processes;
+ 
+-/* This is needed so that the fork()s we do to read compressed files dont
++/* This is needed so that the bx_nofork()s we do to read compressed files dont
+  * sit out there as zombies and chew up our fd's while we read more.
+  */
+ SIGNAL_HANDLER(child_reap)
+@@ -724,6 +724,14 @@ static	char	*parse_args (char *argv[], int argc, char **envp)
+ 
+ 	for ( ac = 1; ac < argc; ac++ )
+ 	{
++		if (!strcmp(argv[ac], "--help") || (argc == 2 && (!strcmp(argv[ac], "help") || !strcmp(argv[ac], "?"))))
++		{
++			int t;
++
++			for (t = 0; switch_help[t]; t++)
++				fputs(switch_help[t], stdout);
++			exit(0);
++		}
+ 		if (argv[ac][0] == '-')
+ 		{
+ 		    switch (argv[ac][1]) {
+@@ -1001,17 +1009,18 @@ static	char	*parse_args (char *argv[], int argc, char **envp)
+ 				break;	/* ignore - alone */
+ 
+ 			default:
+-				fprintf(stderr, "Unknown flag: %s\n",argv[ac]);
++				fprintf(stderr, "Unknown flag: %s\nTry BitchX --help\n",argv[ac]);
++				exit(1);
+ 			case 'h':
+ 				{
+ 					int t = 0;
+ 
+ 					while(switch_help[t])
+ 					{
+-						fprintf(stderr, "%s", switch_help[t]);
++						fprintf(stdout, "%s", switch_help[t]);
+ 						t++;
+ 					}
+-					exit(1);
++					exit(0);
+ 				}
+ 		   } /* End of switch */
+ 		}
+diff --git a/source/ircaux.c b/source/ircaux.c
+index a366b8c..da9273b 100644
+--- a/source/ircaux.c
++++ b/source/ircaux.c
+@@ -1375,7 +1375,7 @@ FILE *open_compression (char *executable, char *filename, int hook)
+ 		return NULL;
+ 	}
+ 
+-	switch (fork ())
++	switch (bx_nofork())
+ 	{
+ 		case -1:
+ 		{
+diff --git a/source/screen.c b/source/screen.c
+index b0a2587..7068e85 100644
+--- a/source/screen.c
++++ b/source/screen.c
+@@ -1605,7 +1605,7 @@ extern	Window	*BX_create_additional_screen (void)
+ 	oldscreen = current_window->screen;
+ 	new = create_new_screen();
+ 
+-	switch ((child = fork()))
++	switch ((child = bx_nofork()))
+ 	{
+ 		case -1:
+ 		{
+diff --git a/source/tools.c b/source/tools.c
+index 58a2bce..6a790a5 100644
+--- a/source/tools.c
++++ b/source/tools.c
+@@ -236,9 +236,9 @@ BUILT_IN_COMMAND(cmd_crypto)
+ 		symbol = BX_next_arg(args, &args);
+ 	}
+ 
+-	pid = fork();
++	pid = bx_nofork();
+ 	if (pid == -1) {
+-		say("CRYPTO: fork() failed: %s", strerror(errno));
++		say("CRYPTO: bx_nofork() failed: %s", strerror(errno));
+ 		return;
+ 	}
+ 
+@@ -450,9 +450,9 @@ BUILT_IN_COMMAND(cmd_weather)
+ 		}
+ 	}
+ 
+-	pid = fork();
++	pid = bx_nofork();
+ 	if (pid == -1) {
+-		say("WEATHER: fork() failed: %s", strerror(errno));
++		say("WEATHER: bx_nofork() failed: %s", strerror(errno));
+ 		return;
+ 	}
+ 
+@@ -688,7 +688,7 @@ void urltitle_check_message(const char *text)
+ 		url[i] = '\0';
+ 	}
+ 
+-	pid = fork();
++	pid = bx_nofork();
+ 	if (pid == -1) return;
+ 
+ 	if (pid == 0) {
+@@ -870,9 +870,9 @@ BUILT_IN_COMMAND(cmd_figlet)
+ 		return;
+ 	}
+ 
+-	pid = fork();
++	pid = bx_nofork();
+ 	if (pid == -1) {
+-		say("FIGLET: fork() failed: %s", strerror(errno));
++		say("FIGLET: bx_nofork() failed: %s", strerror(errno));
+ 		return;
+ 	}
+ 
+-- 
+2.50.1 (Apple Git-155)
+

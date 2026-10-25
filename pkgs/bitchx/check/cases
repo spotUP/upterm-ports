@@ -1,0 +1,6 @@
+help-flag	BitchX --help | sed -n 1p
+help-h	BitchX -h | sed -n 1p
+help-word	BitchX help | sed -n 1p
+help-q	BitchX ? | sed -n 1p
+bad-option	BitchX --nosuchoption 2>&1 | sed -n 1p
+bad-option-exit	BitchX --nosuchoption >/dev/null 2>&1
