@@ -48,6 +48,14 @@ ROOT=$ROOT B=$T STATE=$T/state SYSROOT=$T PREFIX=/x SRC=$T IXEMUL=$T PKGS=xz \
 [ -f "$T/kit/userland/SOURCES.txt" ] && [ -d "$T/kit/userland-src" ] && [ ! -e "$T/kit/userland.new" ] || \
 	{ echo "test_kit_stage: good staging left no userland" >&2; bad=1; }
 
+# The staged kit says which ports commit it came from (STAGED-FROM: HEAD, plus -dirty
+# when tracked files differ), so vtcon's make dist can refuse a kit from an unmerged branch.
+head=$(git -C "$ROOT" rev-parse HEAD)
+case $(cat "$T/kit/userland/STAGED-FROM" 2>/dev/null) in
+	"$head"|"$head-dirty") ;;
+	*) echo "test_kit_stage: STAGED-FROM is missing or is not the ports HEAD $head" >&2; bad=1 ;;
+esac
+
 # A <p>_DRAWER package (vbcc): the drawer is copied whole, its licence is read from
 # inside it, the lha archives are the source with their URLs in the SOURCES.txt row.
 # A missing drawer stops kit-stage and leaves the old kit in place.
