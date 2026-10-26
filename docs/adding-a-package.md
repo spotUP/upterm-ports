@@ -160,10 +160,10 @@ Owner steps, in order:
 1. Read the diff, above all any install script and patch (they run on users' machines). Check the licence rows and the host of the URL.
 2. Fetch the archive independently and compare the sha256.
 3. `make <name>` (`JOBS=2` if the machine is busy), then `make host-<name>`.
-4. In the vtcon repository: `pkg_rows.py emit <name> --write`, then run the tests of the touched files.
-5. Rig check: start a rig, install the package with `upkg`, run the `check` cases, uninstall, confirm the drawer is gone, stop the rig.
-6. `make dist`; confirm `build/ipk/<id>_*.ipk` and the new `Packages` stanza.
-7. Merge, commit the vtcon rows, bump the version and publish the release.
+4. In the vtcon repository: `python3 tools/pkg_rows.py emit <name> --ports <this checkout> --write`, apply any hunk the generator cannot write yet, then run the tests of the touched files with `make test ONLY=<suite>` (for the rows themselves: `make test ONLY=pkg_rows`, with `UPTERM_PORTS=<this checkout>` until the ports branch is merged).
+5. Rig check: `python3 tools/rig/rig.py start --max --purpose "<session>: check <name> ipk"`, then `make wasabi`, `make amiga` and `python3 tools/rig/rig.py install`. Install the package with `upkg`, run the `check` cases, uninstall, confirm the drawer is gone, then `python3 tools/rig/rig.py stop`.
+6. `make dist`; confirm `build/ipk/<id>_*.ipk` and the new stanza in `Packages`.
+7. Merge the pull request, commit the vtcon rows, bump the version and publish the release with `gh release create` as vtcon's RULES.md describes (the upload is the owner's step).
 8. On a clean rig: `upkg update && upkg install <id>`.
 
 ## 8. Not accepted yet

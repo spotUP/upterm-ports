@@ -29,6 +29,7 @@ progress is ledgered in `thoughts/shared/plans/2026-10-04-phase0-progress.md`.
 | Build one package (fetch, patch, configure, build, install to the sysroot, check_bin) | `make <pkg>` (e.g. `make grep`; `JOBS=2` when the Mac is busy) |
 | The libraries the tools build against | `make sysroot` (libixcompat + ncurses today) |
 | macOS build of the same source + expected outputs of its check cases | `make host-<pkg>` (writes `build/expected/<pkg>/<case>.txt`) |
+| Lint a package recipe (fields, https URL, patch order, check dir) | `tools/recipe_lint.sh [pkg ...]` (changed recipes when no argument; also run by the PR workflow) |
 | Host checks of one binary | `tools/check_bin.sh <pkg> "<stack bytes or empty>" <binary>...` |
 | 68030+/FPU scan alone | `python3 tools/m68k_scan.py <binary>` |
 | Host tests of the build tools (m68k_scan.py) | `make test` |
