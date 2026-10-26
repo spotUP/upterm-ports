@@ -172,13 +172,19 @@ int main(void)
     CHECK(exec_calls == 2 && deinit_calls == 2);
     CHECK(upkg_rows_run(&rows, "upgrade", "delta", sink) == 0);
     CHECK(exec_calls == 3);
-    /* an unknown command runs nothing and rebuilds nothing */
-    CHECK(upkg_rows_run(&rows, "frobnicate", "alpha", sink) == -1);
-    CHECK(exec_calls == 3 && deinit_calls == 3);
+    /* a failed command reports RETURN_FAIL (20) like `upkg install` from a Shell, never the raw -1 opkg returns:
+     * the Workbench window and browse print "[ERROR] ... (exit N)" with this code */
+    exec_rc = -1;
+    CHECK(upkg_rows_run(&rows, "install", "alpha", sink) == 20);
+    CHECK(exec_calls == 4 && deinit_calls == 4);
+    exec_rc = 0;
+    /* an unknown command runs nothing and rebuilds nothing, and fails with the same code */
+    CHECK(upkg_rows_run(&rows, "frobnicate", "alpha", sink) == 20);
+    CHECK(exec_calls == 4 && deinit_calls == 4);
 
     /* Update runs through the same function with no package: argc 0 */
     CHECK(upkg_rows_run(&rows, "update", NULL, sink) == 0);
-    CHECK(exec_calls == 4 && exec_argc == 0 && deinit_calls == 4);
+    CHECK(exec_calls == 5 && exec_argc == 0 && deinit_calls == 5);
     CHECK(upkg_rows_run(&rows, "install", "alpha", sink) == 0 && exec_argc == 1);
 
     /* the buttons: a run disables all of them, otherwise the row's plus Update and Quit */

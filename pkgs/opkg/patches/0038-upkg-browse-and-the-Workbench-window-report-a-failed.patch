@@ -1,0 +1,89 @@
+From 8d1f9166abc4ddd20659738372c261ad8a5ae101 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 26 Oct 2026 11:50:07 +0100
+Subject: [PATCH] upkg: browse and the Workbench window report a failed command
+ as RETURN_FAIL (20), like the Shell exit
+
+Patch 0036 mapped a negative result to 20 only in main(), so the Add-ons window and browse, which run
+commands through upkg_rows_run, still printed "[ERROR] upkg install X (exit -1)". The mapping is now
+upkg_rc() in opkg_cmd.h, used by main() and upkg_rows_run; an unknown command in upkg_rows_run fails
+with the same code.
+---
+ libopkg/opkg_cmd.h  | 12 ++++++++++++
+ libopkg/upkg_rows.c |  4 ++--
+ src/opkg.c          |  9 ++-------
+ 3 files changed, 16 insertions(+), 9 deletions(-)
+
+diff --git a/libopkg/opkg_cmd.h b/libopkg/opkg_cmd.h
+index 0e09955..0ba3b95 100644
+--- a/libopkg/opkg_cmd.h
++++ b/libopkg/opkg_cmd.h
+@@ -41,6 +41,18 @@ typedef struct opkg_cmd opkg_cmd_t;
+ opkg_cmd_t *opkg_cmd_find(const char *name);
+ int opkg_cmd_exec(opkg_cmd_t * cmd, int argc, const char **argv);
+ 
++/* AmigaOS RETURN_FAIL */
++#define UPKG_RC_FAIL 20
++
++/* The code upkg reports for a command result: a failure is RETURN_FAIL (20), never the -1 several commands
++ * return (the AmigaOS Shell reads a negative code as "Unknown command"); success 0 and the positive codes a
++ * command returns itself (1: nothing matched) stay. One mapping for the Shell exit, browse and the Workbench
++ * window, so all three show the same code. */
++static inline int upkg_rc(int err)
++{
++    return err < 0 ? UPKG_RC_FAIL : err;
++}
++
+ extern int opkg_state_changed;
+ 
+ #ifdef __cplusplus
+diff --git a/libopkg/upkg_rows.c b/libopkg/upkg_rows.c
+index f86cb54..fbca9ac 100644
+--- a/libopkg/upkg_rows.c
++++ b/libopkg/upkg_rows.c
+@@ -230,7 +230,7 @@ int upkg_rows_run(upkg_rows_t *rows, const char *cmdname, const char *name, upkg
+     int rc;
+ 
+     if (!cmd)
+-        return -1;
++        return UPKG_RC_FAIL;
+     argv[0] = name;
+     argv[1] = NULL;     /* NAME NULL: a command without a package, as `upkg update` */
+     upkg_wrap_flush();
+@@ -246,7 +246,7 @@ int upkg_rows_run(upkg_rows_t *rows, const char *cmdname, const char *name, upkg
+     upkg_rows_load(rows);
+     if (sink)
+         upkg_set_sink(NULL);
+-    return rc;
++    return upkg_rc(rc);
+ }
+ 
+ /* The buttons enabled while a run goes (none: a second run or a quit would meet the first) and otherwise the
+diff --git a/src/opkg.c b/src/opkg.c
+index 48774b2..29b578f 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -589,9 +589,6 @@ static int upkg_command_index(int argc, char **argv)
+     return idx;
+ }
+ 
+-/* AmigaOS RETURN_FAIL */
+-#define UPKG_RC_FAIL 20
+-
+ int main(int argc, char *argv[])
+ {
+     int opts, err = -1, full_argc, cmd_at;
+@@ -738,8 +735,6 @@ int main(int argc, char *argv[])
+     opkg_conf_deinit();
+ 
+  err0:
+-    /* err starts at -1 and several commands return -1. A negative code is no AmigaOS return code: the
+-     * Shell reads it as "Unknown command" after the real message. A failure is RETURN_FAIL (20), the
+-     * same on the host; the positive codes a command returns itself (1: nothing matched) stay. */
+-    return err < 0 ? UPKG_RC_FAIL : err;
++    /* err starts at -1 and several commands return -1: upkg_rc makes a failure RETURN_FAIL (20) */
++    return upkg_rc(err);
+ }
+-- 
+2.50.1 (Apple Git-155)
+
