@@ -113,6 +113,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: UP-Term (vtcon) main, read only (the tty cases compile its terminfo)
+        run: git clone --depth 1 https://github.com/spotUP/UP-Term.git ../vtcon
       - name: make host-PKG for each changed recipe that has host commands
         run: |
           set -eu
