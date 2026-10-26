@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "upkg_rows.c"
 
@@ -41,7 +42,7 @@ static const char *lists[4] = {
 };
 static int list_calls, exec_calls, find_calls, deinit_calls, init_calls, feeds_calls, status_calls, sink_set, sink_cleared;
 static const char *exec_name;
-static int exec_rc;
+static int exec_rc, exec_argc = -1;
 static int order_ok = 1;
 
 char *upkg_browse_list(int which) { list_calls++; return xstrdup(lists[which]); }
@@ -49,12 +50,13 @@ static opkg_cmd_t dummy_cmd;
 opkg_cmd_t *opkg_cmd_find(const char *name)
 {
     find_calls++;
-    return !strcmp(name, "install") || !strcmp(name, "remove") || !strcmp(name, "upgrade") ? &dummy_cmd : NULL;
+    return !strcmp(name, "install") || !strcmp(name, "remove") || !strcmp(name, "upgrade") || !strcmp(name, "update") ? &dummy_cmd : NULL;
 }
 int opkg_cmd_exec(opkg_cmd_t *cmd, int argc, const char **argv)
 {
-    (void)cmd; (void)argc;
+    (void)cmd;
     exec_calls++;
+    exec_argc = argc;
     exec_name = argv[0];
     if (!sink_set || sink_cleared)
         order_ok = 0;           /* the sink must be on while the command runs */
@@ -70,6 +72,10 @@ void upkg_set_sink(upkg_sink_fn fn)
 {
     if (fn) { sink_set = 1; sink_cleared = 0; } else sink_cleared = 1;
 }
+
+static int lines_n;
+static char lines_got[16][600];
+static void line_cb(void *ctx, const char *line) { (void)ctx; snprintf(lines_got[lines_n++], sizeof lines_got[0], "%s", line); }
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "[FAIL] rows_test.c:%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 
@@ -168,6 +174,30 @@ int main(void)
     /* an unknown command runs nothing and rebuilds nothing */
     CHECK(upkg_rows_run(&rows, "frobnicate", "alpha", sink) == -1);
     CHECK(exec_calls == 3 && deinit_calls == 3);
+
+    /* Update runs through the same function with no package: argc 0 */
+    CHECK(upkg_rows_run(&rows, "update", NULL, sink) == 0);
+    CHECK(exec_calls == 4 && exec_argc == 0 && deinit_calls == 4);
+    CHECK(upkg_rows_run(&rows, "install", "alpha", sink) == 0 && exec_argc == 1);
+
+    /* the buttons: a run disables all of them, otherwise the row's plus Update and Quit */
+    CHECK(upkg_rows_buttons(1, UPKG_ACT_INSTALL | UPKG_ACT_REMOVE) == 0);
+    CHECK(upkg_rows_buttons(0, 0) == (UPKG_ACT_UPDATE | UPKG_ACT_QUIT));
+    CHECK(upkg_rows_buttons(0, UPKG_ACT_REMOVE) == (UPKG_ACT_REMOVE | UPKG_ACT_UPDATE | UPKG_ACT_QUIT));
+
+    /* the log: pieces of text become lines; a line may arrive in several pieces; tab and carriage return handled */
+    {
+        upkg_lines_t l = { {0}, 0 };
+        lines_n = 0;
+        upkg_lines_put(&l, "Installing al", 13, line_cb, NULL);
+        CHECK(lines_n == 0);
+        upkg_lines_put(&l, "pha\r\nDone\n\nA\tB", 14, line_cb, NULL);
+        CHECK(lines_n == 3 && !strcmp(lines_got[0], "Installing alpha") && !strcmp(lines_got[1], "Done") && !strcmp(lines_got[2], ""));
+        upkg_lines_end(&l, line_cb, NULL);
+        CHECK(lines_n == 4 && !strcmp(lines_got[3], "A       B"));
+        upkg_lines_end(&l, line_cb, NULL);
+        CHECK(lines_n == 4);                       /* nothing left */
+    }
 
     for (i = 0; i < 3; i++)
         upkg_rows_free(&rows);
