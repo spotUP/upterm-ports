@@ -111,3 +111,9 @@ Logs: scratchpad vbcc-ctl2.log, vbcc-noctl.log.
 - Also built build/amiga/iconprobe, wbrun, conwho in the vtcon worktree (install_rig.prepare copies them); make dist-vbcc ok.
 - Host: tests.test_dist_ipk + tests.test_dist_addons 63 tests OK (1 skipped); make test ONLY=dist_stack OK.
 - Rig 8 (--max --os 32): `vbcc_rig.py --upkg`: "[OK] vbcc via upkg: 0 failed of 13", including "[OK] remove: the record is gone". The rig 8 compile output (build/rig8/vbcc-pkg-out.txt) is the sentinel source. Rig 8 stopped: yes.
+
+## Landed
+
+- 2026-10-26: port/vbcc-kit (11 commits, head 2c1d2df, already on top of ports main 876b09e) fast-forwarded to ports main.
+- Host tests run before the push: tools/test_kit_stage.sh (ok), tools/test_m68k_scan.py (9 of 9). The ports repo has no tests/ directory; no vbcc-named test exists.
+- vtcon side: addon/vbcc-kit rebased on vtcon main and fast-forwarded to main in the same landing; the meta repos.lock pins both heads.
