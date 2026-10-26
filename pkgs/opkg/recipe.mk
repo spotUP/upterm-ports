@@ -61,6 +61,12 @@
 # patches/0028: write_status_files_if_changed returns -1 when the status file or a changed file list fails to write or close
 # (ENOSPC shows at fclose; ferror is checked too) and every caller folds it into its result, so the command exits non-zero.
 # check/status_write_rc.sh (RLIMIT_FSIZE stands in for a full disk).
+# patches/0029: libopkg/upkg_rows.c holds the add-on rows (the parser of list, list-installed, list-upgradable and list-new, and
+# the run of install, remove and upgrade with an output sink and the rebuild after it); upkg browse and the Workbench window use
+# it, so there is one parser. Pure C, no curses. check/rows.sh + check/rows_test.c (ASan, over fixture list text).
+# patches/0030: main calls upkg_wb(struct WBStartup *) when argc == 0 (a Workbench icon), after the IXSTACK setup and the feed and
+# status load; any command line runs as before. upkg_wb is a stub that logs "window opened, N rows". check/wb_start.sh +
+# check/wb_exec.c (an exec with an empty argv): called once for argc == 0, never for a command line.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

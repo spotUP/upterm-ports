@@ -1,0 +1,222 @@
+From a384bfc1ad7b90126e24ba335ec92f6f68a59da4 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 26 Oct 2026 02:53:33 +0100
+Subject: [PATCH 30/30] upkg: a start with argc == 0 (a Workbench icon) calls
+ upkg_wb
+
+Workbench starts a program from an icon with argc 0 and a struct WBStartup in argv.
+main then skips the option parsing, takes browse as the command, loads the
+configuration, feeds and status files as always, and calls upkg_wb(wb) instead of
+opkg_cmd_exec. The branch sits below the IXSTACK setup, so a GUI start keeps the
+child stack for curl. upkg_wb is a stub for now: it logs "window opened, N rows"
+(N from upkg_rows_load) to UP-Term:log/upkg-wb.log on the Amiga, and on a host build
+to $UPKG_WB_LOG, so a host test can count the calls.
+---
+ libopkg/CMakeLists.txt |  2 ++
+ libopkg/upkg_wb.c      | 44 +++++++++++++++++++++++++++++++++
+ libopkg/upkg_wb.h      | 24 ++++++++++++++++++
+ src/opkg.c             | 56 ++++++++++++++++++++++++++----------------
+ 4 files changed, 105 insertions(+), 21 deletions(-)
+ create mode 100644 libopkg/upkg_wb.c
+ create mode 100644 libopkg/upkg_wb.h
+
+diff --git a/libopkg/CMakeLists.txt b/libopkg/CMakeLists.txt
+index ec7849e..c6a4fda 100644
+--- a/libopkg/CMakeLists.txt
++++ b/libopkg/CMakeLists.txt
+@@ -24,6 +24,7 @@ set(HEADER_FILES
+     opkg_message.h
+     upkg_wrap.h
+     upkg_rows.h
++    upkg_wb.h
+     opkg_remove.h
+     opkg_solver.h
+     opkg_utils.h
+@@ -105,6 +106,7 @@ set(SOURCE_FILES
+     upkg_wrap.c
+     upkg_browse.c
+     upkg_rows.c
++    upkg_wb.c
+     opkg_remove.c
+     opkg_utils.c
+     opkg_verify.c
+diff --git a/libopkg/upkg_wb.c b/libopkg/upkg_wb.c
+new file mode 100644
+index 0000000..3543153
+--- /dev/null
++++ b/libopkg/upkg_wb.c
+@@ -0,0 +1,44 @@
++/* upkg_wb.c - upkg: the Workbench window of the add-on list (UP-Term). A stub: it logs that the
++ * window would open, with the row count, and returns. The GadTools window replaces the body.
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#include "config.h"
++
++#include <stdio.h>
++#include <stdlib.h>
++
++#include "upkg_rows.h"
++#include "upkg_wb.h"
++
++#ifdef __amigaos__
++#define WB_LOG "UP-Term:log/upkg-wb.log"
++#else
++#define WB_LOG (getenv("UPKG_WB_LOG"))
++#endif
++
++int upkg_wb(struct WBStartup *wb)
++{
++    upkg_rows_t rows = { NULL, 0 };
++    const char *log = WB_LOG, *stack = getenv("IXSTACK");
++    FILE *fp;
++    size_t n;
++
++    (void)wb;
++    n = upkg_rows_load(&rows);
++    upkg_rows_free(&rows);
++    if (!log || !*log)
++        return 0;
++    fp = fopen(log, "a");
++    if (!fp)
++        return 1;
++    fprintf(fp, "window opened, %lu rows\n", (unsigned long)n);
++#ifndef __amigaos__
++    fprintf(fp, "IXSTACK=%s\n", stack ? stack : "");
++#else
++    (void)stack;
++#endif
++    fclose(fp);
++    return 0;
++}
+diff --git a/libopkg/upkg_wb.h b/libopkg/upkg_wb.h
+new file mode 100644
+index 0000000..00b71e4
+--- /dev/null
++++ b/libopkg/upkg_wb.h
+@@ -0,0 +1,24 @@
++/* upkg_wb.h - upkg: the Workbench window of the add-on list, entered from main when upkg is
++ * started from an icon (argc == 0) (UP-Term).
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++#ifndef UPKG_WB_H
++#define UPKG_WB_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct WBStartup;
++
++/* Run the Workbench window of the add-on list; WB is the message Workbench started upkg with.
++ * Called after the configuration, the feeds and the status files are loaded. Returns the exit code.
++ * For now it only logs "window opened, N rows" (N from upkg_rows_load) to UP-Term:log/upkg-wb.log on
++ * the Amiga; on a host build to the file named by $UPKG_WB_LOG, with the IXSTACK it saw. */
++int upkg_wb(struct WBStartup *wb);
++
++#ifdef __cplusplus
++}
++#endif
++#endif                          /* UPKG_WB_H */
+diff --git a/src/opkg.c b/src/opkg.c
+index 1f974db..bf934d3 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -39,6 +39,7 @@
+ #include "opkg_download.h"
+ #include "xfuncs.h"
+ #include "upkg_wrap.h"
++#include "upkg_wb.h"
+ 
+ /* every message follows the console width; piped it is a plain printf / fprintf */
+ #define printf upkg_printf
+@@ -596,6 +597,7 @@ int main(int argc, char *argv[])
+     int nocheckfordirorfile;
+     int noreadfeedsfile;
+     int noloadconf;
++    int wb = argc == 0;
+ 
+     /* Through a pipe stdout is fully buffered: `upkg download x | reader` (the browse dialogs'
+      * programbox) would show nothing until the buffer fills or upkg exits. Lines go out as written. */
+@@ -626,27 +628,36 @@ int main(int argc, char *argv[])
+     setlocale(LC_ALL, "");
+     opkg_config->verbosity = NOTICE;
+ 
+-    /* `upkg browse ARGS`: parse the options before browse only; ARGS go to the script as they are. */
+-    full_argc = argc;
+-    cmd_at = upkg_command_index(argc, argv);
+-    if (cmd_at > 0 && !strcmp(argv[cmd_at], "browse"))
+-        argc = cmd_at + 1;
+-
+-    opts = args_parse_stage1(argc, argv);
+-    if (opts == argc || opts < 0) {
+-        fprintf(stderr, "upkg must have one sub-command argument\n");
+-        usage(1);
+-    }
++    /* Started from a Workbench icon argc is 0 and argv is a struct WBStartup, not a command line:
++     * no option parsing, the command is browse (the window), run after the feeds and status
++     * files are loaded, below the IXSTACK setup above. */
++    if (wb) {
++        full_argc = 0;
++        opts = 0;
++        cmd_name = "browse";
++    } else {
++        /* `upkg browse ARGS`: parse the options before browse only; ARGS go to the script as they are. */
++        full_argc = argc;
++        cmd_at = upkg_command_index(argc, argv);
++        if (cmd_at > 0 && !strcmp(argv[cmd_at], "browse"))
++            argc = cmd_at + 1;
++
++        opts = args_parse_stage1(argc, argv);
++        if (opts == argc || opts < 0) {
++            fprintf(stderr, "upkg must have one sub-command argument\n");
++            usage(1);
++        }
+ 
+-    cmd_name = argv[opts++];
++        cmd_name = argv[opts++];
+ 
+-    /* upkg: two-word forms. "list upgradable", "list upgradeable" and "list installed" run
+-     * list-upgradable and list-installed; any other second word is still a glob for list. */
+-    if (!strcmp(cmd_name, "list") && opts < argc) {
+-        if (!strcmp(argv[opts], "upgradable") || !strcmp(argv[opts], "upgradeable"))
+-            cmd_name = "list-upgradable", opts++;
+-        else if (!strcmp(argv[opts], "installed"))
+-            cmd_name = "list-installed", opts++;
++        /* upkg: two-word forms. "list upgradable", "list upgradeable" and "list installed" run
++         * list-upgradable and list-installed; any other second word is still a glob for list. */
++        if (!strcmp(cmd_name, "list") && opts < argc) {
++            if (!strcmp(argv[opts], "upgradable") || !strcmp(argv[opts], "upgradeable"))
++                cmd_name = "list-upgradable", opts++;
++            else if (!strcmp(argv[opts], "installed"))
++                cmd_name = "list-installed", opts++;
++        }
+     }
+ 
+     nocheckfordirorfile = !strcmp(cmd_name, "print-architecture")
+@@ -685,7 +696,7 @@ int main(int argc, char *argv[])
+             goto err0;
+     }
+ 
+-    if (args_parse_stage2(argc, argv) < 0) {
++    if (!wb && args_parse_stage2(argc, argv) < 0) {
+         fprintf(stderr, "Stage 2 argument parsing failed.\n");
+         usage(1);
+     }
+@@ -712,7 +723,10 @@ int main(int argc, char *argv[])
+     }
+ 
+     argc = full_argc;
+-    err = opkg_cmd_exec(cmd, argc - opts, (const char **)(argv + opts));
++    if (wb)
++        err = upkg_wb((struct WBStartup *)argv);
++    else
++        err = opkg_cmd_exec(cmd, argc - opts, (const char **)(argv + opts));
+ 
+     opkg_download_cleanup();
+  err1:
+-- 
+2.50.1 (Apple Git-155)
+
