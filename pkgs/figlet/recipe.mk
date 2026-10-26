@@ -18,3 +18,5 @@ figlet_INSTALL_CMD = install -d $(SYSROOT)$(PREFIX)/bin $(SYSROOT)$(PREFIX)/shar
 figlet_HOST_CONFIGURE_CMD = rsync -a --exclude .git $(figlet_SRC)/ $(figlet_HOBJ)/
 figlet_HOST_BUILD_CMD = $(MAKE) -C $(figlet_HOBJ) figlet CFLAGS="-O2 -include unistd.h" DEFAULTFONTDIR=$(figlet_HOBJ)/fonts && mkdir -p $(figlet_HOBJ)/inst/bin && \
 	cp $(figlet_HOBJ)/figlet $(figlet_HOBJ)/inst/bin/figlet
+figlet_FEED_ID   := up-figlet
+figlet_SUMMARY   := FIGlet large text banners in UP-Term:bin with the standard font in UP-Term:share/figlet
