@@ -13,16 +13,15 @@ arc=$(make -s print-${p}_ARCHIVE)
 [ -f "$arc" ] || tools/fetch.sh "$(make -s print-${p}_URL)" "$(make -s print-${p}_SHA256)" "$arc" >/dev/null
 src=$(make -s print-${p}_SRC)
 rm -f $ROOT/build/state/$p.unpacked
-mkdir -p "$ROOT/build/state"; touch "$ROOT/build/state/$p.fetched"  # the fetch rule uses seq 1 0, which BSD seq answers with "1 0"
-gmake -s $ROOT/build/state/$p.unpacked >/dev/null
+make -s $ROOT/build/state/$p.unpacked >/dev/null
 pd=pkgs/$p/patches
 [ -z "$(git status --porcelain $pd)" ] || fail "$pd is not clean before the test"
-gmake -s $p-patches >/dev/null
+make -s $p-patches >/dev/null
 [ -z "$(git status --porcelain $pd)" ] || fail "$p-patches on an unchanged tree changed $pd: $(git status --porcelain $pd | head -3 | tr '\n' ' ')"
 n=$(ls $pd | wc -l)
 echo "test" >> "$src/README.md"
 git -C "$src" -c user.name=t -c user.email=t@localhost commit -qam "test: an extra commit"
-gmake -s $p-patches >/dev/null
+make -s $p-patches >/dev/null
 [ "$(ls $pd | wc -l)" -eq $((n + 1)) ] || fail "a new commit did not add exactly one file"
 [ -z "$(git status --porcelain $pd | grep -v '^??')" ] || fail "a new commit changed an existing patch"
 rm -f "$(git status --porcelain $pd | sed -n 's/^?? //p')"
