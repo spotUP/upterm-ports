@@ -123,7 +123,7 @@ $(1): $(STATE)/$(1).checked
 $(STATE)/$(1).fetched: pkgs/$(1)/recipe.mk
 	@mkdir -p $(STATE)
 	$$(if $$($(1)_OWN)$$($(1)_LHA_URLS),,$(ROOT)/tools/fetch.sh $$($(1)_URL) $$($(1)_SHA256) $$($(1)_ARCHIVE))
-	$$(foreach i,$$(shell seq 1 $$(words $$($(1)_LHA_URLS))),$(ROOT)/tools/fetch.sh $$(word $$(i),$$($(1)_LHA_URLS)) \
+	$$(foreach i,$$(if $$($(1)_LHA_URLS),$$(shell seq 1 $$(words $$($(1)_LHA_URLS)))),$(ROOT)/tools/fetch.sh $$(word $$(i),$$($(1)_LHA_URLS)) \
 		$$(word $$(i),$$($(1)_LHA_SHA256S)) $(DL)/$$(notdir $$(word $$(i),$$($(1)_LHA_URLS)));)
 	@touch $$@
 
