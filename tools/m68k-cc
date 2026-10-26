@@ -1,11 +1,17 @@
-#!/bin/sh
+#!/bin/bash
 # The C compiler every recipe uses: bebbo's m68k-amigaos-gcc for ixemul.
 # Compiles get the CPU flags as given; a call that links drops them,
 # because with -m68020 the driver picks the multilib libnix crt0
 # (lib/libm020/crt0.o: undefined DOSBase, __nocommandline) instead of
 # ixemul's crt0.o (measured 2026-10-04; neovim-amiga D-7, cpython-amiga).
-# The code stays 68020: only crt0 and libgcc come from the 68000 set.
+# Only crt0 and libgcc come from the 68000 set: a call that compiles and
+# links in one go ("cc -m68020 -o x a.c b.c") first compiles each source
+# alone with -c and the CPU flags, then links the objects without them.
+# Before that split such a call compiled its sources for 68000 as well
+# (column, sqlite3, ptyrun: measured 2026-10-26 by counting extb.l, mul.l,
+# div.l and scaled-index operands in the installed binaries).
 AMIGA=${AMIGA:-$HOME/opt/amiga}
+GCC=$AMIGA/bin/m68k-amigaos-gcc
 link=1
 for a; do
 	case $a in -c|-S|-E|-M|-MM) link=0 ;; esac
@@ -13,21 +19,51 @@ done
 # -fPIC/-fpic never: AmigaOS hunk executables have no GOT, and gcc's PIC
 # code does not assemble here ("lea (%pc, _GLOBAL_OFFSET_TABLE_@GOTPC)";
 # zlib 1.3.2's configure adds -fPIC whenever the compiler is gcc).
+args=()
 for a; do
-	shift
 	case $a in -fPIC|-fpic) continue ;; esac
-	if [ $link = 1 ]; then
-		case $a in -m680[0-6]0|-m68020-60|-m68020-40|-mcpu=*) continue ;; esac
-	fi
-	set -- "$@" "$a"
+	args+=("$a")
+done
+[ $link = 1 ] || exec "$GCC" -mcrt=ixemul "${args[@]}"
+
+# Split the link call. cc: the options a compile takes (CPU flags included).
+# ld: the link line, sources replaced by their objects, CPU flags dropped.
+# Options with a separate value carry it along; -o, -Xlinker, -l and -Wl,
+# belong to the link only, and inputs that are not sources (objects,
+# archives) are not given to the compiles.
+cc=() ld=() srcs=()
+tmp=
+n=${#args[@]} i=0
+while [ $i -lt $n ]; do
+	a=${args[$i]}
+	case $a in
+	-o|-Xlinker)
+		ld+=("$a" "${args[$((i + 1))]}"); i=$((i + 2)); continue ;;
+	-I|-D|-U|-include|-imacros|-isystem|-idirafter|-iquote|-x|-MF|-MT|-MQ)
+		cc+=("$a" "${args[$((i + 1))]}"); i=$((i + 2)); continue ;;
+	-x*) cc+=("$a") ;;
+	-o?*|-l*|-L*|-Wl,*) ld+=("$a") ;;
+	-m680[0-6]0|-m68020-60|-m68020-40|-mcpu=*) cc+=("$a") ;;
+	-*) cc+=("$a") ld+=("$a") ;;
+	*.c|*.cc|*.cpp|*.cxx|*.C|*.s|*.S|*.i)
+		[ -n "$tmp" ] || {
+			tmp=$(mktemp -d "${TMPDIR:-/tmp}/m68k-cc.XXXXXX") || exit 1
+			trap 'rm -rf "$tmp"' EXIT
+		}
+		srcs+=("$a")
+		ld+=("$tmp/${#srcs[@]}.o") ;;
+	*) ld+=("$a") ;;
+	esac
+	i=$((i + 1))
+done
+for ((k = 0; k < ${#srcs[@]}; k++)); do
+	"$GCC" -mcrt=ixemul "${cc[@]}" -c "${srcs[$k]}" -o "$tmp/$((k + 1)).o" || exit
 done
 # A link ends with libixcompat.a: the headers rename stat, fstat, lstat and
 # fstatat to __stat50 and so on (ixemul-vtcon, vtcon-4), and the library
 # vectors behind them are reached through the stubs in that archive. After
 # the objects, so the archive is searched only for what is still undefined;
 # a recipe that already lists it earlier keeps working.
-if [ $link = 1 ]; then
-	ixc=$(cd "$(dirname "$0")/.." && pwd)/build/sysroot/UP-Term/lib/libixcompat.a
-	[ -f "$ixc" ] && set -- "$@" "$ixc"
-fi
-exec "$AMIGA/bin/m68k-amigaos-gcc" -mcrt=ixemul "$@"
+ixc=$(cd "$(dirname "$0")/.." && pwd)/build/sysroot/UP-Term/lib/libixcompat.a
+[ -f "$ixc" ] && ld+=("$ixc")
+"$GCC" -mcrt=ixemul "${ld[@]}"
