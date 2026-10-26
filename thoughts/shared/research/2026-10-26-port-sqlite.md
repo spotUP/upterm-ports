@@ -80,3 +80,10 @@ Status: amiga build green (68020 soft-float, __stack 262144, 1682976 bytes). Rig
 - Layer to fix: ixemul (lseek.c). Defer the extension: remember the position past EOF and extend in the next write()/ftruncate (or
   make the extension happen only when a write follows). No port patch is right: any program that reads beyond EOF of a writable file
   (SQLite does for every new database) is hit. After the fix: rerun userland_rig.py --only sqlite (expect 9 of 9; the two-shell lock test still unrun).
+
+## Write failure: fix (2026-10-26, vtcon-05 session 6)
+ixemul-vtcon branch fix/lseek-no-extend (38eeb96, pushed to spotUP/ixemul-vtcon): lseek() past EOF only records the
+offset (f_seek_pending); read there returns 0, fstat keeps the real size, write() extends with zeros first.
+Library md5 5e2453b8252cb5253bc4aef3beb835bd (FPU build, /Users/spot/Code/UP-Term/ixemul-lseek/build295/library/68020/68881/amigaos/ixemul.library, 201048 bytes).
+Rig 8, old lib f8c21ce31fc769b9006f6e9bfeb478ea: lseekprobe size0 FAIL. New lib: lseekprobe 7 of 7 OK.
+userland_rig.py --only sqlite on the new lib: 9 of 9 PASS (persist, journal and fts5 included). Two-shell lock test still unrun.
