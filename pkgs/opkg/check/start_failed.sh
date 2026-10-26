@@ -34,9 +34,22 @@ grep -q 'upkg cannot make its temporary drawer .*absent.*: No such file or direc
 rc=0
 env OPKG_CONF_DIR="$w/etc" UPKG_WB_LOG="$log" "$w/wb_exec" "$upkg" > "$w/wb.out" 2>&1 || rc=$?
 [ "$rc" != 0 ] || { echo "[FAIL] start_failed: the icon start without a temporary drawer exited 0"; exit 1; }
-n=$(grep -c '^startup failed: upkg cannot make its temporary drawer ' "$log" || true)
+n=$(grep -c '^startup failed: upkg cannot make its temporary drawer$' "$log" || true)
 [ "$n" = 1 ] || { cat "$log"; echo "[FAIL] start_failed: $n startup-failed lines for the icon start, wanted 1"; exit 1; }
 ! grep -q '^window opened' "$log" || { echo "[FAIL] start_failed: upkg_wb ran after the failed start"; exit 1; }
+
+# a long path: no requester body line is wider than 60 columns (a 640 pixel screen in topaz 8 clips the rest), the
+# hint line and the whole path survive
+rm -f "$log"; long=$w/$(printf 'd%.0s' $(seq 1 90))
+conf "$long"
+env OPKG_CONF_DIR="$w/etc" UPKG_WB_LOG="$log" "$w/wb_exec" "$upkg" > "$w/long.out" 2>&1 || true
+sed 's/^startup failed: //' "$log" > "$w/body.txt"
+wide=$(awk '{ if (length($0) > 60) n++ } END { print n + 0 }' "$w/body.txt")
+[ "$wide" = 0 ] || { cat "$w/body.txt"; echo "[FAIL] start_failed: $wide requester body lines are wider than 60 columns"; exit 1; }
+[ "$(wc -l < "$w/body.txt")" -ge 3 ] || { cat "$w/body.txt"; echo "[FAIL] start_failed: the requester body is not folded into lines"; exit 1; }
+grep -q 'Is TMP: assigned (Assign TMP: T:)?$' "$w/body.txt" || { cat "$w/body.txt"; echo "[FAIL] start_failed: the hint is missing from the requester body"; exit 1; }
+
+tr -d '\n' < "$w/body.txt" | grep -q "$long/opkg-" || { cat "$w/body.txt"; echo "[FAIL] start_failed: the folded body lost part of the path"; exit 1; }
 
 # a good tmp_dir: no such line
 rm -f "$log"; conf "$w/tmp"
