@@ -4,9 +4,12 @@ where sub-command is one of:
 Package Manipulation:
   update                      Update list of available packages
   upgrade                     Upgrade installed packages
+  upgrade --all               Same as upgrade
   dist-upgrade                Upgrade operation that allows package removal
                               (libsolv backend)
   install <pkgs>              Install package(s)
+  install --all               Install every package not installed yet,
+                              after asking all their questions first
   configure <pkgs>            Configure unpacked package(s)
   remove <pkgs|glob>          Remove package(s)
   clean                       Clean internal cache

@@ -57,7 +57,7 @@ int opkg_cmd_exec(opkg_cmd_t *cmd, int argc, const char **argv)
     (void)cmd;
     exec_calls++;
     exec_argc = argc;
-    exec_name = argv[0];
+    exec_name = argc > 0 ? argv[0] : "";
     if (!sink_set || sink_cleared)
         order_ok = 0;           /* the sink must be on while the command runs */
     return exec_rc;
@@ -197,6 +197,35 @@ int main(void)
     CHECK(exec_calls == 5 && exec_argc == 0 && deinit_calls == 5);
     CHECK(upkg_rows_run(&rows, "install", "alpha", sink) == 0 && exec_argc == 1);
 
+    /* bulk: Install All covers the available and new rows, Update All the upgradable ones; the command gets all names */
+    {
+        size_t k, want_i = 0, want_u = 0, ni, nu;
+        char **bi, **bu, *t;
+
+        for (k = 0; k < rows.n; k++) {
+            want_i += rows.row[k].kind == UPKG_ROW_AVAILABLE || rows.row[k].kind == UPKG_ROW_NEW;
+            want_u += rows.row[k].kind == UPKG_ROW_UPGRADE;
+        }
+        bi = upkg_rows_bulk_names(&rows, 'I', &ni);
+        bu = upkg_rows_bulk_names(&rows, 'U', &nu);
+        CHECK(ni == want_i && nu == want_u && nu == 1 && ni >= 2);
+        CHECK(!strcmp(bi[0], "alpha") && !strcmp(bi[1], "bravo") && bi[ni] == NULL && !strcmp(bu[0], "delta") && bu[1] == NULL);
+        CHECK(upkg_rows_run_names(&rows, "install", (int)ni, (const char **)bi, NULL) == 0);
+        CHECK(exec_argc == (int)ni && !strcmp(exec_name, "alpha"));
+        CHECK(upkg_rows_run_names(&rows, "upgrade", 0, NULL, NULL) == 0 && exec_argc == 0);   /* upgrade of everything: no names */
+        upkg_rows_bulk_free(bi);
+        upkg_rows_bulk_free(bu);
+        t = upkg_rows_bulk_text('I', 3, 1258291);
+        CHECK(!strcmp(t, "Install all 3 add-ons? Total download: 1.2 MB."));
+        free(t);
+        t = upkg_rows_bulk_text('U', 1, 500);
+        CHECK(!strcmp(t, "Update all 1 add-on? Total download: 500 bytes."));
+        free(t);
+        t = upkg_rows_bulk_text('U', 2, 20480);
+        CHECK(!strcmp(t, "Update all 2 add-ons? Total download: 20.0 KB."));
+        free(t);
+    }
+
     /* the buttons: a run disables all of them, otherwise the row's plus Update and Quit */
     CHECK(upkg_rows_buttons(1, UPKG_ACT_INSTALL | UPKG_ACT_REMOVE) == 0);
     CHECK(upkg_rows_buttons(0, 0) == (UPKG_ACT_UPDATE | UPKG_ACT_QUIT));
@@ -287,6 +316,8 @@ int main(void)
         CHECK(upkg_rows_key_action(127, &plain) == 0);
         CHECK(upkg_rows_key_action('r', &inst) == 0);     /* the Remove key moved to Delete */
         CHECK(upkg_rows_key_action('i', &plain) == 'i' && upkg_rows_key_action('u', &upg) == 'u');
+        CHECK(upkg_rows_key_action('I', &inst) == 'I' && upkg_rows_key_action('U', &plain) == 'U');   /* Install All, Update All */
+        CHECK(upkg_rows_key_action('I', NULL) == 'I' && upkg_rows_key_action('U', NULL) == 'U');     /* with no row */
 
         v = upkg_rows_launch_status("charlie", 5);
         CHECK(!strcmp(v, "charlie exited with code 5"));
