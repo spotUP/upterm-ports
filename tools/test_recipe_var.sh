@@ -6,7 +6,10 @@ set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/tools/recipe-var.sh"
 bad=0
+# A local recipe (_LOCAL: ixcompat) takes its version from a sibling checkout (git describe in
+# ixemul-vtcon), which a CI runner does not have, so it is not read here.
 for p in $(make -s -C "$ROOT" print-PKGS); do
+	[ -z "$(var "$p" LOCAL)" ] || continue
 	[ -n "$(var "$p" VERSION)" ] || { echo "test_recipe_var: $p: ${p}_VERSION reads empty" >&2; bad=1; }
 done
 # A "#" in a recipe variable starts a make comment unless written "\#": git's install line was cut

@@ -1,7 +1,7 @@
 #!/bin/sh
 # recipe_lint.sh PKG...: static checks of pkgs/<pkg>/recipe.mk, read through recipe-var.sh (make print-%).
 # Errors (exit 1): a field the build needs is empty, the URL is not https, a patch file is not *.patch,
-# a program (_BINS) has no check/cases. Warning: no _LICENSE_FILES (kit-stage falls back to COPYING).
+# a program (_BINS) has neither check/cases nor a check/tty file. Warning: no _LICENSE_FILES (kit-stage falls back to COPYING).
 # Fields of own programs (_OWN) and prebuilt packages (_LHA_URLS) differ: no URL or sha256 is asked of them.
 # The download and the sha256 compare are not here: tools/fetch.sh does that (make <pkg>.fetched, CI job "sha256").
 set -eu
@@ -37,7 +37,7 @@ for p in "$@"; do
 		case "$f" in *.patch) ;; *) err "$p" "patches/$(basename "$f") is not a *.patch file" ;; esac
 	done
 	if [ -n "$(var "$p" BINS)" ] && [ -z "$own" ]; then
-		[ -s "$ROOT/pkgs/$p/check/cases" ] || [ -d "$ROOT/pkgs/$p/check/tty" ] || err "$p" "has _BINS but no pkgs/$p/check/cases"
+		[ -s "$ROOT/pkgs/$p/check/cases" ] || [ -s "$ROOT/pkgs/$p/check/tty" ] || err "$p" "has _BINS but no pkgs/$p/check/cases"
 	fi
 done
 [ "$bad" = 0 ] && echo "recipe_lint: $* ok"

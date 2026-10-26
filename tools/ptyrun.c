@@ -21,6 +21,8 @@
  *
  * ixemul has no fork: the child is a vfork that only sets up its own
  * kernel state and execs (setsid, open, TIOCSCTTY, dup2). */
+/* glibc declares posix_openpt, grantpt, unlockpt and ptsname only under a feature macro; macOS ignores it */
+#define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
