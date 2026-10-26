@@ -12,6 +12,10 @@ vim_URL       := https://github.com/vim/vim/archive/refs/tags/v$(vim_VERSION).ta
 vim_ARCHIVE   := $(DL)/vim-$(vim_VERSION).tar.gz
 vim_SHA256    := 9e97414b85bdcb2d28d5264c65dd730d86b9a75319b005c63da0bc130c715a2f
 vim_LICENSE   := Vim
+# The feed (vtcon tools/pkg_rows.py): the package id and the Packages Description.
+vim_FEED_ID   := up-vim
+vim_SUMMARY   := Vim 9.2.1202 in UP-Term:bin and UP-Term:share/vim
+vim_FEED_MIN_BASE := 1.0
 vim_LICENSE_FILES := LICENSE
 vim_DEPS      := ixcompat ncurses
 vim_FEATURES  := --with-features=small --disable-gui --without-x --disable-nls --disable-gpm \

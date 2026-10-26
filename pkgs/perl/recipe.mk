@@ -10,6 +10,10 @@ perl_URL       := https://www.cpan.org/src/5.0/perl-$(perl_VERSION).tar.gz
 perl_ARCHIVE   := $(DL)/perl-$(perl_VERSION).tar.gz
 perl_SHA256    := 1137740985837b5cdf15f0cfab932279dcb4352f912fed6fc144e8b4f0823627
 perl_LICENSE   := Artistic-1.0-Perl OR GPL-1.0-or-later
+# The feed (vtcon tools/pkg_rows.py): the package id and the Packages Description.
+perl_FEED_ID   := up-perl
+perl_SUMMARY   := Perl 5.42.3 in UP-Term:bin
+perl_FEED_MIN_BASE := 1.0
 perl_LICENSE_FILES := README Copying Artistic
 perl_DEPS      := ixcompat
 perl_CROSS_VER := 1.6.5
