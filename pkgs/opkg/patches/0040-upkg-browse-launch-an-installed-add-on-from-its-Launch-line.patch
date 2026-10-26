@@ -1,0 +1,314 @@
+From 2a6720162f349137f565d5c90b87ad5e41b62055 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 00:02:32 +0100
+Subject: [PATCH] upkg browse: launch an installed add-on from its Launch line
+
+Enter on an installed row whose control file carries a Launch: line leaves curses, runs the line through xsystem (sh -c, so the program's stack cookie is honoured by ixemul execve), resumes browse and reloads the rows. The exit code shows in the status line as NAME exited with code N. Remove moves from r to Delete. Footer hints come from ch_menu_hints.
+---
+ libopkg/upkg_browse.c |  41 +++++++++++++----
+ libopkg/upkg_rows.c   | 102 ++++++++++++++++++++++++++++++++++++++++++
+ libopkg/upkg_rows.h   |  24 ++++++++++
+ 3 files changed, 158 insertions(+), 9 deletions(-)
+
+diff --git a/libopkg/upkg_browse.c b/libopkg/upkg_browse.c
+index 7ef89a0..769a47b 100644
+--- a/libopkg/upkg_browse.c
++++ b/libopkg/upkg_browse.c
+@@ -18,6 +18,7 @@
+ #include <sys/stat.h>
+ 
+ #include <upkgui/ui.h>
++#include <upkgui/chrome.h>
+ 
+ #include "opkg_conf.h"
+ #include "opkg_cmd.h"
+@@ -29,9 +30,9 @@
+ #include "upkg_browse.h"
+ #include "upkg_rows.h"
+ 
+-#define USAGE "usage: upkg browse\nkeys: Up Down move, Enter info, i install, r remove, u upgrade, q quit"
++#define USAGE "usage: upkg browse\nkeys: Up Down move, Enter info (launch when the add-on has a Launch line), i install, Delete remove, u upgrade, q quit"
+ #define TITLE "UP-TERM ADD-ONS"
+-#define PROMPT "Enter info   i install   r remove   u upgrade   q quit"
++#define PROMPT "Enter info or launch   i install   Delete remove   u upgrade   q quit"
+ 
+ /* dialog colour codes of the menu: upgrade yellow, installed green, new cyan */
+ #define C_UPGRADE "\\Z3"
+@@ -42,6 +43,8 @@
+ static upkg_rows_t rows;
+ static entry *ents;
+ static char **items;
++static unsigned *eflags;
++static char status[160];
+ static size_t nitems;
+ 
+ static void menu_free(void)
+@@ -52,6 +55,8 @@ static void menu_free(void)
+         free(items[i]);
+     free(ents);
+     free(items);
++    free(eflags);
++    eflags = NULL;
+     ents = NULL;
+     items = NULL;
+     nitems = 0;
+@@ -82,6 +87,7 @@ static void menu_build(void)
+     status = xcalloc(rows.n, sizeof *status);
+     items = xcalloc(rows.n, sizeof *items);
+     ents = xcalloc(rows.n, sizeof *ents);
++    eflags = xcalloc(rows.n, sizeof *eflags);
+     nitems = rows.n;
+ 
+     for (i = 0; i < rows.n; i++) {
+@@ -99,6 +105,8 @@ static void menu_build(void)
+             sprintf_alloc(&items[i], "%s%s", colour, status[i]);
+         }
+         free(status[i]);
++        if (r->kind == UPKG_ROW_INSTALLED || r->kind == UPKG_ROW_UPGRADE)
++            eflags[i] |= CH_ENTRY_INSTALLED | (r->launch && *r->launch ? CH_ENTRY_LAUNCH : 0);
+         ents[i].tag = r->name;
+         ents[i].item = items[i];
+     }
+@@ -307,16 +315,17 @@ int upkg_browse(int argc, char **argv)
+     }
+ 
+     for (;;) {
+-        int key, isinst, isupg, sel;
++        int key, action, isinst, isupg, sel;
+         const char *tag;
+ 
+         menu_build();
+-        snprintf(count, sizeof count, "%lu add-ons", (unsigned long)rows.n);
++        snprintf(count, sizeof count, "%lu add-ons%s%s", (unsigned long)rows.n, *status ? "   " : "", status);
+         ui_opt.backtitle = count;
+         ui_opt.entries = ents;
++        ui_opt.entry_flags = eflags;
+         ui_opt.nentries = (int)rows.n;
+         ui_opt.default_item = last;
+-        ui_opt.hotkeys = "iruq";
++        ui_opt.hotkeys = "iu\177q";
+         ui_opt.colors = 1;
+         ui_prepare();
+         rc = ui_view(K_MENU, PROMPT, NULL);
+@@ -346,7 +355,19 @@ int upkg_browse(int argc, char **argv)
+         isinst = rows.row[sel].kind == UPKG_ROW_INSTALLED || rows.row[sel].kind == UPKG_ROW_UPGRADE;
+         isupg = rows.row[sel].kind == UPKG_ROW_UPGRADE;
+ 
+-        if (key == 0) {
++        status[0] = '\0';
++        if (key == 0 && upkg_rows_key_action(0, &rows.row[sel]) == 'l') {
++            char *st;
++            int lrc;
++
++            ui_suspend();
++            lrc = upkg_rows_launch_run(&rows, last, rows.row[sel].launch);
++            ui_resume();
++            st = upkg_rows_launch_status(last, lrc);
++            snprintf(status, sizeof status, "%s", st);
++            free(st);
++            action = 0;
++        } else if (key == 0) {
+             const char *b = info_box(last, isinst, isupg);
+ 
+             if (!b) {
+@@ -355,10 +376,12 @@ int upkg_browse(int argc, char **argv)
+                 rc = 2;
+                 break;
+             }
+-            key = !strcmp(b, "Install") ? 'i' : !strcmp(b, "Remove") ? 'r' : !strcmp(b, "Upgrade") ? 'u' : 0;
++            action = !strcmp(b, "Install") ? 'i' : !strcmp(b, "Remove") ? 'r' : !strcmp(b, "Upgrade") ? 'u' : 0;
++        } else {
++            action = upkg_rows_key_action(key, &rows.row[sel]);
+         }
+-        if (key) {
+-            int r = act(key, last, isinst, isupg);
++        if (action) {
++            int r = act(action, last, isinst, isupg);
+ 
+             if (r == 2) {
+                 ui_stop();
+diff --git a/libopkg/upkg_rows.c b/libopkg/upkg_rows.c
+index fbca9ac..692fc7b 100644
+--- a/libopkg/upkg_rows.c
++++ b/libopkg/upkg_rows.c
+@@ -18,6 +18,7 @@
+ #include "xfuncs.h"
+ #include "upkg_browse.h"
+ #include "upkg_rows.h"
++#include "xsystem.h"
+ 
+ #define LISTS_DEFAULT "/UP-Term/pkg/upkg/lists"
+ 
+@@ -68,6 +69,7 @@ void upkg_rows_free(upkg_rows_t *rows)
+         free(rows->row[i].installed);
+         free(rows->row[i].available);
+         free(rows->row[i].desc);
++        free(rows->row[i].launch);
+     }
+     free(rows->row);
+     rows->row = NULL;
+@@ -108,6 +110,7 @@ void upkg_rows_parse(upkg_rows_t *rows, const char *all, const char *inst, const
+         r->available = dupn(rest, vl);
+         r->desc = sep2 ? dupn(sep2 + 3, rl - vl - 3) : xstrdup("");
+         r->installed = xstrdup("");
++        r->launch = xstrdup("");
+         r->kind = UPKG_ROW_AVAILABLE;
+         if (fresh && find_name(fresh, r->name, nl, &tl))
+             r->kind = UPKG_ROW_NEW;
+@@ -138,8 +141,17 @@ size_t upkg_rows_load(upkg_rows_t *rows)
+ {
+     char *all = upkg_browse_list(0), *inst = upkg_browse_list(1), *upg = upkg_browse_list(2),
+         *fresh = upkg_browse_list(3);
++    size_t i;
+ 
+     upkg_rows_parse(rows, all, inst, upg, fresh);
++    for (i = 0; i < rows->n; i++) {
++        upkg_row_t *r = &rows->row[i];
++
++        if (r->kind == UPKG_ROW_INSTALLED || r->kind == UPKG_ROW_UPGRADE) {
++            free(r->launch);
++            r->launch = upkg_rows_launch(r->name);
++        }
++    }
+     free(all);
+     free(inst);
+     free(upg);
+@@ -335,3 +347,93 @@ int upkg_rows_interactive(const char *name)
+     closedir(d);
+     return found;
+ }
++
++/* The value of FIELD in the control file at PATH: the text after "FIELD:" and its blanks up to the end of the
++ * line, trailing blanks and CR dropped. The first match wins; continuation lines (they start with a blank) are
++ * not part of a one-line field. */
++char *upkg_rows_control_field(const char *path, const char *field)
++{
++    char line[1024];
++    size_t fl = strlen(field);
++    FILE *fp = fopen(path, "r");
++    char *value = NULL;
++
++    if (!fp)
++        return NULL;
++    while (!value && fgets(line, sizeof line, fp)) {
++        size_t k = strlen(line);
++        const char *v;
++
++        while (k && (line[k - 1] == '\n' || line[k - 1] == '\r' || line[k - 1] == ' ' || line[k - 1] == '\t'))
++            line[--k] = '\0';
++        if (strncmp(line, field, fl) || line[fl] != ':')
++            continue;
++        v = line + fl + 1;
++        while (*v == ' ' || *v == '\t')
++            v++;
++        value = xstrdup(v);
++    }
++    fclose(fp);
++    return value;
++}
++
++char *upkg_rows_launch(const char *name)
++{
++    const char *dir = getenv("UPKG_INFO_DIR");
++    char *path, *value;
++
++    if (!dir || !*dir)
++        dir = opkg_config && opkg_config->default_dest ? opkg_config->default_dest->info_dir : NULL;
++    if (!dir || !*dir)
++        return xstrdup("");
++    sprintf_alloc(&path, "%s/%s.control", dir, name);
++    value = upkg_rows_control_field(path, "Launch");
++    free(path);
++    return value ? value : xstrdup("");
++}
++
++int upkg_rows_key_action(int hotkey, const upkg_row_t *row)
++{
++    int installed = row && (row->kind == UPKG_ROW_INSTALLED || row->kind == UPKG_ROW_UPGRADE);
++
++    switch (hotkey) {
++    case 0:
++        return installed && row->launch && *row->launch ? 'l' : 0;
++    case 127:
++        return installed ? 'r' : 0;
++    case 'i':
++    case 'u':
++        return hotkey;
++    default:
++        return 0;
++    }
++}
++
++char *upkg_rows_launch_status(const char *name, int rc)
++{
++    char *s;
++
++    if (rc < 0)
++        sprintf_alloc(&s, "%s could not be started", name);
++    else
++        sprintf_alloc(&s, "%s exited with code %d", name, rc);
++    return s;
++}
++
++int upkg_rows_launch_run(upkg_rows_t *rows, const char *name, const char *line)
++{
++    const char *argv[4];
++    int rc;
++
++    (void)name;
++    argv[0] = "sh";
++    argv[1] = "-c";
++    argv[2] = line;
++    argv[3] = NULL;
++    fflush(stdout);
++    fflush(stderr);
++    rc = xsystem(argv);
++    hash_reload();
++    upkg_rows_load(rows);
++    return rc;
++}
+diff --git a/libopkg/upkg_rows.h b/libopkg/upkg_rows.h
+index b4814a1..0c90dfd 100644
+--- a/libopkg/upkg_rows.h
++++ b/libopkg/upkg_rows.h
+@@ -29,6 +29,7 @@ typedef struct {
+     char *installed;            /* installed version, "" when not installed */
+     char *available;            /* the feed's version (the newer one for UPKG_ROW_UPGRADE) */
+     char *desc;                 /* "" when the feed has none */
++    char *launch;               /* the installed package's "Launch:" line (an AmigaDOS command line), "" when none */
+ } upkg_row_t;
+ 
+ typedef struct {
+@@ -45,6 +46,29 @@ size_t upkg_rows_load(upkg_rows_t *rows);
+ 
+ void upkg_rows_free(upkg_rows_t *rows);
+ 
++/* The value of the control field FIELD ("Launch") in the control text at PATH, malloc; NULL when the file or the
++ * field is absent. The field name is matched exactly at the start of a line, the value is trimmed. */
++char *upkg_rows_control_field(const char *path, const char *field);
++
++/* The "Launch:" line of the installed package NAME, read from its installed control file (<info_dir>/NAME.control;
++ * UPKG_INFO_DIR overrides the directory); malloc, "" when the package has none or is not installed. */
++char *upkg_rows_launch(const char *name);
++
++/* What a key does on ROW in the browse list. HOTKEY is ui_hotkey(): 0 Enter, 'i' install, 'u' upgrade, 127 Delete.
++ * Returns the action letter: 'l' launch (Enter on an installed row with a Launch line), 'r' remove (Delete on an
++ * installed row), 'i', 'u' as typed, 0 for Enter on any other row (the info box) and for every key that does
++ * nothing (a letter 'r' no longer removes). */
++int upkg_rows_key_action(int hotkey, const upkg_row_t *row);
++
++/* "<NAME> exited with code N"; malloc */
++char *upkg_rows_launch_status(const char *name, int rc);
++
++/* Run the Launch line of ROW in the console the caller has left curses for: `sh -c LINE` through xsystem (a
++ * vfork + exec, so ixemul's execve and vsh give a native program the stack its $STACK: cookie asks for; no
++ * cookie reader of our own). Afterwards the hash and ROWS are loaded again (the row pointer is then stale).
++ * Returns the program's exit code, -1 when it could not be started. */
++int upkg_rows_launch_run(upkg_rows_t *rows, const char *name, const char *line);
++
+ /* "installed V", "upgrade X to Y", "new V" or "available V"; malloc */
+ char *upkg_rows_status(const upkg_row_t *row);
+ 
+-- 
+2.50.1 (Apple Git-155)
+

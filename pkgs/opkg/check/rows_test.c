@@ -68,6 +68,16 @@ void pkg_hash_init(void) { init_calls++; }
 int pkg_hash_load_feeds(void) { feeds_calls++; return 0; }
 int pkg_hash_load_status_files(void) { status_calls++; return 0; }
 void upkg_wrap_flush(void) {}
+/* browse launch: xsystem records the argv it was given and returns the exit code the test sets */
+static int sys_calls, sys_rc, sys_deinit_before;
+static char sys_line[256];
+int xsystem(const char *argv[])
+{
+    sys_calls++;
+    sys_deinit_before = deinit_calls;
+    snprintf(sys_line, sizeof sys_line, "%s|%s|%s", argv[0], argv[1], argv[2]);
+    return sys_rc;
+}
 static void sink(const char *t, size_t n) { (void)t; (void)n; }
 void upkg_set_sink(upkg_sink_fn fn)
 {
@@ -224,6 +234,83 @@ int main(void)
         CHECK(upkg_rows_interactive("ask") == 0);
         remove(path);
         rmdir(dir);
+    }
+
+    /* browse launch (patches/0040): the Launch line of an installed package's control file */
+    {
+        char dir[] = "/tmp/rows_info.XXXXXX";
+        char path[256];
+        FILE *fp;
+        char *v;
+        upkg_row_t plain = {0}, inst = {0}, upg = {0};
+        int deinit_start;
+
+        CHECK(mkdtemp(dir) != NULL);
+        snprintf(path, sizeof path, "%s/charlie.control", dir);
+        fp = fopen(path, "w");
+        CHECK(fp != NULL);
+        fputs("Package: charlie\nVersion: 3.1\nLaunch:   Work:Tools/charlie -x  \r\nDescription: d\n", fp);
+        fclose(fp);
+        snprintf(path, sizeof path, "%s/delta.control", dir);
+        fp = fopen(path, "w");
+        CHECK(fp != NULL);
+        fputs("Package: delta\nVersion: 3.0\nLaunchish: no\n", fp);
+        fclose(fp);
+        setenv("UPKG_INFO_DIR", dir, 1);
+
+        v = upkg_rows_launch("charlie");
+        CHECK(!strcmp(v, "Work:Tools/charlie -x"));
+        free(v);
+        v = upkg_rows_launch("delta");               /* a field that only starts with Launch is not Launch */
+        CHECK(!strcmp(v, ""));
+        free(v);
+        v = upkg_rows_launch("nosuch");
+        CHECK(!strcmp(v, ""));
+        free(v);
+
+        upkg_rows_free(&rows);
+        CHECK(upkg_rows_load(&rows) == 6);
+        CHECK(!strcmp(by_name(&rows, "charlie")->launch, "Work:Tools/charlie -x"));
+        CHECK(!strcmp(by_name(&rows, "delta")->launch, ""));
+        CHECK(!strcmp(by_name(&rows, "alpha")->launch, ""));   /* not installed: never read */
+
+        /* the key decision: Enter launches an installed row with Launch, Delete removes an installed row */
+        plain.kind = UPKG_ROW_AVAILABLE;
+        inst.kind = UPKG_ROW_INSTALLED;
+        inst.launch = by_name(&rows, "charlie")->launch;
+        upg.kind = UPKG_ROW_UPGRADE;
+        upg.launch = (char *)"";
+        CHECK(upkg_rows_key_action(0, &inst) == 'l');
+        CHECK(upkg_rows_key_action(0, &upg) == 0);        /* installed, no Launch: the info box */
+        CHECK(upkg_rows_key_action(0, &plain) == 0);
+        CHECK(upkg_rows_key_action(127, &inst) == 'r' && upkg_rows_key_action(127, &upg) == 'r');
+        CHECK(upkg_rows_key_action(127, &plain) == 0);
+        CHECK(upkg_rows_key_action('r', &inst) == 0);     /* the Remove key moved to Delete */
+        CHECK(upkg_rows_key_action('i', &plain) == 'i' && upkg_rows_key_action('u', &upg) == 'u');
+
+        v = upkg_rows_launch_status("charlie", 5);
+        CHECK(!strcmp(v, "charlie exited with code 5"));
+        free(v);
+        v = upkg_rows_launch_status("charlie", 0);
+        CHECK(!strcmp(v, "charlie exited with code 0"));
+        free(v);
+
+        /* the run: one shell command line through xsystem, then the rows are read again */
+        deinit_start = deinit_calls;
+        list_calls = 0;
+        sys_rc = 7;
+        CHECK(upkg_rows_launch_run(&rows, "charlie", "Work:Tools/charlie -x") == 7);
+        CHECK(sys_calls == 1 && !strcmp(sys_line, "sh|-c|Work:Tools/charlie -x"));
+        CHECK(sys_deinit_before == deinit_start && deinit_calls == deinit_start + 1);
+        CHECK(list_calls == 4 && rows.n == 6);
+        CHECK(!strcmp(by_name(&rows, "charlie")->launch, "Work:Tools/charlie -x"));
+
+        snprintf(path, sizeof path, "%s/charlie.control", dir);
+        remove(path);
+        snprintf(path, sizeof path, "%s/delta.control", dir);
+        remove(path);
+        rmdir(dir);
+        unsetenv("UPKG_INFO_DIR");
     }
 
     for (i = 0; i < 3; i++)
