@@ -1,0 +1,697 @@
+From a7e44e2a8437fe4d55ef1be271d758269fc328d0 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 26 Oct 2026 02:52:24 +0100
+Subject: [PATCH 29/30] upkg: the add-on rows come from upkg_rows, one parser
+ for the curses browse and the Workbench window
+
+upkg browse parsed the four lists (list, list-installed, list-upgradable, list-new)
+and ran install, remove and upgrade inside its curses code. Both move to
+libopkg/upkg_rows.c, which has no curses and no Intuition: upkg_rows_load builds
+{name, kind, installed, available, description} rows, upkg_rows_run runs the
+command through opkg_cmd_exec with an optional output sink, rebuilds the package
+hash and loads the rows again. upkg browse keeps only the menu text and colours.
+---
+ libopkg/CMakeLists.txt |   2 +
+ libopkg/upkg_browse.c  | 259 +++++++++--------------------------------
+ libopkg/upkg_rows.c    | 199 +++++++++++++++++++++++++++++++
+ libopkg/upkg_rows.h    |  60 ++++++++++
+ 4 files changed, 318 insertions(+), 202 deletions(-)
+ create mode 100644 libopkg/upkg_rows.c
+ create mode 100644 libopkg/upkg_rows.h
+
+diff --git a/libopkg/CMakeLists.txt b/libopkg/CMakeLists.txt
+index 599ffe4..ec7849e 100644
+--- a/libopkg/CMakeLists.txt
++++ b/libopkg/CMakeLists.txt
+@@ -23,6 +23,7 @@ set(HEADER_FILES
+     opkg_install.h
+     opkg_message.h
+     upkg_wrap.h
++    upkg_rows.h
+     opkg_remove.h
+     opkg_solver.h
+     opkg_utils.h
+@@ -103,6 +104,7 @@ set(SOURCE_FILES
+     opkg_message.c
+     upkg_wrap.c
+     upkg_browse.c
++    upkg_rows.c
+     opkg_remove.c
+     opkg_utils.c
+     opkg_verify.c
+diff --git a/libopkg/upkg_browse.c b/libopkg/upkg_browse.c
+index a798661..7b86762 100644
+--- a/libopkg/upkg_browse.c
++++ b/libopkg/upkg_browse.c
+@@ -27,6 +27,7 @@
+ #include "sprintf_alloc.h"
+ #include "xfuncs.h"
+ #include "upkg_browse.h"
++#include "upkg_rows.h"
+ 
+ #define USAGE "usage: upkg browse\nkeys: Up Down move, Enter info, i install, r remove, u upgrade, q quit"
+ #define TITLE "UP-TERM ADD-ONS"
+@@ -38,181 +39,71 @@
+ #define C_INSTALLED "\\Z2"
+ #define C_NEW "\\Z6"
+ 
+-static char *dupn(const char *s, size_t n)
+-{
+-    char *d = xmalloc(n + 1);
+-
+-    memcpy(d, s, n);
+-    d[n] = '\0';
+-    return d;
+-}
+-
+-/* a list as text, and its lines (split in place) */
+-typedef struct {
+-    char *text;
+-    char **line;
+-    size_t n;
+-} lines_t;
+-
+-static void lines_free(lines_t *l)
+-{
+-    free(l->text);
+-    free(l->line);
+-    l->text = NULL;
+-    l->line = NULL;
+-    l->n = 0;
+-}
+-
+-/* takes TEXT (malloc), or NULL for an empty list */
+-static void lines_set(lines_t *l, char *text)
+-{
+-    char *p;
+-    size_t cap = 0;
+-
+-    lines_free(l);
+-    if (!text)
+-        return;
+-    l->text = text;
+-    for (p = text; *p;) {
+-        char *e = strchr(p, '\n');
+-
+-        if (l->n == cap) {
+-            cap = cap ? cap * 2 : 256;
+-            l->line = xrealloc(l->line, cap * sizeof *l->line);
+-        }
+-        l->line[l->n++] = p;
+-        if (!e)
+-            break;
+-        *e = '\0';
+-        p = e + 1;
+-    }
+-}
+-
+-/* the text after "NAME - " in a list line, else NULL */
+-static const char *after_name(const char *line, const char *name, size_t len)
+-{
+-    if (strncmp(line, name, len) || strncmp(line + len, " - ", 3))
+-        return NULL;
+-    return line + len + 3;
+-}
+-
+-static const char *find_name(const lines_t *l, const char *name, size_t len)
+-{
+-    size_t i;
+-    const char *r;
+-
+-    for (i = 0; i < l->n; i++)
+-        if ((r = after_name(l->line[i], name, len)) != NULL)
+-            return r;
+-    return NULL;
+-}
+-
+-static lines_t all, inst, upg, fresh;
+-
+-static void lists_load(void)
+-{
+-    lines_set(&all, upkg_browse_list(0));
+-    lines_set(&inst, upkg_browse_list(1));
+-    lines_set(&upg, upkg_browse_list(2));
+-    lines_set(&fresh, upkg_browse_list(3));
+-}
+-
+-/* the menu: one entry per row of the full list */
+-typedef struct {
+-    char *name, *status, *desc;
+-    const char *colour;
+-} row_t;
+-
+-static row_t *rows;
+-static size_t nrows;
++/* the menu: one entry per row of the full list; the rows are upkg_rows.c's */
++static upkg_rows_t rows;
+ static entry *ents;
+ static char **items;
++static size_t nitems;
+ 
+-static void rows_free(void)
++static void menu_free(void)
+ {
+     size_t i;
+ 
+-    for (i = 0; i < nrows; i++) {
+-        free(rows[i].name);
+-        free(rows[i].status);
+-        free(rows[i].desc);
++    for (i = 0; i < nitems; i++)
+         free(items[i]);
+-    }
+-    free(rows);
+     free(ents);
+     free(items);
+-    rows = NULL;
+     ents = NULL;
+     items = NULL;
+-    nrows = 0;
++    nitems = 0;
+ }
+ 
+-/* The rows "installed V", "upgrade X to Y", "available V" or "new V", the status padded to the
+- * widest so the descriptions line up. A colour code takes no column. */
+-static void rows_build(void)
++static const char *row_colour(upkg_row_kind_t kind)
+ {
+-    size_t i, w = 0;
+-
+-    rows_free();
+-    rows = xcalloc(all.n, sizeof *rows);
+-    items = xcalloc(all.n, sizeof *items);
+-    ents = xcalloc(all.n, sizeof *ents);
+-
+-    for (i = 0; i < all.n; i++) {
+-        const char *line = all.line[i], *sep = strstr(line, " - "), *rest, *sep2, *t;
+-        row_t *r;
+-        char *ver;
+-        size_t nl, vl;
+-
+-        if (!sep)
+-            continue;
+-        r = &rows[nrows];
+-        nl = (size_t)(sep - line);
+-        r->name = dupn(line, nl);
+-        rest = sep + 3;
+-        sep2 = strstr(rest, " - ");
+-        vl = sep2 ? (size_t)(sep2 - rest) : strlen(rest);
+-        ver = dupn(rest, vl);
+-        r->desc = xstrdup(sep2 ? sep2 + 3 : "");
+-        r->colour = "";
+-        sprintf_alloc(&r->status, "available %s", ver);
+-        if (find_name(&fresh, r->name, nl)) {
+-            free(r->status);
+-            r->colour = C_NEW;
+-            sprintf_alloc(&r->status, "new %s", ver);
+-        }
+-        if ((t = find_name(&inst, r->name, nl)) != NULL) {
+-            const char *u = find_name(&upg, r->name, nl), *te = strstr(t, " - ");
+-
+-            free(r->status);
+-            if (u) {
+-                const char *ue = strstr(u, " - ");
+-                /* the line is "NAME - INSTALLED - NEW" */
+-                r->colour = C_UPGRADE;
+-                sprintf_alloc(&r->status, "upgrade %.*s to %s", (int)(ue ? (size_t)(ue - u) : strlen(u)),
+-                             u, ue ? ue + 3 : "");
+-            } else {
+-                r->colour = C_INSTALLED;
+-                sprintf_alloc(&r->status, "installed %.*s", (int)(te ? (size_t)(te - t) : strlen(t)), t);
+-            }
+-        }
+-        free(ver);
+-        if (strlen(r->status) > w)
+-            w = strlen(r->status);
+-        nrows++;
++    switch (kind) {
++    case UPKG_ROW_UPGRADE:
++        return C_UPGRADE;
++    case UPKG_ROW_INSTALLED:
++        return C_INSTALLED;
++    case UPKG_ROW_NEW:
++        return C_NEW;
++    default:
++        return "";
+     }
++}
+ 
+-    for (i = 0; i < nrows; i++) {
+-        row_t *r = &rows[i];
++/* The menu entries "installed V", "upgrade X to Y", "available V" or "new V", the status padded to
++ * the widest so the descriptions line up. A colour code takes no column. */
++static void menu_build(void)
++{
++    size_t i, w = 0;
++    char **status;
++
++    menu_free();
++    status = xcalloc(rows.n, sizeof *status);
++    items = xcalloc(rows.n, sizeof *items);
++    ents = xcalloc(rows.n, sizeof *ents);
++    nitems = rows.n;
++
++    for (i = 0; i < rows.n; i++) {
++        status[i] = upkg_rows_status(&rows.row[i]);
++        if (strlen(status[i]) > w)
++            w = strlen(status[i]);
++    }
++    for (i = 0; i < rows.n; i++) {
++        const upkg_row_t *r = &rows.row[i];
++        const char *colour = row_colour(r->kind);
+ 
+         if (*r->desc) {
+-            sprintf_alloc(&items[i], "%s%-*s   %s", r->colour, (int)w, r->status, r->desc);
++            sprintf_alloc(&items[i], "%s%-*s   %s", colour, (int)w, status[i], r->desc);
+         } else {
+-            sprintf_alloc(&items[i], "%s%s", r->colour, r->status);
++            sprintf_alloc(&items[i], "%s%s", colour, status[i]);
+         }
++        free(status[i]);
+         ents[i].tag = r->name;
+         ents[i].item = items[i];
+     }
++    free(status);
+ }
+ 
+ /* true when a feed's control for NAME has "UP-Term-Interactive: yes" (the package asks questions
+@@ -319,43 +210,21 @@ static void box_sink_end(void)
+     }
+ }
+ 
+-/* After an install, remove or upgrade the hash is rebuilt from the feeds and the status files, as
+- * after a fresh start; the new markers are read from the .prev files again by the list code. */
+-static void hash_reload(void)
+-{
+-    pkg_hash_deinit();
+-    pkg_hash_init(); /* deinit leaves n_buckets 0: the next lookup would divide by zero */
+-    pkg_hash_load_feeds();
+-    pkg_hash_load_status_files();
+-}
+-
+-static void flush_all(void)
+-{
+-    upkg_wrap_flush();
+-    fflush(stdout);
+-    fflush(stderr);
+-}
+-
+ /* Run the opkg command CMDNAME on TAG. A package with install questions of its own runs in the
+  * plain window; any other shows its output in a box that waits for OK. Returns 0, or 1 when the
+  * terminal went away. */
+ static int run_action(const char *cmdname, const char *tag)
+ {
+-    opkg_cmd_t *cmd = opkg_cmd_find(cmdname);
+-    const char *argv[2];
+     char *title, *closing;
+     int rc;
+ 
+-    argv[0] = tag;
+-    argv[1] = NULL;
+     sprintf_alloc(&title, "upkg %s %s", cmdname, tag);
+ 
+     if (interactive(tag)) {
+         char junk[64];
+ 
+         ui_suspend();
+-        rc = opkg_cmd_exec(cmd, 1, argv);
+-        flush_all();
++        rc = upkg_rows_run(&rows, cmdname, tag, NULL);
+         if (rc == 0)
+             printf("[OK] %s\n", title);
+         else
+@@ -370,10 +239,7 @@ static int run_action(const char *cmdname, const char *tag)
+     }
+ 
+     ui_program_begin(title);
+-    flush_all();
+-    upkg_set_sink(box_sink);
+-    rc = opkg_cmd_exec(cmd, 1, argv);
+-    upkg_set_sink(NULL);
++    rc = upkg_rows_run(&rows, cmdname, tag, box_sink);
+     box_sink_end();
+     if (rc == 0) {
+         sprintf_alloc(&closing, "[OK] %s\n", title);
+@@ -458,7 +324,7 @@ static const char *info_box(const char *tag, int isinst, int isupg)
+ int upkg_browse(int argc, char **argv)
+ {
+     char *last = NULL, count[64];
+-    int rc, stale = 0;
++    int rc;
+ 
+     if (argc == 1 && (!strcmp(argv[0], "--help") || !strcmp(argv[0], "-h") || !strcmp(argv[0], "help") ||
+                       !strcmp(argv[0], "?"))) {
+@@ -474,8 +340,8 @@ int upkg_browse(int argc, char **argv)
+         return 2;
+     }
+ 
+-    lists_load();
+-    if (!all.n) {
++    upkg_rows_load(&rows);
++    if (!rows.n) {
+         fprintf(stderr, "No package lists. Run upkg update first.\n");
+         return 1;
+     }
+@@ -484,25 +350,19 @@ int upkg_browse(int argc, char **argv)
+     ui_opt.title = TITLE;
+     rc = ui_start("upkg browse");
+     if (rc) {
+-        lines_free(&all);
++        upkg_rows_free(&rows);
+         return 2;
+     }
+ 
+     for (;;) {
+         int key, isinst, isupg, sel;
+         const char *tag;
+-        size_t tl;
+ 
+-        if (stale) {
+-            hash_reload();
+-            lists_load();
+-            stale = 0;
+-        }
+-        rows_build();
+-        snprintf(count, sizeof count, "%lu add-ons", (unsigned long)nrows);
++        menu_build();
++        snprintf(count, sizeof count, "%lu add-ons", (unsigned long)rows.n);
+         ui_opt.backtitle = count;
+         ui_opt.entries = ents;
+-        ui_opt.nentries = (int)nrows;
++        ui_opt.nentries = (int)rows.n;
+         ui_opt.default_item = last;
+         ui_opt.hotkeys = "iruq";
+         ui_opt.colors = 1;
+@@ -516,7 +376,7 @@ int upkg_browse(int argc, char **argv)
+             rc = 2;
+             break;
+         }
+-        if (rc != 0 || !nrows) {
++        if (rc != 0 || !rows.n) {
+             rc = 0;
+             quit_screen();
+             break;
+@@ -531,9 +391,8 @@ int upkg_browse(int argc, char **argv)
+         tag = ents[sel].tag;
+         free(last);
+         last = xstrdup(tag);
+-        tl = strlen(tag);
+-        isinst = find_name(&inst, tag, tl) != NULL;
+-        isupg = find_name(&upg, tag, tl) != NULL;
++        isinst = rows.row[sel].kind == UPKG_ROW_INSTALLED || rows.row[sel].kind == UPKG_ROW_UPGRADE;
++        isupg = rows.row[sel].kind == UPKG_ROW_UPGRADE;
+ 
+         if (key == 0) {
+             const char *b = info_box(last, isinst, isupg);
+@@ -555,15 +414,11 @@ int upkg_browse(int argc, char **argv)
+                 rc = 2;
+                 break;
+             }
+-            stale = r == 1;
+         }
+     }
+ 
+-    rows_free();
+-    lines_free(&all);
+-    lines_free(&inst);
+-    lines_free(&upg);
+-    lines_free(&fresh);
++    menu_free();
++    upkg_rows_free(&rows);
+     free(last);
+     return rc;
+ }
+diff --git a/libopkg/upkg_rows.c b/libopkg/upkg_rows.c
+new file mode 100644
+index 0000000..6b57fe5
+--- /dev/null
++++ b/libopkg/upkg_rows.c
+@@ -0,0 +1,199 @@
++/* upkg_rows.c - upkg: the add-on rows of the browse screens, without any screen (UP-Term).
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#include "config.h"
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "opkg_cmd.h"
++#include "pkg_hash.h"
++#include "sprintf_alloc.h"
++#include "xfuncs.h"
++#include "upkg_browse.h"
++#include "upkg_rows.h"
++
++static char *dupn(const char *s, size_t n)
++{
++    char *d = xmalloc(n + 1);
++
++    memcpy(d, s, n);
++    d[n] = '\0';
++    return d;
++}
++
++/* the first " - " in S[0..N), else NULL */
++static const char *sep_in(const char *s, size_t n)
++{
++    size_t i;
++
++    for (i = 0; i + 3 <= n; i++)
++        if (!memcmp(s + i, " - ", 3))
++            return s + i;
++    return NULL;
++}
++
++/* the text after "NAME - " in the first line of TEXT that starts so (its length in *LEN), else NULL */
++static const char *find_name(const char *text, const char *name, size_t nl, size_t *len)
++{
++    const char *p = text;
++
++    while (p && *p) {
++        const char *e = strchr(p, '\n');
++        size_t ll = e ? (size_t)(e - p) : strlen(p);
++
++        if (ll >= nl + 3 && !memcmp(p, name, nl) && !memcmp(p + nl, " - ", 3)) {
++            *len = ll - nl - 3;
++            return p + nl + 3;
++        }
++        p = e ? e + 1 : NULL;
++    }
++    return NULL;
++}
++
++void upkg_rows_free(upkg_rows_t *rows)
++{
++    size_t i;
++
++    for (i = 0; i < rows->n; i++) {
++        free(rows->row[i].name);
++        free(rows->row[i].installed);
++        free(rows->row[i].available);
++        free(rows->row[i].desc);
++    }
++    free(rows->row);
++    rows->row = NULL;
++    rows->n = 0;
++}
++
++void upkg_rows_parse(upkg_rows_t *rows, const char *all, const char *inst, const char *upg, const char *fresh)
++{
++    const char *p = all;
++    size_t lines = 0, cap;
++
++    upkg_rows_free(rows);
++    if (!all)
++        return;
++    for (p = all; *p; p++)
++        if (*p == '\n')
++            lines++;
++    cap = lines + 1;
++    rows->row = xcalloc(cap, sizeof *rows->row);
++
++    for (p = all; p && *p;) {
++        const char *e = strchr(p, '\n'), *sep, *rest, *sep2, *t;
++        size_t ll = e ? (size_t)(e - p) : strlen(p), nl, rl, vl, tl;
++        upkg_row_t *r;
++
++        sep = sep_in(p, ll);
++        if (!sep) {
++            p = e ? e + 1 : NULL;
++            continue;
++        }
++        r = &rows->row[rows->n];
++        nl = (size_t)(sep - p);
++        r->name = dupn(p, nl);
++        rest = sep + 3;
++        rl = ll - nl - 3;
++        sep2 = sep_in(rest, rl);
++        vl = sep2 ? (size_t)(sep2 - rest) : rl;
++        r->available = dupn(rest, vl);
++        r->desc = sep2 ? dupn(sep2 + 3, rl - vl - 3) : xstrdup("");
++        r->installed = xstrdup("");
++        r->kind = UPKG_ROW_AVAILABLE;
++        if (fresh && find_name(fresh, r->name, nl, &tl))
++            r->kind = UPKG_ROW_NEW;
++        if (inst && (t = find_name(inst, r->name, nl, &tl)) != NULL) {
++            const char *te = sep_in(t, tl), *u;
++            size_t ul;
++
++            free(r->installed);
++            r->installed = dupn(t, te ? (size_t)(te - t) : tl);
++            r->kind = UPKG_ROW_INSTALLED;
++            /* the upgrade line is "NAME - INSTALLED - NEW" */
++            if (upg && (u = find_name(upg, r->name, nl, &ul)) != NULL) {
++                const char *ue = sep_in(u, ul);
++
++                free(r->installed);
++                free(r->available);
++                r->installed = dupn(u, ue ? (size_t)(ue - u) : ul);
++                r->available = ue ? dupn(ue + 3, ul - (size_t)(ue - u) - 3) : xstrdup("");
++                r->kind = UPKG_ROW_UPGRADE;
++            }
++        }
++        rows->n++;
++        p = e ? e + 1 : NULL;
++    }
++}
++
++size_t upkg_rows_load(upkg_rows_t *rows)
++{
++    char *all = upkg_browse_list(0), *inst = upkg_browse_list(1), *upg = upkg_browse_list(2),
++        *fresh = upkg_browse_list(3);
++
++    upkg_rows_parse(rows, all, inst, upg, fresh);
++    free(all);
++    free(inst);
++    free(upg);
++    free(fresh);
++    return rows->n;
++}
++
++char *upkg_rows_status(const upkg_row_t *r)
++{
++    char *s = NULL;
++
++    switch (r->kind) {
++    case UPKG_ROW_UPGRADE:
++        sprintf_alloc(&s, "upgrade %s to %s", r->installed, r->available);
++        break;
++    case UPKG_ROW_INSTALLED:
++        sprintf_alloc(&s, "installed %s", r->installed);
++        break;
++    case UPKG_ROW_NEW:
++        sprintf_alloc(&s, "new %s", r->available);
++        break;
++    default:
++        sprintf_alloc(&s, "available %s", r->available);
++    }
++    return s;
++}
++
++/* After an install, remove or upgrade the hash is rebuilt from the feeds and the status files, as
++ * after a fresh start; the new markers are read from the .prev files again by the list code. */
++static void hash_reload(void)
++{
++    pkg_hash_deinit();
++    pkg_hash_init(); /* deinit leaves n_buckets 0: the next lookup would divide by zero */
++    pkg_hash_load_feeds();
++    pkg_hash_load_status_files();
++}
++
++int upkg_rows_run(upkg_rows_t *rows, const char *cmdname, const char *name, upkg_sink_fn sink)
++{
++    opkg_cmd_t *cmd = opkg_cmd_find(cmdname);
++    const char *argv[2];
++    int rc;
++
++    if (!cmd)
++        return -1;
++    argv[0] = name;
++    argv[1] = NULL;
++    upkg_wrap_flush();
++    fflush(stdout);
++    fflush(stderr);
++    if (sink)
++        upkg_set_sink(sink);
++    rc = opkg_cmd_exec(cmd, 1, argv);
++    upkg_wrap_flush();
++    fflush(stdout);
++    fflush(stderr);
++    hash_reload();
++    upkg_rows_load(rows);
++    if (sink)
++        upkg_set_sink(NULL);
++    return rc;
++}
+diff --git a/libopkg/upkg_rows.h b/libopkg/upkg_rows.h
+new file mode 100644
+index 0000000..cb3b0ea
+--- /dev/null
++++ b/libopkg/upkg_rows.h
+@@ -0,0 +1,60 @@
++/* upkg_rows.h - upkg: the add-on rows of the browse screens, without any screen (UP-Term).
++ *
++ * One parser of the four lists (list, list-installed, list-upgradable, list-new) that both
++ * `upkg browse` (curses) and the Workbench window use, and the one place that runs install,
++ * remove and upgrade and rebuilds the rows afterwards. Pure C: no curses, no Intuition.
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++#ifndef UPKG_ROWS_H
++#define UPKG_ROWS_H
++
++#include <stddef.h>
++#include "upkg_wrap.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++typedef enum {
++    UPKG_ROW_AVAILABLE,         /* in a feed, not installed */
++    UPKG_ROW_NEW,               /* in a feed, added by the last update, not installed */
++    UPKG_ROW_INSTALLED,         /* installed, nothing newer */
++    UPKG_ROW_UPGRADE            /* installed, a newer version is in a feed */
++} upkg_row_kind_t;
++
++typedef struct {
++    char *name;
++    upkg_row_kind_t kind;
++    char *installed;            /* installed version, "" when not installed */
++    char *available;            /* the feed's version (the newer one for UPKG_ROW_UPGRADE) */
++    char *desc;                 /* "" when the feed has none */
++} upkg_row_t;
++
++typedef struct {
++    upkg_row_t *row;
++    size_t n;
++} upkg_rows_t;
++
++/* Build ROWS from the four list texts (as upkg_browse_list returns them; NULL is an empty list).
++ * One row per line of ALL that has a " - ". Replaces what ROWS held. */
++void upkg_rows_parse(upkg_rows_t *rows, const char *all, const char *inst, const char *upg, const char *fresh);
++
++/* upkg_rows_parse over upkg_browse_list(0..3), from the package hash in memory; returns the row count */
++size_t upkg_rows_load(upkg_rows_t *rows);
++
++void upkg_rows_free(upkg_rows_t *rows);
++
++/* "installed V", "upgrade X to Y", "new V" or "available V"; malloc */
++char *upkg_rows_status(const upkg_row_t *row);
++
++/* Run the opkg command CMD ("install", "remove", "upgrade") on NAME. The messages of upkg and of
++ * its script children go to SINK line by line while it runs (NULL: they stay on stdout). Afterwards
++ * the package hash is rebuilt from the feeds and the status files and ROWS is loaded again.
++ * Returns the command's exit code, or -1 for an unknown CMD (nothing ran). */
++int upkg_rows_run(upkg_rows_t *rows, const char *cmd, const char *name, upkg_sink_fn sink);
++
++#ifdef __cplusplus
++}
++#endif
++#endif                          /* UPKG_ROWS_H */
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,142 @@
+From ee6e1cfc9b00e70ab88115674398d05c0a3ba4fa Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 26 Oct 2026 11:11:35 +0100
+Subject: [PATCH] upkg: the start-failure requester text is folded to 60
+ columns, so a 640 pixel screen shows the reason and the hint
+
+---
+ libopkg/upkg_wb.c   |  8 +++++--
+ libopkg/upkg_wb.h   |  4 ++++
+ libopkg/upkg_wrap.c | 51 +++++++++++++++++++++++++++++++++++++++++++++
+ libopkg/upkg_wrap.h |  4 ++++
+ 4 files changed, 65 insertions(+), 2 deletions(-)
+
+diff --git a/libopkg/upkg_wb.c b/libopkg/upkg_wb.c
+index f41655e..914bb6b 100644
+--- a/libopkg/upkg_wb.c
++++ b/libopkg/upkg_wb.c
+@@ -68,11 +68,13 @@ int upkg_wb(struct WBStartup *wb)
+ void upkg_start_failed(int wb, const char *text)
+ {
+     const char *log = WB_LOG;
++    char folded[1024];
+     FILE *fp;
+ 
+     if (!wb || !log || !*log || !(fp = fopen(log, "a")))
+         return;
+-    fprintf(fp, "startup failed: %s\n", text);
++    upkg_fold(text, UPKG_REQ_COLS, folded, sizeof folded);
++    fprintf(fp, "startup failed: %s\n", folded);
+     fclose(fp);
+ }
+ 
+@@ -461,6 +463,7 @@ void upkg_start_failed(int wb, const char *text)
+ {
+     struct IntuitionBase *ib;
+     struct EasyStruct es;
++    char folded[1024];
+ 
+     if (!wb || !(ib = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 37)))
+         return;
+@@ -471,7 +474,8 @@ void upkg_start_failed(int wb, const char *text)
+     es.es_GadgetFormat = (UBYTE *)"OK";
+     /* the library base of this file: EasyRequest reads it from the global */
+     IntuitionBase = ib;
+-    EasyRequest(NULL, &es, NULL, (ULONG)text);
++    upkg_fold(text, UPKG_REQ_COLS, folded, sizeof folded);
++    EasyRequest(NULL, &es, NULL, (ULONG)folded);
+     CloseLibrary((struct Library *)ib);
+     IntuitionBase = NULL;
+ }
+diff --git a/libopkg/upkg_wb.h b/libopkg/upkg_wb.h
+index 7c0ad1f..53972fc 100644
+--- a/libopkg/upkg_wb.h
++++ b/libopkg/upkg_wb.h
+@@ -25,6 +25,10 @@ int upkg_wb(struct WBStartup *wb);
+  * build has no requester: it appends "startup failed: TEXT" to $UPKG_WB_LOG. */
+ void upkg_start_failed(int wb, const char *text);
+ 
++/* Longest line of that text: a 640 pixel screen in topaz 8 holds 80 columns, the requester frame and its margins
++ * take the rest. The host log shows the same folded lines (after the "startup failed: " prefix on the first). */
++#define UPKG_REQ_COLS 60
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/libopkg/upkg_wrap.c b/libopkg/upkg_wrap.c
+index 8eb3f24..09fe4d4 100644
+--- a/libopkg/upkg_wrap.c
++++ b/libopkg/upkg_wrap.c
+@@ -382,3 +382,54 @@ int upkg_printf(const char *fmt, ...)
+     va_end(ap);
+     return n;
+ }
++
++/* Break S at blanks into lines of at most WIDTH characters, joined by newlines, into OUT (N bytes, always
++ * terminated). A word longer than WIDTH (a path) breaks hard at WIDTH. A requester has no wrap of its own and
++ * clips at the screen edge, so its text is folded before it is shown. */
++void upkg_fold(const char *s, int width, char *out, size_t n)
++{
++    size_t o = 0;
++    int col = 0;
++
++    if (!n)
++        return;
++    if (width < 1)
++        width = 1;
++    while (*s && o + 2 < n) {
++        size_t w = 0;
++
++        if (*s == ' ') {
++            s++;
++            continue;
++        }
++        while (s[w] && s[w] != ' ')
++            w++;
++        if (col && col + 1 + (int)w > width) {
++            out[o++] = '\n';
++            col = 0;
++        } else if (col) {
++            out[o++] = ' ';
++            col++;
++        }
++        while (w) {
++            size_t k = w;
++
++            if (col == width) {
++                out[o++] = '\n';
++                col = 0;
++            }
++            if (k > (size_t)(width - col))
++                k = (size_t)(width - col);
++            if (o + k + 2 >= n)
++                k = n - o - 2;
++            memcpy(out + o, s, k);
++            o += k;
++            col += (int)k;
++            s += k;
++            w -= k;
++            if (!k)
++                break;
++        }
++    }
++    out[o] = 0;
++}
+diff --git a/libopkg/upkg_wrap.h b/libopkg/upkg_wrap.h
+index 0f5129b..7dfff0b 100644
+--- a/libopkg/upkg_wrap.h
++++ b/libopkg/upkg_wrap.h
+@@ -34,6 +34,10 @@ int upkg_wrap_width(FILE *fp);
+  * wider; a word longer than the line breaks hard at the width. */
+ void upkg_wrap_puts(FILE *fp, int hang, const char *s);
+ 
++/* S folded at blanks into lines of at most WIDTH characters, newline-joined, in OUT (N bytes). A word longer than
++ * WIDTH breaks hard. For text shown in a requester, which does not wrap. */
++void upkg_fold(const char *s, int width, char *out, size_t n);
++
+ /* Write out the partial word and blanks held back across calls. A word printed
+  * by two calls is wrapped as one word, so its end is only known at a blank, a
+  * newline or here: called at exit (registered by the first wrapped write) and
+-- 
+2.50.1 (Apple Git-155)
+

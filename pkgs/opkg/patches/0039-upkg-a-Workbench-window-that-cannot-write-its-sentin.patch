@@ -1,0 +1,27 @@
+From 4a83ffd8c2074e8ae1a4da67f719a58753f581ac Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 26 Oct 2026 13:17:50 +0100
+Subject: [PATCH] upkg: a Workbench window that cannot write its sentinel log
+ stays open
+
+wb_sentinel returned 1 when fopen of the log failed, and upkg_wb took that for a failed start and closed the window. The log is only a test aid, so a failure to open it is ignored.
+---
+ libopkg/upkg_wb.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libopkg/upkg_wb.c b/libopkg/upkg_wb.c
+index 914bb6b..07fe083 100644
+--- a/libopkg/upkg_wb.c
++++ b/libopkg/upkg_wb.c
+@@ -38,7 +38,7 @@ static int wb_sentinel(size_t n)
+         return 0;
+     fp = fopen(log, "a");
+     if (!fp)
+-        return 1;
++        return 0;   /* the log is a test aid: failing to write it must not close the window */
+     fprintf(fp, "window opened, %lu rows\n", (unsigned long)n);
+ #ifndef __amigaos__
+     {
+-- 
+2.50.1 (Apple Git-155)
+

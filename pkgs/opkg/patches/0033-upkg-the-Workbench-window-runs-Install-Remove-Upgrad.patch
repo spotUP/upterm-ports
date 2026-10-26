@@ -1,0 +1,487 @@
+From de4e4bab7f1d9dfe57885f8793de720cfe6f2330 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 26 Oct 2026 03:12:01 +0100
+Subject: [PATCH] upkg: the Workbench window runs Install, Remove, Upgrade and
+ Update live: output reaches the log while the window answers, buttons are off
+ during a run, closing is refused
+
+---
+ libopkg/upkg_rows.c |  44 +++++++++-
+ libopkg/upkg_rows.h |  17 +++-
+ libopkg/upkg_wb.c   | 198 +++++++++++++++++++++++++++++++++++---------
+ libopkg/upkg_wrap.c |  49 +++++++++++
+ libopkg/upkg_wrap.h |   9 ++
+ libopkg/xsystem.c   |   8 +-
+ 6 files changed, 282 insertions(+), 43 deletions(-)
+
+diff --git a/libopkg/upkg_rows.c b/libopkg/upkg_rows.c
+index ee2f58f..39ddbd2 100644
+--- a/libopkg/upkg_rows.c
++++ b/libopkg/upkg_rows.c
+@@ -227,13 +227,13 @@ int upkg_rows_run(upkg_rows_t *rows, const char *cmdname, const char *name, upkg
+     if (!cmd)
+         return -1;
+     argv[0] = name;
+-    argv[1] = NULL;
++    argv[1] = NULL;     /* NAME NULL: a command without a package, as `upkg update` */
+     upkg_wrap_flush();
+     fflush(stdout);
+     fflush(stderr);
+     if (sink)
+         upkg_set_sink(sink);
+-    rc = opkg_cmd_exec(cmd, 1, argv);
++    rc = opkg_cmd_exec(cmd, name ? 1 : 0, argv);
+     upkg_wrap_flush();
+     fflush(stdout);
+     fflush(stderr);
+@@ -243,3 +243,43 @@ int upkg_rows_run(upkg_rows_t *rows, const char *cmdname, const char *name, upkg
+         upkg_set_sink(NULL);
+     return rc;
+ }
++
++/* The buttons enabled while a run goes (none: a second run or a quit would meet the first) and otherwise the
++ * ones the row enables, plus Update and Quit. */
++unsigned upkg_rows_buttons(int running, unsigned act)
++{
++    return running ? 0 : (act | UPKG_ACT_UPDATE | UPKG_ACT_QUIT);
++}
++
++void upkg_lines_put(upkg_lines_t *l, const char *text, size_t len, upkg_line_fn emit, void *ctx)
++{
++    size_t i;
++
++    for (i = 0; i < len; i++) {
++        char ch = text[i];
++
++        if (ch == '\n') {
++            l->buf[l->n] = '\0';
++            emit(ctx, l->buf);
++            l->n = 0;
++        } else if (ch == '\r') {
++            continue;
++        } else if (ch == '\t') {
++            do {
++                if (l->n < sizeof l->buf - 1)
++                    l->buf[l->n++] = ' ';
++            } while (l->n % 8 && l->n < sizeof l->buf - 1);
++        } else if (l->n < sizeof l->buf - 1) {
++            l->buf[l->n++] = ch;
++        }
++    }
++}
++
++void upkg_lines_end(upkg_lines_t *l, upkg_line_fn emit, void *ctx)
++{
++    if (l->n) {
++        l->buf[l->n] = '\0';
++        emit(ctx, l->buf);
++        l->n = 0;
++    }
++}
+diff --git a/libopkg/upkg_rows.h b/libopkg/upkg_rows.h
+index e1aa607..feb7520 100644
+--- a/libopkg/upkg_rows.h
++++ b/libopkg/upkg_rows.h
+@@ -58,6 +58,8 @@ typedef enum {
+ #define UPKG_ACT_INSTALL 1u     /* the buttons a row enables */
+ #define UPKG_ACT_REMOVE 2u
+ #define UPKG_ACT_UPGRADE 4u
++#define UPKG_ACT_UPDATE 8u      /* the other buttons of the window */
++#define UPKG_ACT_QUIT 16u
+ 
+ /* 1 when ROW is shown under filter F */
+ int upkg_rows_match(const upkg_row_t *row, upkg_filter_t f);
+@@ -73,7 +75,20 @@ unsigned upkg_rows_actions(const upkg_row_t *row);
+  * upgradable, new or available); malloc */
+ char *upkg_rows_label(const upkg_row_t *row);
+ 
+-/* Run the opkg command CMD ("install", "remove", "upgrade") on NAME. The messages of upkg and of
++/* The buttons enabled: none while RUNNING (a command is going), else ACT plus Update and Quit */
++unsigned upkg_rows_buttons(int running, unsigned act);
++
++/* Output arrives as text pieces (the sink); the log shows lines. Tabs become spaces to the next multiple of 8, a
++ * carriage return is dropped, a line longer than the buffer is cut. */
++typedef void (*upkg_line_fn)(void *ctx, const char *line);
++typedef struct {
++    char buf[512];
++    size_t n;
++} upkg_lines_t;
++void upkg_lines_put(upkg_lines_t *l, const char *text, size_t len, upkg_line_fn emit, void *ctx);
++void upkg_lines_end(upkg_lines_t *l, upkg_line_fn emit, void *ctx);   /* the unfinished last line, if any */
++
++/* Run the opkg command CMD ("install", "remove", "upgrade") on NAME (NULL for "update", which takes none). The messages of upkg and of
+  * its script children go to SINK line by line while it runs (NULL: they stay on stdout). Afterwards
+  * the package hash is rebuilt from the feeds and the status files and ROWS is loaded again.
+  * Returns the command's exit code, or -1 for an unknown CMD (nothing ran). */
+diff --git a/libopkg/upkg_wb.c b/libopkg/upkg_wb.c
+index 4e616e8..992dbb3 100644
+--- a/libopkg/upkg_wb.c
++++ b/libopkg/upkg_wb.c
+@@ -19,6 +19,7 @@
+ #include <string.h>
+ 
+ #include "upkg_rows.h"
++#include "upkg_wrap.h"
+ #include "upkg_wb.h"
+ 
+ #ifdef __amigaos__
+@@ -100,6 +101,7 @@ static void list_init(struct List *l)
+ #define WB_COLUMNS 72           /* inner width in characters of the screen font, less on a narrow screen */
+ #define LIST_ROWS 10
+ #define LOG_ROWS 4
++#define LOG_KEEP 300            /* log lines kept; the oldest go first */
+ 
+ enum { G_FILTER, G_LIST, G_INSTALL, G_REMOVE, G_UPGRADE, G_UPDATE, G_LOG, G_QUIT, G_COUNT };
+ 
+@@ -119,8 +121,13 @@ typedef struct {
+     upkg_filter_t filter;
+     long sel;                   /* the selected listview line, -1 for none */
+     int width, height;          /* the window's outer size, from the gadget layout */
++    int running;                /* an upkg command is going: the buttons are off and the window cannot close */
++    unsigned log_n;
++    upkg_lines_t lines;         /* the sink's pieces of text, cut into log lines */
+ } wb_t;
+ 
++static wb_t *cur_wb;            /* the window the running command reports to (the sink has no context argument) */
++
+ static void list_free(struct List *l)
+ {
+     struct Node *n;
+@@ -146,18 +153,39 @@ static int list_add(struct List *l, const char *text)
+     return 1;
+ }
+ 
+-/* The listview is detached while its labels change, then shown again with the last line in view. */
+-static void log_line(wb_t *wb, const char *text)
++/* Add a line to the log's labels (no redraw), dropping the oldest beyond LOG_KEEP. The gadget must be detached
++ * (GTLV_Labels ~0) while the list changes: log_hide before, log_show after. */
++static void log_add(wb_t *wb, const char *text)
+ {
+-    ULONG count = 0;
+-    struct Node *n;
++    if (wb->log_n >= LOG_KEEP) {
++        struct Node *n = RemHead(&wb->log);
++
++        if (n) {
++            free(n->ln_Name);
++            free(n);
++            wb->log_n--;
++        }
++    }
++    if (list_add(&wb->log, text))
++        wb->log_n++;
++}
+ 
++static void log_hide(wb_t *wb)
++{
+     GT_SetGadgetAttrs(wb->gad[G_LOG], wb->win, NULL, GTLV_Labels, (ULONG)~0, TAG_DONE);
+-    list_add(&wb->log, text);
+-    for (n = wb->log.lh_Head; n->ln_Succ; n = n->ln_Succ)
+-        count++;
++}
++
++static void log_show(wb_t *wb)
++{
+     GT_SetGadgetAttrs(wb->gad[G_LOG], wb->win, NULL, GTLV_Labels, (ULONG)&wb->log,
+-                      GTLV_Top, count ? count - 1 : 0, TAG_DONE);
++                      GTLV_Top, wb->log_n ? wb->log_n - 1 : 0, TAG_DONE);
++}
++
++static void log_line(wb_t *wb, const char *text)
++{
++    log_hide(wb);
++    log_add(wb, text);
++    log_show(wb);
+ }
+ 
+ /* Fill the add-on list with the rows the filter shows; no selection afterwards. Safe before the window exists. */
+@@ -184,14 +212,18 @@ static int list_fill(wb_t *wb)
+     return 1;
+ }
+ 
+-/* Install, Remove and Upgrade follow the selected row; Update and Quit are always enabled. */
++/* Install, Remove and Upgrade follow the selected row; Update and Quit are enabled; while a run goes nothing is. */
+ static void buttons_update(wb_t *wb)
+ {
+-    unsigned act = wb->sel < 0 ? 0 : upkg_rows_actions(&wb->rows.row[wb->idx[wb->sel]]);
++    unsigned act = upkg_rows_buttons(wb->running, wb->sel < 0 ? 0 : upkg_rows_actions(&wb->rows.row[wb->idx[wb->sel]]));
+ 
+     GT_SetGadgetAttrs(wb->gad[G_INSTALL], wb->win, NULL, GA_Disabled, !(act & UPKG_ACT_INSTALL), TAG_DONE);
+     GT_SetGadgetAttrs(wb->gad[G_REMOVE], wb->win, NULL, GA_Disabled, !(act & UPKG_ACT_REMOVE), TAG_DONE);
+     GT_SetGadgetAttrs(wb->gad[G_UPGRADE], wb->win, NULL, GA_Disabled, !(act & UPKG_ACT_UPGRADE), TAG_DONE);
++    GT_SetGadgetAttrs(wb->gad[G_UPDATE], wb->win, NULL, GA_Disabled, !(act & UPKG_ACT_UPDATE), TAG_DONE);
++    GT_SetGadgetAttrs(wb->gad[G_QUIT], wb->win, NULL, GA_Disabled, !(act & UPKG_ACT_QUIT), TAG_DONE);
++    GT_SetGadgetAttrs(wb->gad[G_FILTER], wb->win, NULL, GA_Disabled, wb->running, TAG_DONE);
++    GT_SetGadgetAttrs(wb->gad[G_LIST], wb->win, NULL, GA_Disabled, wb->running, TAG_DONE);
+ }
+ 
+ static void filter_set(wb_t *wb, upkg_filter_t f)
+@@ -280,41 +312,129 @@ static int gadgets_make(wb_t *wb)
+     return 1;
+ }
+ 
+-static int event_loop(wb_t *wb)
++static void say_requester(wb_t *wb, const char *body)
++{
++    struct EasyStruct es;
++
++    memset(&es, 0, sizeof es);
++    es.es_StructSize = sizeof es;
++    es.es_Title = (UBYTE *)"UP-Term Add-ons";
++    es.es_TextFormat = (UBYTE *)"%s";
++    es.es_GadgetFormat = (UBYTE *)"OK";
++    EasyRequest(wb->win, &es, NULL, (ULONG)body);
++}
++
++static void line_emit(void *ctx, const char *line)
+ {
+-    int running = 1;
++    log_add((wb_t *)ctx, line);
++}
+ 
+-    while (running) {
+-        struct IntuiMessage *msg;
++/* upkg's messages, as pieces of text: the log shows them as they come, then the window gets its turn */
++static void drain(wb_t *wb, int *quit);
++static void sink_cb(const char *text, size_t len)
++{
++    wb_t *wb = cur_wb;
+ 
+-        Wait(1UL << wb->win->UserPort->mp_SigBit);
+-        while ((msg = GT_GetIMsg(wb->win->UserPort)) != NULL) {
+-            ULONG cls = msg->Class;
+-            UWORD code = msg->Code;
+-            struct Gadget *gad = (struct Gadget *)msg->IAddress;
+-
+-            GT_ReplyIMsg(msg);
+-            switch (cls) {
+-            case IDCMP_CLOSEWINDOW:
+-                running = 0;
+-                break;
+-            case IDCMP_REFRESHWINDOW:
+-                GT_BeginRefresh(wb->win);
+-                GT_EndRefresh(wb->win, TRUE);
+-                break;
+-            case IDCMP_GADGETUP:
+-                if (gad->GadgetID == G_QUIT)
+-                    running = 0;
+-                else if (gad->GadgetID == G_FILTER)
+-                    filter_set(wb, (upkg_filter_t)code);
+-                else if (gad->GadgetID == G_LIST) {
+-                    wb->sel = (long)code < (long)wb->shown ? (long)code : -1;
+-                    buttons_update(wb);
+-                }
++    log_hide(wb);
++    upkg_lines_put(&wb->lines, text, len, line_emit, wb);
++    log_show(wb);
++    upkg_pump_call();
++}
++
++static void pump_cb(void)
++{
++    int quit = 0;
++
++    drain(cur_wb, &quit);
++}
++
++/* Run the opkg command CMD on the row's package (NAME NULL: Update) with the window live. */
++static void run_cmd(wb_t *wb, const char *cmd, const char *name)
++{
++    char what[320], done[360], *copy = name ? strdup(name) : NULL;
++    int rc;
++
++    snprintf(what, sizeof what, "upkg %s%s%s", cmd, copy ? " " : "", copy ? copy : "");
++    wb->running = 1;
++    buttons_update(wb);
++    log_line(wb, what);
++    cur_wb = wb;
++    memset(&wb->lines, 0, sizeof wb->lines);
++    upkg_set_pump(pump_cb, 1UL << wb->win->UserPort->mp_SigBit);
++    rc = upkg_rows_run(&wb->rows, cmd, copy, sink_cb);
++    upkg_set_pump(NULL, 0);
++    log_hide(wb);
++    upkg_lines_end(&wb->lines, line_emit, wb);
++    snprintf(done, sizeof done, rc == 0 ? "[OK] %s" : "[ERROR] %s (exit %d)", what, rc);
++    log_add(wb, done);
++    log_show(wb);
++    cur_wb = NULL;
++    wb->running = 0;
++    filter_set(wb, wb->filter);         /* the rows were loaded again: show them, no selection */
++    free(copy);
++}
++
++/* A button on the selected row (or Update) */
++static void action(wb_t *wb, int id)
++{
++    const char *cmd = id == G_INSTALL ? "install" : id == G_REMOVE ? "remove" : id == G_UPGRADE ? "upgrade" : "update";
++    const char *name = NULL;
++
++    if (id != G_UPDATE) {
++        if (wb->sel < 0)
++            return;
++        name = wb->rows.row[wb->idx[wb->sel]].name;
++    }
++    run_cmd(wb, cmd, name);
++}
++
++/* All waiting messages. While a command runs, closing the window is refused with a requester. */
++static void drain(wb_t *wb, int *quit)
++{
++    struct IntuiMessage *msg;
++
++    while ((msg = GT_GetIMsg(wb->win->UserPort)) != NULL) {
++        ULONG cls = msg->Class;
++        UWORD code = msg->Code;
++        struct Gadget *gad = (struct Gadget *)msg->IAddress;
++
++        GT_ReplyIMsg(msg);
++        switch (cls) {
++        case IDCMP_CLOSEWINDOW:
++            if (wb->running)
++                say_requester(wb, "A command is still running.\nThe window closes when it is done.");
++            else
++                *quit = 1;
++            break;
++        case IDCMP_REFRESHWINDOW:
++            GT_BeginRefresh(wb->win);
++            GT_EndRefresh(wb->win, TRUE);
++            break;
++        case IDCMP_GADGETUP:
++            if (wb->running)
+                 break;
+-            }
++            if (gad->GadgetID == G_QUIT)
++                *quit = 1;
++            else if (gad->GadgetID == G_FILTER)
++                filter_set(wb, (upkg_filter_t)code);
++            else if (gad->GadgetID == G_LIST) {
++                wb->sel = (long)code < (long)wb->shown ? (long)code : -1;
++                buttons_update(wb);
++            } else if (gad->GadgetID >= G_INSTALL && gad->GadgetID <= G_UPDATE)
++                action(wb, gad->GadgetID);
++            break;
+         }
+     }
++}
++
++static int event_loop(wb_t *wb)
++{
++    int quit = 0;
++
++    while (!quit) {
++        Wait(1UL << wb->win->UserPort->mp_SigBit);
++        drain(wb, &quit);
++    }
+     return 0;
+ }
+ 
+diff --git a/libopkg/upkg_wrap.c b/libopkg/upkg_wrap.c
+index 8ed9ff7..8eb3f24 100644
+--- a/libopkg/upkg_wrap.c
++++ b/libopkg/upkg_wrap.c
+@@ -12,6 +12,11 @@
+ #include <string.h>
+ #include <unistd.h>
+ #include <sys/ioctl.h>
++#include <sys/time.h>
++#include <sys/types.h>
++#ifdef __amigaos__
++#include <ix.h>
++#endif
+ 
+ #ifdef __amigaos__
+ /* The NDK devices/timer.h declares its own struct timeval, which clashes with ixemul's; give the NDK one
+@@ -223,6 +228,50 @@ int upkg_sink_active(void)
+     return sink != NULL;
+ }
+ 
++static upkg_pump_fn pump;
++static unsigned long pump_mask;
++
++void upkg_set_pump(upkg_pump_fn fn, unsigned long sigmask)
++{
++    pump = fn;
++    pump_mask = fn ? sigmask : 0;
++}
++
++int upkg_pump_active(void)
++{
++    return pump != NULL;
++}
++
++void upkg_pump_call(void)
++{
++    if (pump)
++        pump();
++}
++
++/* One wait on the pipe and the window (ixemul's ix_select takes the signal mask; plain select on a host) */
++int upkg_pump_wait(int fd)
++{
++    fd_set rf;
++    struct timeval tv;
++    int n;
++
++    FD_ZERO(&rf);
++    FD_SET(fd, &rf);
++    tv.tv_sec = 0;
++    tv.tv_usec = 200000;
++#ifdef __amigaos__
++    {
++        unsigned long mask = pump_mask;
++
++        n = ix_select(fd + 1, &rf, NULL, NULL, &tv, &mask);
++    }
++#else
++    n = select(fd + 1, &rf, NULL, NULL, &tv);
++#endif
++    upkg_pump_call();
++    return n < 0 || (n > 0 && FD_ISSET(fd, &rf));
++}
++
+ void upkg_sink_write(const char *text, size_t len)
+ {
+     if (sink)
+diff --git a/libopkg/upkg_wrap.h b/libopkg/upkg_wrap.h
+index 109f054..0f5129b 100644
+--- a/libopkg/upkg_wrap.h
++++ b/libopkg/upkg_wrap.h
+@@ -46,6 +46,15 @@ void upkg_wrap_flush(void);
+ typedef void (*upkg_sink_fn)(const char *text, size_t len);
+ void upkg_set_sink(upkg_sink_fn fn);
+ int upkg_sink_active(void);
++
++/* A pump keeps a window alive while upkg waits for a child's output (xsystem): while it is set, xsystem waits
++ * in upkg_pump_wait, which returns when the child's pipe is readable or SIGMASK (the window's signal bit)
++ * arrives, and calls the pump either way. NULL removes it. */
++typedef void (*upkg_pump_fn)(void);
++void upkg_set_pump(upkg_pump_fn fn, unsigned long sigmask);
++int upkg_pump_active(void);
++int upkg_pump_wait(int fd);     /* 1 when FD is readable (or the wait failed: read to find out) */
++void upkg_pump_call(void);
+ void upkg_sink_write(const char *text, size_t len);
+ 
+ /* DOS opens a requester (Retry/Cancel) on the Workbench screen when a volume is full or absent, and it takes
+diff --git a/libopkg/xsystem.c b/libopkg/xsystem.c
+index eb19b2b..2626042 100644
+--- a/libopkg/xsystem.c
++++ b/libopkg/xsystem.c
+@@ -88,8 +88,14 @@ int xsystem(const char *argv[])
+         ssize_t got;
+ 
+         close(pfd[1]);
+-        while ((got = read(pfd[0], chunk, sizeof chunk)) > 0)
++        for (;;) {
++            if (upkg_pump_active() && !upkg_pump_wait(pfd[0]))
++                continue;
++            got = read(pfd[0], chunk, sizeof chunk);
++            if (got <= 0)
++                break;
+             upkg_sink_write(chunk, (size_t)got);
++        }
+         close(pfd[0]);
+     }
+ 
+-- 
+2.50.1 (Apple Git-155)
+

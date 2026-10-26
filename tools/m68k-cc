@@ -28,19 +28,24 @@ done
 
 # Split the link call. cc: the options a compile takes (CPU flags included).
 # ld: the link line, sources replaced by their objects, CPU flags dropped.
-# Options with a separate value carry it along; -o, -Xlinker, -l and -Wl,
-# belong to the link only, and inputs that are not sources (objects,
-# archives) are not given to the compiles.
+# Options with a separate value carry it along: a value left behind is
+# read as the next option's operand ("--param max-inline-insns-single=1200
+# -I x" made the compile take -I as the param and lose the include
+# drawer, ncurses configure 2026-10-26). -o, -Xlinker, -u, -T, -z, -e, -l
+# and -Wl, belong to the link only, and inputs that are not sources
+# (objects, archives) are not given to the compiles.
 cc=() ld=() srcs=()
 tmp=
 n=${#args[@]} i=0
 while [ $i -lt $n ]; do
 	a=${args[$i]}
 	case $a in
-	-o|-Xlinker)
+	-o|-Xlinker|-u|-T|-z|-e)
 		ld+=("$a" "${args[$((i + 1))]}"); i=$((i + 2)); continue ;;
-	-I|-D|-U|-include|-imacros|-isystem|-idirafter|-iquote|-x|-MF|-MT|-MQ)
+	-I|-D|-U|-A|-include|-imacros|-isystem|-idirafter|-iquote|-iprefix|-iwithprefix|-iwithprefixbefore|-isysroot|-imultilib|-x|-MF|-MT|-MQ|-aux-info|-Xassembler|-Xpreprocessor)
 		cc+=("$a" "${args[$((i + 1))]}"); i=$((i + 2)); continue ;;
+	-B|--param)
+		cc+=("$a" "${args[$((i + 1))]}") ld+=("$a" "${args[$((i + 1))]}"); i=$((i + 2)); continue ;;
 	-x*) cc+=("$a") ;;
 	-o?*|-l*|-L*|-Wl,*) ld+=("$a") ;;
 	-m680[0-6]0|-m68020-60|-m68020-40|-mcpu=*) cc+=("$a") ;;

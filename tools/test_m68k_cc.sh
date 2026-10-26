@@ -31,6 +31,15 @@ linkl=$(grep -v -- ' -c ' "$LOG")
 case $linkl in *-m68020*) fail "link call kept -m68020: $linkl" ;; esac
 case $linkl in *'-o prog'*'1.o'*'2.o'*'-Wl,stack.o lib.a -lm'*) ;; *) fail "link call wrong: $linkl" ;; esac
 
+# Options whose value is a separate word keep it next to them: a bare --param in the compile
+# took the following -I as its value and lost the include drawer (ncurses configure).
+run -m68020 --param max-inline-insns-single=1200 -I inc -B bdir -u sym -o prog a.c
+cl=$(grep -- ' -c ' "$LOG")
+case $cl in *'--param max-inline-insns-single=1200 -I inc -B bdir'*) ;; *) fail "compile call split a separate value: $cl" ;; esac
+case $cl in *' -u '*|*sym*) fail "compile call got the link-only -u sym: $cl" ;; esac
+linkl=$(grep -v -- ' -c ' "$LOG")
+case $linkl in *'-B bdir -u sym -o prog'*) ;; *) fail "link call lost a separate value: $linkl" ;; esac
+
 run -m68020 -O2 -c a.c -o a.o
 [ "$(wc -l < "$LOG")" -eq 1 ] && grep -- '-m68020 -O2 -c a.c -o a.o' "$LOG" > /dev/null || fail "compile-only call changed"
 
