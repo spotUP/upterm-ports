@@ -44,7 +44,7 @@ tree_BUILD_CMD = $(MAKE) -C $(tree_OBJ) tree CC="$(ROOT)/tools/m68k-cc" LDFLAGS=
 tree_INSTALL_CMD = install -d $(SYSROOT)$(PREFIX)/bin ... && install -m 755 $(tree_OBJ)/tree $(SYSROOT)$(PREFIX)/bin/tree ...
 ```
 
-The `HOST_*` commands build the same source on your own computer. Their only purpose is to produce the expected output of the check cases (next paragraph):
+The `HOST_*` commands build the same source on your own computer. Their only purpose is to produce the expected output of the check cases (next paragraph). Upstream code written for Linux may need a portability flag to build on your computer: figlet calls `getopt` without including `unistd.h`, which macOS clang rejects, so its host build adds `CFLAGS="-O2 -include unistd.h"`. Put such flags in the `HOST_*` command; the Amiga build has its own flags:
 
 ```make
 tree_HOST_CONFIGURE_CMD = rsync -a --exclude .git $(tree_SRC)/ $(tree_HOBJ)/
@@ -126,7 +126,13 @@ bitchx_SUMMARY   := BitchX IRC client in UP-Term:bin and its IRCLIB in UP-Term:l
 bitchx_FEED_MIN_BASE := 1.0
 ```
 
-`_FEED_ID` is the package name in the feed. `_SUMMARY` is its one-line description. `_FEED_MIN_BASE` is the lowest base version it works with (empty means the current one). `_DATA` lists extra directories the package installs (BitchX: `lib/bx`).
+`_FEED_ID` is the package name in the feed. `_SUMMARY` is its one-line description. `_FEED_MIN_BASE` is the lowest base version it works with (empty means the current one). `_DATA` lists extra directories the package installs (BitchX: `lib/bx`). Every path the install step puts under the prefix that is not a `_BINS` program must be named in `_DATA`, or the package leaves it out: figlet installs its fonts to `share/figlet`, so its recipe says
+
+```make
+figlet_DATA      := share/figlet
+```
+
+Without that line the generated rows hold `bin/figlet` only and the package installs a figlet that cannot find its font. `pkg_rows emit` and `pkg_rows check` read the install step (`_INSTALL_CMD`) and stop, naming the path, when something it installs is covered by neither `_BINS` nor `_DATA`. (Man pages under `share/man` are listed through the prose file instead; a recipe whose install step is the default `make install` names no path, so the tool cannot compare it: list every installed drawer in `_DATA` yourself.)
 
 The rows that the vtcon repository needs (a line in `dist/packages.txt`, lines in `dist/slim.txt` and the six files of `dist/addons/<name>/`) are generated from the recipe. `$VTCON` is a checkout of https://github.com/spotUP/UP-Term. Run both commands from this repository:
 
@@ -160,10 +166,10 @@ Owner steps, in order:
 1. Read the diff, above all any install script and patch (they run on users' machines). Check the licence rows and the host of the URL.
 2. Fetch the archive independently and compare the sha256.
 3. `make <name>` (`JOBS=2` if the machine is busy), then `make host-<name>`.
-4. In the vtcon repository: `python3 tools/pkg_rows.py emit <name> --ports <this checkout> --write`, apply any hunk the generator cannot write yet, then run the tests of the touched files with `make test ONLY=<suite>` (for the rows themselves: `make test ONLY=pkg_rows`, with `UPTERM_PORTS=<this checkout>` until the ports branch is merged).
+4. In the vtcon repository: `python3 tools/pkg_rows.py emit <name> --ports <this checkout> --write` (when the package already has rows, because the recipe changed during review, add `--replace`: it rewrites that package's rows in place and leaves every other row byte-identical; without it the tool refuses), apply any hunk the generator cannot write yet, then run the tests of the touched files with `make test ONLY=<suite>` (for the rows themselves: `make test ONLY=pkg_rows`, with `UPTERM_PORTS=<this checkout>` until the ports branch is merged).
 5. Rig check: `python3 tools/rig/rig.py start --max --purpose "<session>: check <name> ipk"`, then `make wasabi`, `make amiga` and `python3 tools/rig/rig.py install`. Install the package with `upkg`, run the `check` cases, uninstall, confirm the drawer is gone, then `python3 tools/rig/rig.py stop`.
-6. `make dist`; confirm `build/ipk/<id>_*.ipk` and the new stanza in `Packages`.
-7. Merge the pull request, commit the vtcon rows, bump the version and publish the release with `gh release create` as vtcon's RULES.md describes (the upload is the owner's step).
+6. Merge the pull request first. A pull-request branch cannot build the feed: `make dist` needs the kit staged from this repository's `main` (`build/kit/userland/STAGED-FROM` must equal the `HEAD` of a clean checkout that is an ancestor of `origin/main`). So: check out `main` here, run `make kit-stage` (it builds every package and stamps `STAGED-FROM`), then in the vtcon repository run `make dist` with the vendor NDK unpacked at `vendor/ndk-3.2r4-Include_H` (a fresh worktree has none; `make dist` stops with "the NDK headers are missing" otherwise). Confirm `build/ipk/<id>_*.ipk` and the new stanza in `Packages`. There is no narrower target: `dist-index` depends on every `dist-*`.
+7. Commit the vtcon rows, bump the version and publish the release with `gh release create` as vtcon's RULES.md describes (the upload is the owner's step).
 8. On a clean rig: `upkg update && upkg install <id>`.
 
 ## 8. Not accepted yet
