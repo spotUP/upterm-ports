@@ -1,0 +1,9 @@
+version	sqlite3 -version
+select	sqlite3 :memory: "select 1+1;"
+file	sqlite3 :memory: ".read two.sql"
+table	sqlite3 :memory: ".read seed.sql" "select sum(a), group_concat(b) from t;"
+dump	sqlite3 :memory: ".read seed.sql" ".dump"
+error	sqlite3 :memory: "select * from nosuch;" ; test $? -ne 0
+persist	rm -f p.db; sqlite3 p.db ".read seed.sql" && sqlite3 p.db "select count(*) from t;"
+journal	rm -f j.db; sqlite3 j.db "pragma journal_mode;create table t(a);begin;insert into t values(1);commit;pragma integrity_check;"
+fts5	sqlite3 :memory: "create virtual table f using fts5(x);insert into f values('hello world');select * from f where f match 'hello';"

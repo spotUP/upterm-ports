@@ -1,0 +1,96 @@
+From f93742165d09509a4b04efd06815c6f040326ac8 Mon Sep 17 00:00:00 2001
+From: upterm-ports <upterm-ports@localhost>
+Date: Mon, 26 Oct 2026 14:50:17 +0100
+Subject: [PATCH] sqlite3.c: build the flock VFS as the default unix VFS on
+ AmigaOS
+
+ixemul compiles fcntl F_SETLK out (EINVAL), so the posix advisory locks of the
+default unix VFS fail on every open. flock works (ixemul-vtcon compat/lockf.c),
+and SQLITE_ENABLE_LOCKING_STYLE=1 compiles the flock VFS in; this makes it the
+default one on __amigaos__. LOCKING_STYLE also lists pread/pwrite in the
+syscall table (ixemul has neither), and reads statfs f_fstypename and the proxy
+locking state, which are macOS only: all three are left out on __amigaos__.
+The lock type constants ixemul hides are defined for the (unreached) posix lock
+code, and the page size comes from getpagesize.
+---
+ sqlite3.c | 22 +++++++++++++++++-----
+ 1 file changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/sqlite3.c b/sqlite3.c
+index ac75490..565bfa6 100644
+--- a/sqlite3.c
++++ b/sqlite3.c
+@@ -40730,6 +40730,16 @@ SQLITE_PRIVATE int sqlite3KvvfsInit(void){
+ # define HAVE_PREAD 1
+ # define HAVE_PWRITE 1
+ #endif
++#if defined(__amigaos__)
++/* ixemul has no pread/pwrite and compiles its fcntl record locks (F_SETLK and
++** the lock types) out, so the posix lock code below needs the names to compile;
++** it is never reached: the default VFS is the flock one. */
++# define F_GETLK  7
++# define F_SETLK  8
++# define F_RDLCK  1
++# define F_UNLCK  2
++# define F_WRLCK  3
++#endif
+ #if defined(HAVE_PREAD64) && defined(HAVE_PWRITE64)
+ # undef USE_PREAD
+ # define USE_PREAD64 1
+@@ -41117,7 +41127,7 @@ static struct unix_syscall {
+   { "read",         (sqlite3_syscall_ptr)read,       0  },
+ #define osRead      ((ssize_t(*)(int,void*,size_t))aSyscall[8].pCurrent)
+ 
+-#if defined(USE_PREAD) || SQLITE_ENABLE_LOCKING_STYLE
++#if defined(USE_PREAD) || (SQLITE_ENABLE_LOCKING_STYLE && !defined(__amigaos__))
+   { "pread",        (sqlite3_syscall_ptr)pread,      0  },
+ #else
+   { "pread",        (sqlite3_syscall_ptr)0,          0  },
+@@ -41134,7 +41144,7 @@ static struct unix_syscall {
+   { "write",        (sqlite3_syscall_ptr)write,      0  },
+ #define osWrite     ((ssize_t(*)(int,const void*,size_t))aSyscall[11].pCurrent)
+ 
+-#if defined(USE_PREAD) || SQLITE_ENABLE_LOCKING_STYLE
++#if defined(USE_PREAD) || (SQLITE_ENABLE_LOCKING_STYLE && !defined(__amigaos__))
+   { "pwrite",       (sqlite3_syscall_ptr)pwrite,     0  },
+ #else
+   { "pwrite",       (sqlite3_syscall_ptr)0,          0  },
+@@ -45148,7 +45158,7 @@ static int unixDeviceCharacteristics(sqlite3_file *id){
+ static int unixGetpagesize(void){
+ #if OS_VXWORKS
+   return 1024;
+-#elif defined(_BSD_SOURCE)
++#elif defined(_BSD_SOURCE) || defined(__amigaos__)
+   return getpagesize();
+ #else
+   return (int)sysconf(_SC_PAGESIZE);
+@@ -47412,7 +47422,7 @@ static int unixOpen(
+   }
+ #endif
+ 
+-#if defined(__APPLE__) || SQLITE_ENABLE_LOCKING_STYLE
++#if defined(__APPLE__) || (SQLITE_ENABLE_LOCKING_STYLE && !defined(__amigaos__))
+   if( fstatfs(fd, &fsInfo) == -1 ){
+     storeLastErrno(p, errno);
+     robust_close(p, fd, __LINE__);
+@@ -47434,7 +47444,7 @@ static int unixOpen(
+   if( isNewJrnl )               ctrlFlags |= UNIXFILE_DIRSYNC;
+   if( flags & SQLITE_OPEN_URI ) ctrlFlags |= UNIXFILE_URI;
+ 
+-#if SQLITE_ENABLE_LOCKING_STYLE
++#if SQLITE_ENABLE_LOCKING_STYLE && !defined(__amigaos__)
+ #if SQLITE_PREFER_PROXY_LOCKING
+   isAutoProxy = 1;
+ #endif
+@@ -49158,6 +49168,8 @@ SQLITE_API int sqlite3_os_init(void){
+   static sqlite3_vfs aVfs[] = {
+ #if SQLITE_ENABLE_LOCKING_STYLE && defined(__APPLE__)
+     UNIXVFS("unix",          autolockIoFinder ),
++#elif SQLITE_ENABLE_LOCKING_STYLE && defined(__amigaos__)
++    UNIXVFS("unix",          flockIoFinder ),
+ #elif OS_VXWORKS
+     UNIXVFS("unix",          vxworksIoFinder ),
+ #else
+-- 
+2.50.1 (Apple Git-155)
+
