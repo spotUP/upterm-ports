@@ -36,8 +36,8 @@ wait "$pid"
 rc=$?
 kill "$dog" 2>/dev/null; wait "$dog" 2>/dev/null || true
 set -e
-# upkg reports a failed update as exit 255 (-1); a crash is 128 + signal (134 abort, 139 segv, 137 watchdog)
-if [ "$rc" -ne 255 ]; then
-  echo "[FAIL] upkg update on an absent volume root exited $rc instead of 255 (recursion in file_mkdir_hier?)"; exit 1
+# upkg reports a failed update as exit 20 (RETURN_FAIL, patch 0036); a crash is 128 + signal (134 abort, 139 segv, 137 watchdog)
+if [ "$rc" -ne 20 ]; then
+  echo "[FAIL] upkg update on an absent volume root exited $rc instead of 20 (recursion in file_mkdir_hier?)"; exit 1
 fi
-echo "[OK] file_mkdir_hier returned -1 for an absent volume root (upkg exit 255, no crash)"
+echo "[OK] file_mkdir_hier returned -1 for an absent volume root (upkg exit 20, no crash)"
