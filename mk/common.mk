@@ -112,9 +112,11 @@ $(1)_CONFIGURE_CMD ?= $$(if $$($(1)_CMAKE),cd $$($(1)_OBJ) && $$(call CMAKE_M68K
 	--build=$(BUILD_TRIPLE) --host=m68k-amigaos --prefix=$(PREFIX) $$($(1)_CONFIGURE))
 $(1)_BUILD_CMD ?= $(MAKE) -C $$($(1)_OBJ) -j$(JOBS)
 $(1)_INSTALL_CMD ?= $(MAKE) -C $$($(1)_OBJ) install DESTDIR=$(SYSROOT)
-$(1)_HOST_CONFIGURE_CMD ?= $$(if $$($(1)_CMAKE),cd $$($(1)_HOBJ) && cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=$$($(1)_HOBJ)/inst \
+# a prebuilt package (<p>_LHA_URLS) has no source to build for macOS: host-<p> says so
+$(1)_HOST_CONFIGURE_CMD ?= $$(if $$($(1)_LHA_URLS),echo "$(1) is prebuilt ($(1)_LHA_URLS) and has no macOS build: its check is pkgs/$(1)/check/$(1)_rig.py" >&2; exit 1,\
+	$$(if $$($(1)_CMAKE),cd $$($(1)_HOBJ) && cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=$$($(1)_HOBJ)/inst \
 	$$($(1)_HOST_CONFIGURE) $$($(1)_SRC),cd $$($(1)_HOBJ) && $$($(1)_SRC)/configure --prefix=$$($(1)_HOBJ)/inst \
-	$$($(1)_HOST_CONFIGURE))
+	$$($(1)_HOST_CONFIGURE)))
 $(1)_HOST_BUILD_CMD ?= $(MAKE) -C $$($(1)_HOBJ) -j$(JOBS) install
 
 .PHONY: $(1) host-$(1) clean-$(1) $(1)-patches
