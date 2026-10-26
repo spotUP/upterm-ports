@@ -30,3 +30,25 @@ Status: amiga build green (68020 soft-float, __stack 262144, 1682976 bytes). Rig
 - userland_rig.py --only sqlite: stopped at case 2. version: output differs from the host only in "(32-bit)" vs "(64-bit)" (expected: build width; the case needs a normaliser or a host-independent command, e.g. "sqlite3 -version | cut -d' ' -f1-3"). select (`sqlite3 :memory: "select 1+1;"`): HANGS, never prints, ignores Ctrl-C. Same for any command that opens a database (-batch, /ram/x.db, .databases). Cases 3-9 not run. Two-shell test not run.
 - Cause (unverified, measured symptoms only): the process is runnable (state "ready", stack 262144, ~6k used), and `wasabi snoop --entry` shows it calling FindTask(NULL) in a tight loop with no other DOS call. -version (no database open) works. Not fixed: needs a disassembly or ixemul-side look (spin in ixemul after sqlite3_initialize / first open), beyond a recipe or patch fault.
 - Note: a hung sqlite3 started via EXEC occupies a run slot and ignores Ctrl-C; `wasabi free N` stops it.
+
+## Hang root cause (2026-10-26, rig 8, measured)
+- Not ixemul, not the port patch: a miscompile by bebbo's m68k-amigaos-gcc 6.5.0b (20260819) back-end
+  optimizer "bbb" (on by default at -O2) in sqlite3WhereBegin, sqlite3.c line 177022:
+  `Bitmask b = pTabItem->colUsed; int n = 0; for(; b; b=b>>1, n++){}` (Bitmask = u64).
+- Evidence: 8 samples of the hung task's saved PC (taskpeek: tc_SPReg frame) all fall in
+  0x108451e2..0x108451f2 = segment 0 offset 0xe6caa..0xe6cba; link map (-Wl,-Map, binary identical) puts
+  sqlite3.c .text at 0x56ab0, and nm of the save-temps object places that offset in _sqlite3WhereBegin. Code:
+      move.l a0,d1 / move.l a1,d2        ; b copied from a0:a1 into d1:d2 once, before the loop
+  L:  lsr.l #1,d1 / roxr.l #1,d2 / addq.l #1,d0
+      cmp.w #0,a0 / jne L / cmp.w #0,a1 / jne L   ; tests the unchanged a0:a1 -> never ends
+      move.l d1,a0 / move.l d2,a1        ; copy-back hoisted after the loop
+  The same sqlite3.i compiled with -fbbb=- keeps the copy-back inside the loop (correct); with
+  -fno-peephole2 the pattern is also gone. A small standalone test of the same loop compiles correctly:
+  the bug needs b allocated to address registers under register pressure.
+- No call in the loop: it is a pure CPU spin, so Ctrl-C (checked by ixemul on library calls) never lands.
+  The FindTask(NULL) lines in `snoop --entry` are not from this loop (unexplained, unverified source).
+- Reached by any statement that opens a table cursor (the shell's first statement reads sqlite_schema);
+  -version opens nothing, so it works.
+- Fix layer: the compiler (bbb pass in bebbo gcc). Interim for this port: build with -fbbb=- (whole
+  amalgamation, since other u64 loops may hit the same pattern); then rerun the rig cases. Other ports
+  built with -O2 can carry the same miscompile wherever a u64 lives in a0/a1.
