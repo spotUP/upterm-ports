@@ -180,9 +180,7 @@ $(STATE)/host-$(1).expected: $(STATE)/host-$(1).built $$(wildcard pkgs/$(1)/chec
 	@touch $$@
 
 $(1)-patches:
-	rm -f pkgs/$(1)/patches/*.patch
-	git -C $$($(1)_SRC) format-patch -q -o $(ROOT)/pkgs/$(1)/patches upstream
-	ls pkgs/$(1)/patches
+	sh tools/patches.sh $$($(1)_SRC) $(ROOT)/pkgs/$(1)/patches
 
 clean-$(1):
 	rm -rf $$($(1)_SRC) $$($(1)_OBJ) $$($(1)_HOBJ) $(EXPECT)/$(1) $(STATE)/$(1).* $(STATE)/host-$(1).*
