@@ -64,3 +64,19 @@ Status: amiga build green (68020 soft-float, __stack 262144, 1682976 bytes). Rig
 - Not yet known: whether it is a second bbb miscompile (an -fbbb=- sqlite3 binary was not obtained: the manual compile command
   needed sqlite_cfg.h defines and stopped at dlfcn.h) or the flock VFS / patch 0001. Next step: build the whole amalgamation with
   -fbbb=- (recipe CFLAGS) and rerun; if the same, trace the write path (snoop the Write calls of the failing create).
+
+## Write failure (2026-10-26, rig 8, 060 --max, vtcon origin/main 48006aec, measured)
+- Two causes. (1) fts5 "missing row 0": a second bbb miscompile. Same source, `-O2 -fbbb=-` in sqlite_ENV CFLAGS: fts5 PASS (7 of 9),
+  and `-O0` fts5 PASS too. Compiler bug, to bisect (Opus). Not committed: recipe keeps -O2 until the compiler is fixed.
+- (2) persist/journal "file is not a database", y.db = 24 bytes of zeros: NOT the compiler (same failure at -O0 and at -O2 -fbbb=-),
+  NOT the flock VFS or patch 0001 (same with -vfs unix-none, unix-flock, unix-dotfile; fails before any lock matters).
+- Evidence: a test program (shim VFS over "unix" logging every xRead/xWrite/xTruncate/xFileSize, linked to the port's libsqlite3.a) shows
+  the pager never calls xWrite. Sequence: xFileSize=0, then xRead(n=16, off=24) (the dbFileVers read of sqlite3PagerSharedLock) returns
+  short, then xFileSize=24 -> sqlite sees a non-empty file with no valid header -> SQLITE_NOTADB (rc 26).
+- Cause: ixemul lseek() (ixemul-vtcon library/lseek.c, ~line 205-232): seeking past EOF on a file opened FWRITE extends it at once
+  (__extend_file writes zeros up to the new position). POSIX: lseek past EOF changes nothing; the file grows only on a write.
+  Plain C test (open O_RDWR|O_CREAT on a new file, lseek(fd,24,SEEK_SET), read): lseek returns 24 and fstat/ls show size 24; read returns 0.
+  An earlier "lseek+write works" test never read past EOF, so it missed this.
+- Layer to fix: ixemul (lseek.c). Defer the extension: remember the position past EOF and extend in the next write()/ftruncate (or
+  make the extension happen only when a write follows). No port patch is right: any program that reads beyond EOF of a writable file
+  (SQLite does for every new database) is hit. After the fix: rerun userland_rig.py --only sqlite (expect 9 of 9; the two-shell lock test still unrun).
