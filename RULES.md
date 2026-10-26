@@ -5,7 +5,8 @@ The plan is vtcon's `thoughts/shared/plans/2026-10-04-unix-tool-ports.md`;
 progress is ledgered in `thoughts/shared/plans/2026-10-04-phase0-progress.md`.
 
 1. **One recipe per package**, `pkgs/<pkg>/recipe.mk` (version, URL, sha256,
-   licence, configure flags, the programs it ships). Upstream changes live in
+   licence, configure flags, the programs it ships; optional feed fields
+   `_FEED_ID`, `_SUMMARY`, `_FEED_MIN_BASE`, see mk/common.mk). Upstream changes live in
    `pkgs/<pkg>/patches/` as `git format-patch` files (`make <pkg>-patches`
    writes them from `build/src/<pkg>`, which is a git tree tagged `upstream`).
 2. **Runtime: ixemul-vtcon.** Everything links `libixcompat.a` from the sibling
