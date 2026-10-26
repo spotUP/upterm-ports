@@ -20,3 +20,4 @@ figlet_HOST_BUILD_CMD = $(MAKE) -C $(figlet_HOBJ) figlet CFLAGS="-O2 -include un
 	cp $(figlet_HOBJ)/figlet $(figlet_HOBJ)/inst/bin/figlet
 figlet_FEED_ID   := up-figlet
 figlet_SUMMARY   := FIGlet large text banners in UP-Term:bin with the standard font in UP-Term:share/figlet
+figlet_DATA      := share/figlet
