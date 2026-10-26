@@ -52,3 +52,15 @@ Status: amiga build green (68020 soft-float, __stack 262144, 1682976 bytes). Rig
 - Fix layer: the compiler (bbb pass in bebbo gcc). Interim for this port: build with -fbbb=- (whole
   amalgamation, since other u64 loops may hit the same pattern); then rerun the rig cases. Other ports
   built with -O2 can carry the same miscompile wherever a u64 lives in a0/a1.
+
+## Rig check after the cc1 fix (2026-10-26, rig 8, 060 --max, vtcon origin/main 48006aec, gcc 1e025c364)
+- Rebuild: make clean-sqlite && make sqlite; sqlite3.o 16:00:17 is newer than cc1 (15:57:43). make clean-sqlite also removes
+  build/expected/sqlite: run make host-sqlite again before userland_rig.py.
+- Hang FIXED: userland_rig.py --only sqlite: version, select, file, table, dump, error PASS (6 of 9).
+- persist, journal, fts5 FAIL (the two-shell test NOT run, it needs a working file database). Every one that writes a database FILE:
+  `sqlite3 RAM:y.db "create table t(a);"` -> "file is not a database"; y.db ends up 24 bytes (a full first page is 4096).
+  persist.err: "file is not a database"; journal: same; fts5 (:memory:): "fts5: missing row 0 from content table 'main'.'f_content'".
+- Ruled out: plain ixemul open/lseek/write/lseek/write of 4096-byte blocks on RAM: works (test program, same sysroot and flags).
+- Not yet known: whether it is a second bbb miscompile (an -fbbb=- sqlite3 binary was not obtained: the manual compile command
+  needed sqlite_cfg.h defines and stopped at dlfcn.h) or the flock VFS / patch 0001. Next step: build the whole amalgamation with
+  -fbbb=- (recipe CFLAGS) and rerun; if the same, trace the write path (snoop the Write calls of the failing create).
