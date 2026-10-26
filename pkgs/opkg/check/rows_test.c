@@ -62,6 +62,7 @@ int opkg_cmd_exec(opkg_cmd_t *cmd, int argc, const char **argv)
         order_ok = 0;           /* the sink must be on while the command runs */
     return exec_rc;
 }
+opkg_conf_t *opkg_config;
 void pkg_hash_deinit(void) { deinit_calls++; }
 void pkg_hash_init(void) { init_calls++; }
 int pkg_hash_load_feeds(void) { feeds_calls++; return 0; }
@@ -197,6 +198,26 @@ int main(void)
         CHECK(lines_n == 4 && !strcmp(lines_got[3], "A       B"));
         upkg_lines_end(&l, line_cb, NULL);
         CHECK(lines_n == 4);                       /* nothing left */
+    }
+
+    /* the install-questions check, one place for browse and the window */
+    {
+        char dir[] = "/tmp/rows_lists.XXXXXX";
+        char path[256];
+        FILE *fp;
+
+        CHECK(mkdtemp(dir) != NULL);
+        snprintf(path, sizeof path, "%s/feed", dir);
+        fp = fopen(path, "w");
+        CHECK(fp != NULL);
+        fputs("Package: asker\nUP-Term-Interactive: yes\n\nPackage: quiet\nVersion: 1\n", fp);
+        fclose(fp);
+        setenv("UPKG_LISTS_DIR", dir, 1);
+        CHECK(upkg_rows_interactive("asker") == 1);
+        CHECK(upkg_rows_interactive("quiet") == 0);
+        CHECK(upkg_rows_interactive("ask") == 0);
+        remove(path);
+        rmdir(dir);
     }
 
     for (i = 0; i < 3; i++)
