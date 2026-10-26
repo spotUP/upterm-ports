@@ -1,0 +1,47 @@
+From 26d04ad8da85012fb7378eb9a74a7f403f12ee38 Mon Sep 17 00:00:00 2001
+From: upterm-ports <upterm-ports@localhost>
+Date: Mon, 26 Oct 2026 22:52:51 +0100
+Subject: [PATCH 2/2] sqlite3.c: treat a name with an AmigaDOS volume as
+ absolute in unixFullPathname
+
+unixFullPathname put the working directory in front of every name that does not
+start with '/', so RAM:c.db became /cwd/RAM:c.db and the open failed. On
+__amigaos__ a name whose first element (the text before the first '/') holds a
+':' starts at a volume or assign: it is returned unchanged, so the database, its
+-journal and its -wal file (all derived from it by appending a suffix) open at
+the volume. The element loop below always prefixes '/', so it cannot build such
+a name; the '/RAM/x.db' and relative forms still take the old path.
+---
+ sqlite3.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/sqlite3.c b/sqlite3.c
+index 565bfa6..e186fe2 100644
+--- a/sqlite3.c
++++ b/sqlite3.c
+@@ -47685,6 +47685,22 @@ static int unixFullPathname(
+   path.nSymlink = 0;
+   path.nOut = nOut;
+   path.zOut = zOut;
++#if defined(__amigaos__)
++  {
++    /* A name whose first element (the text before the first '/') holds a ':'
++    ** starts at an AmigaDOS volume or assign ("RAM:x.db", "Work:dir/x.db"):
++    ** it is absolute already, and the path elements below always start with
++    ** '/', so it is returned as it is, with no working directory in front. */
++    const char *zVol = zPath;
++    while( *zVol && *zVol!='/' && *zVol!=':' ){ zVol++; }
++    if( *zVol==':' ){
++      int nPath = sqlite3Strlen30(zPath);
++      if( nPath+1>nOut ) return SQLITE_CANTOPEN_BKPT;
++      memcpy(zOut, zPath, nPath+1);
++      return SQLITE_OK;
++    }
++  }
++#endif
+   if( zPath[0]!='/' ){
+     char zPwd[SQLITE_MAX_PATHLEN+2];
+     if( osGetcwd(zPwd, sizeof(zPwd)-2)==0 ){
+-- 
+2.50.1 (Apple Git-155)
+
