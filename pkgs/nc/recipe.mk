@@ -8,6 +8,7 @@
 #   https://github.com/openbsd/src/tree/master/usr.bin/nc
 nc_OWN       := 1
 nc_VERSION   := openbsd-master
+nc_SUMMARY   := OpenBSD netcat (nc) in UP-Term:bin
 nc_LICENSE   := ISC
 nc_DEPS      := ixcompat
 nc_BINS      := bin/nc

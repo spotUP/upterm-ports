@@ -2,6 +2,7 @@
 # in a copy of the source. UnZip stays the native Aminet one (README);
 # bsdunzip reads zip archives too.
 zip_VERSION   := 3.0
+zip_SUMMARY   := Info-ZIP Zip 3.0 in UP-Term:bin
 zip_URL       := https://downloads.sourceforge.net/project/infozip/Zip%203.x%20%28latest%29/3.0/zip30.tar.gz
 zip_ARCHIVE   := $(DL)/zip30.tar.gz
 zip_SHA256    := f0e8bb1f9b7eb0b01285495a2699df3a4b766784c1765a8f1aeedf63c0806369

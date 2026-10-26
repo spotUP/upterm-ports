@@ -2,6 +2,7 @@
 # configure. Patch 0001 searches in the calling thread: AmigaOS has no
 # pthreads, and ixemul no sysconf(_SC_NPROCESSORS_ONLN).
 fzy_VERSION   := 1.0
+fzy_SUMMARY   := fzy 1.0 fuzzy finder in UP-Term:bin
 fzy_URL       := https://github.com/jhawthorn/fzy/releases/download/$(fzy_VERSION)/fzy-$(fzy_VERSION).tar.gz
 fzy_SHA256    := 80257fd74579e13438b05edf50dcdc8cf0cdb1870b4a2bc5967bd1fdbed1facf
 fzy_LICENSE   := MIT

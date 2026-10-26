@@ -4,6 +4,7 @@
 # editors, pagers) go through ixemul's system()/popen() to vsh; lynx's own
 # No fork: built with --disable-dired (the only fork user in this config); check_bin verifies.
 lynx_VERSION   := 2.9.3
+lynx_SUMMARY   := lynx 2.9.3 text web browser (no TLS) in UP-Term:bin
 lynx_URL       := https://invisible-island.net/archives/lynx/tarballs/lynx$(lynx_VERSION).tar.gz
 lynx_SHA256    := 6e99e46980974a6d89eceefbb26ca8c7aa7702b78ecb5bad383b859af225d052
 lynx_LICENSE   := GPL-2.0-only

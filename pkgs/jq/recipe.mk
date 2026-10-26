@@ -2,6 +2,7 @@
 # sub; the plan row's choice). Only the jq program and its page are installed
 # (the tarball's libjq and jq.h stay out of the sysroot).
 jq_VERSION   := 1.7.1
+jq_SUMMARY   := jq 1.7.1 JSON processor (no regex filters) in UP-Term:bin
 jq_URL       := https://github.com/jqlang/jq/releases/download/jq-$(jq_VERSION)/jq-$(jq_VERSION).tar.gz
 jq_SHA256    := 478c9ca129fd2e3443fe27314b455e211e0d8c60bc8ff7df703873deeee580c2
 jq_LICENSE   := MIT

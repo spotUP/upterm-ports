@@ -3,6 +3,7 @@
 # iconv, hcache, Berkeley DB and the dotlock helper. Mail is sent by an external
 # sendmail-style program. fork() is gone: the patch uses vfork.
 mutt_VERSION   := 2.2.16
+mutt_SUMMARY   := mutt 2.2.16 mail client for local mailboxes in UP-Term:bin
 # ftp.mutt.org serves no valid https; the OSU OSL mirror holds the same file (sha256 below matches).
 mutt_URL       := https://ftp.osuosl.org/pub/blfs/conglomeration/mutt/mutt-$(mutt_VERSION).tar.gz
 mutt_ARCHIVE   := $(DL)/mutt-$(mutt_VERSION).tar.gz

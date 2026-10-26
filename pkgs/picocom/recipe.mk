@@ -3,6 +3,7 @@
 # Off: HIGH_BAUD, custom baud rates and UUCP lock directories (the makefile leaves the last two off);
 # flock locking and linenoise stay on, as upstream's makefile has them.
 picocom_VERSION   := 3.1
+picocom_SUMMARY   := picocom 3.1 serial terminal in UP-Term:bin
 picocom_URL       := https://github.com/npat-efault/picocom/archive/refs/tags/$(picocom_VERSION).tar.gz
 picocom_ARCHIVE   := $(DL)/picocom-$(picocom_VERSION).tar.gz
 picocom_SHA256    := e6761ca932ffc6d09bd6b11ff018bdaf70b287ce518b3282d29e0270e88420bb

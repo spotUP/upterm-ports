@@ -6,6 +6,7 @@
 # (C modules are not loadable), no readline. The source builds with a plain compile and
 # link here (its makefile has no install target that fits the prefix layout).
 lua_VERSION   := 5.4.7
+lua_SUMMARY   := Lua 5.4.7 interpreter (lua) and compiler (luac) in UP-Term:bin
 lua_URL       := https://www.lua.org/ftp/lua-$(lua_VERSION).tar.gz
 lua_SHA256    := 9fbf5e28ef86c69858f6d3d34eccc32e911c1a28b4120ff3e84aaa70cfbf1e30
 lua_LICENSE   := MIT

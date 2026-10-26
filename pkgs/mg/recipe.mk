@@ -2,6 +2,7 @@
 # Emacs-like editor, against ncursesw (0.8). Replaces emacs-nox, which is not
 # ported.
 mg_VERSION   := 4.4
+mg_SUMMARY   := mg 4.4 small Emacs-style editor in UP-Term:bin
 mg_URL       := https://github.com/troglobit/mg/releases/download/v$(mg_VERSION)/mg-$(mg_VERSION).tar.gz
 mg_SHA256    := 5955f48138bd5fc3ac53945d610f4089446afc5eea99bfb5f0a01f079426907e
 mg_LICENSE   := public domain / BSD / ISC

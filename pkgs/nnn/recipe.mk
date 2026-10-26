@@ -2,6 +2,7 @@
 # Plain Makefile, no configure. Built without readline (NORL: nnn's own prompt), without
 # locale hooks, sessions, X11 and the FIFO previewer. fork() is gone: the patches use vfork.
 nnn_VERSION   := 5.3
+nnn_SUMMARY   := nnn 5.3 file manager in UP-Term:bin
 nnn_URL       := https://github.com/jarun/nnn/releases/download/v$(nnn_VERSION)/nnn-v$(nnn_VERSION).tar.gz
 nnn_ARCHIVE   := $(DL)/nnn-$(nnn_VERSION).tar.gz
 nnn_SHA256    := c626d57d0aaa5effe04a7e8c24ec9000bc3aca012461b821ecd3c81f5131bb6d
