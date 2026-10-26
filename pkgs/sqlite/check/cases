@@ -1,4 +1,4 @@
-version	sqlite3 -version
+version	sqlite3 -version | sed "s/ (.*-bit)$//"
 select	sqlite3 :memory: "select 1+1;"
 file	sqlite3 :memory: ".read two.sql"
 table	sqlite3 :memory: ".read seed.sql" "select sum(a), group_concat(b) from t;"
