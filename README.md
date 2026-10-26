@@ -14,3 +14,5 @@ compares against. Needs bebbo's gcc 6.5 in `~/opt/amiga` (`AMIGA=`), and
 Not needed for the kit; the userland rig (`vtcon/tools/rig/userland_rig.py`) uses
 what it builds. The whole path: the `upterm` repo's README, "Set up the whole
 thing".
+
+Adding a package: `CONTRIBUTING.md` and `docs/adding-a-package.md`.

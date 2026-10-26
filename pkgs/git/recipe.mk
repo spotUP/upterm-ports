@@ -12,6 +12,10 @@ git_URL       := https://www.kernel.org/pub/software/scm/git/git-$(git_VERSION).
 git_ARCHIVE   := $(DL)/git-$(git_VERSION).tar.xz
 git_SHA256    := 26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3
 git_LICENSE   := GPL-2.0-only
+# The feed (vtcon tools/pkg_rows.py): the package id and the Packages Description.
+git_FEED_ID   := up-git
+git_SUMMARY   := git 2.56.0 in UP-Term:bin and UP-Term:share/git-core
+git_FEED_MIN_BASE := 1.0
 git_LICENSE_FILES := COPYING LGPL-2.1
 git_DEPS      := ixcompat zlib
 git_FLAGS     := NO_PTHREADS=1 NO_OPENSSL=1 NO_CURL=1 NO_EXPAT=1 NO_GETTEXT=1 NO_TCLTK=1 NO_PERL=1 NO_PYTHON=1 \

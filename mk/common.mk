@@ -88,6 +88,11 @@ CHECK_PATH = $($(1)_HOBJ)/inst/bin$(foreach d,$($(1)_CHECK_DEPS),:$(HOSTB)/$(d)/
 #                   <drawer>/ of the kit, takes <p>_LICENSE_FILES from inside it and the <p>_LHA_URLS
 #                   archives as source. A package with a drawer is an add-on in vtcon (dist/slim.txt)
 #   <p>_NO_KIT      non-empty: kit-stage leaves the package out (built and checked only)
+#   <p>_FEED_ID    optional: the package id in the UP-Term feed (up-bitchx). Empty: the package is a
+#                   base-kit program (tree), no feed rows. vtcon's tools/pkg_rows.py reads it
+#   <p>_SUMMARY    optional: the one line that becomes the feed's Packages Description
+#   <p>_FEED_MIN_BASE  optional: lowest base (up-term.lha) version the package needs; empty: the
+#                   current base version
 #   <p>_POST_INSTALL  shell run after make install (optional)
 #   <p>_LHA_URLS / <p>_LHA_SHA256S  a prebuilt payload: parallel lists of lha archives (the
 #                   author's binaries, installed unmodified). <p>_URL/_SHA256 are not

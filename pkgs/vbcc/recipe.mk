@@ -12,6 +12,10 @@ vbcc_LHA_URLS  := http://phoenix.owl.de/vbcc/current/vbcc_bin_amigaos68k.lha \
 vbcc_LHA_SHA256S := 0a75cf9da15d1613554e43b09c6db59e0a05d945e358f1b95d5b32d9c637b7be \
 	ec734d7115359cdb5d1c70349284ecbd5712ef47e8bc28d4150117c6f8c73289
 vbcc_LICENSE   := vbcc, vasm, vlink: redistributable unmodified, non-commercial use (commercial use of m68k AmigaOS output allowed)
+# The feed (vtcon tools/pkg_rows.py): the package id and the Packages Description.
+vbcc_FEED_ID   := up-vbcc
+vbcc_SUMMARY   := vbcc 0.9h C compiler for AmigaOS 68k in UP-Term:vbcc
+vbcc_FEED_MIN_BASE := 1.0
 vbcc_DEPS      :=
 # kit-stage copies the whole drawer (vtcon: dist/slim.txt makes it the up-vbcc add-on, not part of the base)
 vbcc_DRAWER    := vbcc

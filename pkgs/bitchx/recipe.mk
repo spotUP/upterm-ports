@@ -9,6 +9,10 @@ bitchx_LICENSE   := BSD-3-Clause
 bitchx_LICENSE_FILES := COPYRIGHT
 bitchx_DEPS      := ixcompat ncurses
 bitchx_BINS      := bin/BitchX
+# The feed (vtcon tools/pkg_rows.py): the package id and the Packages Description.
+bitchx_FEED_ID   := up-bitchx
+bitchx_SUMMARY   := BitchX IRC client in UP-Term:bin and its IRCLIB in UP-Term:lib/bx
+bitchx_FEED_MIN_BASE := 1.0
 # IRCLIB: the binary looks in /UP-Term/lib/bx (script/, help/, translation/, BitchX.help ...; strings on bin/BitchX
 # show IRCLIB, the script path and the translation path), which is where make install puts it.
 # The help topics install as .bz2 and BitchX would read them through a decompressor child (fork is gone): install them plain.
