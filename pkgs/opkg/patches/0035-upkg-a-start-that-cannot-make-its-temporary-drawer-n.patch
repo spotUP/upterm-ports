@@ -1,0 +1,153 @@
+From 617a548e365818bab164b4760236a88a4889849c Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 26 Oct 2026 03:51:52 +0100
+Subject: [PATCH] upkg: a start that cannot make its temporary drawer names the
+ reason (TMP: unassigned): stderr in a Shell, a requester from Workbench
+
+---
+ libopkg/opkg_conf.c | 17 ++++++++++++++++-
+ libopkg/opkg_conf.h |  2 ++
+ libopkg/upkg_wb.c   | 31 +++++++++++++++++++++++++++++++
+ libopkg/upkg_wb.h   |  5 +++++
+ src/opkg.c          |  4 +++-
+ 5 files changed, 57 insertions(+), 2 deletions(-)
+
+diff --git a/libopkg/opkg_conf.c b/libopkg/opkg_conf.c
+index 8ee081f..95eb7ff 100644
+--- a/libopkg/opkg_conf.c
++++ b/libopkg/opkg_conf.c
+@@ -30,6 +30,8 @@
+ #include <glob.h>
+ #include <unistd.h>
+ #include <stdlib.h>
++#include <string.h>
++#include <errno.h>
+ 
+ #include "opkg_conf.h"
+ #include "pkg_vec.h"
+@@ -803,6 +805,13 @@ err:
+     return -1;
+ }
+ 
++static char conf_error[512];
++
++const char *opkg_conf_error(void)
++{
++    return conf_error;
++}
++
+ int opkg_conf_finalize(void)
+ {
+     int r;
+@@ -837,7 +846,13 @@ int opkg_conf_finalize(void)
+     free(opkg_config->tmp_dir);
+     opkg_config->tmp_dir = mkdtemp(tmp);
+     if (opkg_config->tmp_dir == NULL) {
+-        opkg_perror(ERROR, "Creating temp dir %s failed", tmp);
++        /* One text for the Shell (stderr) and the Workbench requester (upkg_start_failed): ixemul maps /tmp
++         * to TMP:, so a rig or a Workbench without that assign fails here, and without the hint the Shell
++         * only says "Unknown command" and Workbench says nothing. */
++        snprintf(conf_error, sizeof conf_error,
++                 "upkg cannot make its temporary drawer %s: %s. Is TMP: assigned (Assign TMP: T:)?",
++                 tmp, strerror(errno));
++        opkg_message(ERROR, "%s\n", conf_error);
+         free(tmp);
+         tmp = NULL;
+         goto err;
+diff --git a/libopkg/opkg_conf.h b/libopkg/opkg_conf.h
+index ebe5f81..d0ef2d3 100644
+--- a/libopkg/opkg_conf.h
++++ b/libopkg/opkg_conf.h
+@@ -194,6 +194,8 @@ int opkg_conf_init(void);
+ int opkg_conf_load(void);
+ int opkg_conf_read(void);
+ int opkg_conf_finalize(void);
++/* The reason the last opkg_conf_finalize failed, as one sentence ("" when it had none). */
++const char *opkg_conf_error(void);
+ void opkg_conf_deinit(void);
+ 
+ int opkg_conf_write_status_files(void);
+diff --git a/libopkg/upkg_wb.c b/libopkg/upkg_wb.c
+index 251eb99..f41655e 100644
+--- a/libopkg/upkg_wb.c
++++ b/libopkg/upkg_wb.c
+@@ -64,6 +64,18 @@ int upkg_wb(struct WBStartup *wb)
+     return wb_sentinel(n);
+ }
+ 
++
++void upkg_start_failed(int wb, const char *text)
++{
++    const char *log = WB_LOG;
++    FILE *fp;
++
++    if (!wb || !log || !*log || !(fp = fopen(log, "a")))
++        return;
++    fprintf(fp, "startup failed: %s\n", text);
++    fclose(fp);
++}
++
+ #else  /* __amigaos__ */
+ 
+ /* The NDK devices/timer.h declares its own struct timeval, which clashes with ixemul's (see upkg_wrap.c). */
+@@ -445,6 +457,25 @@ static int event_loop(wb_t *wb)
+     return 0;
+ }
+ 
++void upkg_start_failed(int wb, const char *text)
++{
++    struct IntuitionBase *ib;
++    struct EasyStruct es;
++
++    if (!wb || !(ib = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 37)))
++        return;
++    memset(&es, 0, sizeof es);
++    es.es_StructSize = sizeof es;
++    es.es_Title = (UBYTE *)"UP-Term Add-ons";
++    es.es_TextFormat = (UBYTE *)"%s";
++    es.es_GadgetFormat = (UBYTE *)"OK";
++    /* the library base of this file: EasyRequest reads it from the global */
++    IntuitionBase = ib;
++    EasyRequest(NULL, &es, NULL, (ULONG)text);
++    CloseLibrary((struct Library *)ib);
++    IntuitionBase = NULL;
++}
++
+ int upkg_wb(struct WBStartup *wbmsg)
+ {
+     wb_t wb;
+diff --git a/libopkg/upkg_wb.h b/libopkg/upkg_wb.h
+index 6b4f81c..7c0ad1f 100644
+--- a/libopkg/upkg_wb.h
++++ b/libopkg/upkg_wb.h
+@@ -20,6 +20,11 @@ struct WBStartup;
+  * it saw, so a test can count the calls. */
+ int upkg_wb(struct WBStartup *wb);
+ 
++/* A start from an icon (WB nonzero) has no console: show TEXT, the reason upkg could not start, in an
++ * EasyRequest ("UP-Term Add-ons"). A start from a Shell already printed it on stderr: nothing more. The host
++ * build has no requester: it appends "startup failed: TEXT" to $UPKG_WB_LOG. */
++void upkg_start_failed(int wb, const char *text);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/src/opkg.c b/src/opkg.c
+index bf934d3..f0788d2 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -702,8 +702,10 @@ int main(int argc, char *argv[])
+     }
+ 
+     if (!noloadconf) {
+-        if (opkg_conf_finalize())
++        if (opkg_conf_finalize()) {
++            upkg_start_failed(wb, opkg_conf_error());
+             goto err0;
++        }
+     }
+ 
+     if (!nocheckfordirorfile) {
+-- 
+2.50.1 (Apple Git-155)
+
