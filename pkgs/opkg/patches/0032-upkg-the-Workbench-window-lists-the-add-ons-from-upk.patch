@@ -1,0 +1,237 @@
+From 27077124696864669b87ba25f764a61ad03311f9 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 26 Oct 2026 03:04:35 +0100
+Subject: [PATCH] upkg: the Workbench window lists the add-ons from
+ upkg_rows_load, a cycle gadget filters them and the selection enables
+ Install, Remove and Upgrade
+
+The filter, the buttons a row enables and the listview line are pure functions in upkg_rows.c; the window code only calls them.
+---
+ libopkg/upkg_rows.c | 46 +++++++++++++++++++++++++++++++
+ libopkg/upkg_rows.h | 25 +++++++++++++++++
+ libopkg/upkg_wb.c   | 67 +++++++++++++++++++++++++++++++++++++++++----
+ 3 files changed, 133 insertions(+), 5 deletions(-)
+
+diff --git a/libopkg/upkg_rows.c b/libopkg/upkg_rows.c
+index 6b57fe5..ee2f58f 100644
+--- a/libopkg/upkg_rows.c
++++ b/libopkg/upkg_rows.c
+@@ -162,6 +162,52 @@ char *upkg_rows_status(const upkg_row_t *r)
+     return s;
+ }
+ 
++int upkg_rows_match(const upkg_row_t *r, upkg_filter_t f)
++{
++    switch (f) {
++    case UPKG_FILTER_INSTALLED:
++        return r->kind == UPKG_ROW_INSTALLED || r->kind == UPKG_ROW_UPGRADE;
++    case UPKG_FILTER_UPGRADABLE:
++        return r->kind == UPKG_ROW_UPGRADE;
++    default:
++        return 1;
++    }
++}
++
++size_t upkg_rows_filter(const upkg_rows_t *rows, upkg_filter_t f, size_t *idx)
++{
++    size_t i, n = 0;
++
++    for (i = 0; i < rows->n; i++)
++        if (upkg_rows_match(&rows->row[i], f))
++            idx[n++] = i;
++    return n;
++}
++
++unsigned upkg_rows_actions(const upkg_row_t *r)
++{
++    if (!r)
++        return 0;
++    switch (r->kind) {
++    case UPKG_ROW_UPGRADE:
++        return UPKG_ACT_REMOVE | UPKG_ACT_UPGRADE;
++    case UPKG_ROW_INSTALLED:
++        return UPKG_ACT_REMOVE;
++    default:
++        return UPKG_ACT_INSTALL;
++    }
++}
++
++char *upkg_rows_label(const upkg_row_t *r)
++{
++    static const char *const word[] = { "available", "new", "installed", "upgradable" };
++    char *s = NULL;
++
++    sprintf_alloc(&s, "%s  %s  %s  %s", r->name, *r->installed ? r->installed : "-",
++                  *r->available ? r->available : "-", word[r->kind]);
++    return s;
++}
++
+ /* After an install, remove or upgrade the hash is rebuilt from the feeds and the status files, as
+  * after a fresh start; the new markers are read from the .prev files again by the list code. */
+ static void hash_reload(void)
+diff --git a/libopkg/upkg_rows.h b/libopkg/upkg_rows.h
+index cb3b0ea..e1aa607 100644
+--- a/libopkg/upkg_rows.h
++++ b/libopkg/upkg_rows.h
+@@ -48,6 +48,31 @@ void upkg_rows_free(upkg_rows_t *rows);
+ /* "installed V", "upgrade X to Y", "new V" or "available V"; malloc */
+ char *upkg_rows_status(const upkg_row_t *row);
+ 
++/* What the Workbench window shows and enables: decided here, so the window code is glue only. */
++typedef enum {
++    UPKG_FILTER_ALL,            /* every row */
++    UPKG_FILTER_INSTALLED,      /* installed rows, upgradable ones included */
++    UPKG_FILTER_UPGRADABLE      /* rows with a newer version in a feed */
++} upkg_filter_t;
++
++#define UPKG_ACT_INSTALL 1u     /* the buttons a row enables */
++#define UPKG_ACT_REMOVE 2u
++#define UPKG_ACT_UPGRADE 4u
++
++/* 1 when ROW is shown under filter F */
++int upkg_rows_match(const upkg_row_t *row, upkg_filter_t f);
++
++/* Fill IDX (room for ROWS->n entries) with the indexes of the rows shown under F, in row order; returns the count */
++size_t upkg_rows_filter(const upkg_rows_t *rows, upkg_filter_t f, size_t *idx);
++
++/* The buttons ROW enables, UPKG_ACT_* or'ed: installed -> remove, and upgrade only when upgradable; not installed
++ * -> install; NULL (no selection) -> none. Update is always enabled and not part of this. */
++unsigned upkg_rows_actions(const upkg_row_t *row);
++
++/* The listview line "name  installed  available  status" ("-" for no installed version; status is installed,
++ * upgradable, new or available); malloc */
++char *upkg_rows_label(const upkg_row_t *row);
++
+ /* Run the opkg command CMD ("install", "remove", "upgrade") on NAME. The messages of upkg and of
+  * its script children go to SINK line by line while it runs (NULL: they stay on stdout). Afterwards
+  * the package hash is rebuilt from the feeds and the status files and ROWS is loaded again.
+diff --git a/libopkg/upkg_wb.c b/libopkg/upkg_wb.c
+index 0bb4689..4e616e8 100644
+--- a/libopkg/upkg_wb.c
++++ b/libopkg/upkg_wb.c
+@@ -113,6 +113,11 @@ typedef struct {
+     struct Gadget *gad[G_COUNT];
+     struct List list;           /* the add-on listview's labels */
+     struct List log;            /* the log listview's labels */
++    upkg_rows_t rows;
++    size_t *idx;                /* the listview line -> the row, under the filter */
++    size_t shown;
++    upkg_filter_t filter;
++    long sel;                   /* the selected listview line, -1 for none */
+     int width, height;          /* the window's outer size, from the gadget layout */
+ } wb_t;
+ 
+@@ -155,6 +160,50 @@ static void log_line(wb_t *wb, const char *text)
+                       GTLV_Top, count ? count - 1 : 0, TAG_DONE);
+ }
+ 
++/* Fill the add-on list with the rows the filter shows; no selection afterwards. Safe before the window exists. */
++static int list_fill(wb_t *wb)
++{
++    size_t i;
++
++    list_free(&wb->list);
++    free(wb->idx);
++    wb->idx = malloc((wb->rows.n ? wb->rows.n : 1) * sizeof *wb->idx);
++    if (!wb->idx)
++        return 0;
++    wb->shown = upkg_rows_filter(&wb->rows, wb->filter, wb->idx);
++    for (i = 0; i < wb->shown; i++) {
++        char *label = upkg_rows_label(&wb->rows.row[wb->idx[i]]);
++
++        if (!list_add(&wb->list, label)) {
++            free(label);
++            return 0;
++        }
++        free(label);
++    }
++    wb->sel = -1;
++    return 1;
++}
++
++/* Install, Remove and Upgrade follow the selected row; Update and Quit are always enabled. */
++static void buttons_update(wb_t *wb)
++{
++    unsigned act = wb->sel < 0 ? 0 : upkg_rows_actions(&wb->rows.row[wb->idx[wb->sel]]);
++
++    GT_SetGadgetAttrs(wb->gad[G_INSTALL], wb->win, NULL, GA_Disabled, !(act & UPKG_ACT_INSTALL), TAG_DONE);
++    GT_SetGadgetAttrs(wb->gad[G_REMOVE], wb->win, NULL, GA_Disabled, !(act & UPKG_ACT_REMOVE), TAG_DONE);
++    GT_SetGadgetAttrs(wb->gad[G_UPGRADE], wb->win, NULL, GA_Disabled, !(act & UPKG_ACT_UPGRADE), TAG_DONE);
++}
++
++static void filter_set(wb_t *wb, upkg_filter_t f)
++{
++    wb->filter = f;
++    GT_SetGadgetAttrs(wb->gad[G_LIST], wb->win, NULL, GTLV_Labels, (ULONG)~0, TAG_DONE);
++    list_fill(wb);
++    GT_SetGadgetAttrs(wb->gad[G_LIST], wb->win, NULL, GTLV_Labels, (ULONG)&wb->list, GTLV_Top, 0,
++                      GTLV_Selected, (ULONG)~0, TAG_DONE);
++    buttons_update(wb);
++}
++
+ static void gadgets_free(wb_t *wb)
+ {
+     if (wb->glist)
+@@ -241,6 +290,7 @@ static int event_loop(wb_t *wb)
+         Wait(1UL << wb->win->UserPort->mp_SigBit);
+         while ((msg = GT_GetIMsg(wb->win->UserPort)) != NULL) {
+             ULONG cls = msg->Class;
++            UWORD code = msg->Code;
+             struct Gadget *gad = (struct Gadget *)msg->IAddress;
+ 
+             GT_ReplyIMsg(msg);
+@@ -255,6 +305,12 @@ static int event_loop(wb_t *wb)
+             case IDCMP_GADGETUP:
+                 if (gad->GadgetID == G_QUIT)
+                     running = 0;
++                else if (gad->GadgetID == G_FILTER)
++                    filter_set(wb, (upkg_filter_t)code);
++                else if (gad->GadgetID == G_LIST) {
++                    wb->sel = (long)code < (long)wb->shown ? (long)code : -1;
++                    buttons_update(wb);
++                }
+                 break;
+             }
+         }
+@@ -265,7 +321,6 @@ static int event_loop(wb_t *wb)
+ int upkg_wb(struct WBStartup *wbmsg)
+ {
+     wb_t wb;
+-    upkg_rows_t rows = { NULL, 0 };
+     int rc = 1;
+ 
+     (void)wbmsg;
+@@ -283,7 +338,9 @@ int upkg_wb(struct WBStartup *wbmsg)
+     wb.vi = GetVisualInfo(wb.scr, TAG_DONE);
+     if (!wb.vi)
+         goto out;
+-    if (!gadgets_make(&wb))
++    wb.sel = -1;
++    upkg_rows_load(&wb.rows);
++    if (!list_fill(&wb) || !gadgets_make(&wb))
+         goto out;
+     wb.win = OpenWindowTags(NULL,
+         WA_Left, 0, WA_Top, wb.scr->BarHeight + 1, WA_Width, wb.width, WA_Height, wb.height,
+@@ -296,8 +353,7 @@ int upkg_wb(struct WBStartup *wbmsg)
+         goto out;
+     GT_RefreshWindow(wb.win, NULL);
+     log_line(&wb, "Ready.");
+-    upkg_rows_load(&rows);
+-    rc = wb_sentinel(rows.n);
++    rc = wb_sentinel(wb.rows.n);
+     if (rc == 0)
+         rc = event_loop(&wb);
+ out:
+@@ -306,7 +362,8 @@ out:
+     gadgets_free(&wb);
+     list_free(&wb.list);
+     list_free(&wb.log);
+-    upkg_rows_free(&rows);
++    free(wb.idx);
++    upkg_rows_free(&wb.rows);
+     if (wb.vi)
+         FreeVisualInfo(wb.vi);
+     if (wb.scr)
+-- 
+2.50.1 (Apple Git-155)
+

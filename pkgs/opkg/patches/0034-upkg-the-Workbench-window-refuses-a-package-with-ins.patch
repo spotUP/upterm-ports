@@ -1,0 +1,198 @@
+From a6a994a57f0d0569c6295527018f2646d7362f66 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 26 Oct 2026 03:13:40 +0100
+Subject: [PATCH] upkg: the Workbench window refuses a package with install
+ questions of its own and names the shell command, using the check browse uses
+
+---
+ libopkg/upkg_browse.c | 50 +----------------------------------------
+ libopkg/upkg_rows.c   | 52 +++++++++++++++++++++++++++++++++++++++++++
+ libopkg/upkg_rows.h   |  3 +++
+ libopkg/upkg_wb.c     |  7 ++++++
+ 4 files changed, 63 insertions(+), 49 deletions(-)
+
+diff --git a/libopkg/upkg_browse.c b/libopkg/upkg_browse.c
+index 7b86762..7ef89a0 100644
+--- a/libopkg/upkg_browse.c
++++ b/libopkg/upkg_browse.c
+@@ -32,7 +32,6 @@
+ #define USAGE "usage: upkg browse\nkeys: Up Down move, Enter info, i install, r remove, u upgrade, q quit"
+ #define TITLE "UP-TERM ADD-ONS"
+ #define PROMPT "Enter info   i install   r remove   u upgrade   q quit"
+-#define LISTS_DEFAULT "/UP-Term/pkg/upkg/lists"
+ 
+ /* dialog colour codes of the menu: upgrade yellow, installed green, new cyan */
+ #define C_UPGRADE "\\Z3"
+@@ -106,53 +105,6 @@ static void menu_build(void)
+     free(status);
+ }
+ 
+-/* true when a feed's control for NAME has "UP-Term-Interactive: yes" (the package asks questions
+- * of its own). The feed texts are in the lists dir, one file per feed; *.prev and *.sig are not
+- * feeds. A "Package: " line sets the current name. */
+-static int interactive(const char *name)
+-{
+-    const char *dir = getenv("UPKG_LISTS_DIR");
+-    DIR *d;
+-    struct dirent *de;
+-    int found = 0;
+-
+-    if (!dir || !*dir)
+-        dir = opkg_config && opkg_config->lists_dir ? opkg_config->lists_dir : LISTS_DEFAULT;
+-    d = opendir(dir);
+-    if (!d)
+-        return 0;
+-    while (!found && (de = readdir(d)) != NULL) {
+-        size_t n = strlen(de->d_name);
+-        char *path, cur[512], line[1024];
+-        struct stat st;
+-        FILE *fp;
+-
+-        if ((n >= 5 && !strcmp(de->d_name + n - 5, ".prev")) || (n >= 4 && !strcmp(de->d_name + n - 4, ".sig")))
+-            continue;
+-        sprintf_alloc(&path, "%s/%s", dir, de->d_name);
+-        fp = stat(path, &st) == 0 && S_ISREG(st.st_mode) ? fopen(path, "r") : NULL;
+-        free(path);
+-        if (!fp)
+-            continue;
+-        cur[0] = '\0';
+-        while (fgets(line, sizeof line, fp)) {
+-            size_t k = strlen(line);
+-
+-            while (k && (line[k - 1] == '\n' || line[k - 1] == '\r'))
+-                line[--k] = '\0';
+-            if (!strncmp(line, "Package: ", 9)) {
+-                snprintf(cur, sizeof cur, "%s", line + 9);
+-            } else if (!strcmp(line, "UP-Term-Interactive: yes") && !strcmp(cur, name)) {
+-                found = 1;
+-                break;
+-            }
+-        }
+-        fclose(fp);
+-    }
+-    closedir(d);
+-    return found;
+-}
+-
+ static void quit_screen(void)
+ {
+     ui_stop();
+@@ -220,7 +172,7 @@ static int run_action(const char *cmdname, const char *tag)
+ 
+     sprintf_alloc(&title, "upkg %s %s", cmdname, tag);
+ 
+-    if (interactive(tag)) {
++    if (upkg_rows_interactive(tag)) {
+         char junk[64];
+ 
+         ui_suspend();
+diff --git a/libopkg/upkg_rows.c b/libopkg/upkg_rows.c
+index 39ddbd2..f86cb54 100644
+--- a/libopkg/upkg_rows.c
++++ b/libopkg/upkg_rows.c
+@@ -8,7 +8,10 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <dirent.h>
++#include <sys/stat.h>
+ 
++#include "opkg_conf.h"
+ #include "opkg_cmd.h"
+ #include "pkg_hash.h"
+ #include "sprintf_alloc.h"
+@@ -16,6 +19,8 @@
+ #include "upkg_browse.h"
+ #include "upkg_rows.h"
+ 
++#define LISTS_DEFAULT "/UP-Term/pkg/upkg/lists"
++
+ static char *dupn(const char *s, size_t n)
+ {
+     char *d = xmalloc(n + 1);
+@@ -283,3 +288,50 @@ void upkg_lines_end(upkg_lines_t *l, upkg_line_fn emit, void *ctx)
+         l->n = 0;
+     }
+ }
++
++/* true when a feed's control for NAME has "UP-Term-Interactive: yes" (the package asks questions
++ * of its own). The feed texts are in the lists dir, one file per feed; *.prev and *.sig are not
++ * feeds. A "Package: " line sets the current name. */
++int upkg_rows_interactive(const char *name)
++{
++    const char *dir = getenv("UPKG_LISTS_DIR");
++    DIR *d;
++    struct dirent *de;
++    int found = 0;
++
++    if (!dir || !*dir)
++        dir = opkg_config && opkg_config->lists_dir ? opkg_config->lists_dir : LISTS_DEFAULT;
++    d = opendir(dir);
++    if (!d)
++        return 0;
++    while (!found && (de = readdir(d)) != NULL) {
++        size_t n = strlen(de->d_name);
++        char *path, cur[512], line[1024];
++        struct stat st;
++        FILE *fp;
++
++        if ((n >= 5 && !strcmp(de->d_name + n - 5, ".prev")) || (n >= 4 && !strcmp(de->d_name + n - 4, ".sig")))
++            continue;
++        sprintf_alloc(&path, "%s/%s", dir, de->d_name);
++        fp = stat(path, &st) == 0 && S_ISREG(st.st_mode) ? fopen(path, "r") : NULL;
++        free(path);
++        if (!fp)
++            continue;
++        cur[0] = '\0';
++        while (fgets(line, sizeof line, fp)) {
++            size_t k = strlen(line);
++
++            while (k && (line[k - 1] == '\n' || line[k - 1] == '\r'))
++                line[--k] = '\0';
++            if (!strncmp(line, "Package: ", 9)) {
++                snprintf(cur, sizeof cur, "%s", line + 9);
++            } else if (!strcmp(line, "UP-Term-Interactive: yes") && !strcmp(cur, name)) {
++                found = 1;
++                break;
++            }
++        }
++        fclose(fp);
++    }
++    closedir(d);
++    return found;
++}
+diff --git a/libopkg/upkg_rows.h b/libopkg/upkg_rows.h
+index feb7520..b4814a1 100644
+--- a/libopkg/upkg_rows.h
++++ b/libopkg/upkg_rows.h
+@@ -78,6 +78,9 @@ char *upkg_rows_label(const upkg_row_t *row);
+ /* The buttons enabled: none while RUNNING (a command is going), else ACT plus Update and Quit */
+ unsigned upkg_rows_buttons(int running, unsigned act);
+ 
++/* true when a feed marks the package NAME "UP-Term-Interactive: yes": it asks questions of its own and needs a terminal */
++int upkg_rows_interactive(const char *name);
++
+ /* Output arrives as text pieces (the sink); the log shows lines. Tabs become spaces to the next multiple of 8, a
+  * carriage return is dropped, a line longer than the buffer is cut. */
+ typedef void (*upkg_line_fn)(void *ctx, const char *line);
+diff --git a/libopkg/upkg_wb.c b/libopkg/upkg_wb.c
+index 992dbb3..251eb99 100644
+--- a/libopkg/upkg_wb.c
++++ b/libopkg/upkg_wb.c
+@@ -385,6 +385,13 @@ static void action(wb_t *wb, int id)
+             return;
+         name = wb->rows.row[wb->idx[wb->sel]].name;
+     }
++    if (name && upkg_rows_interactive(name)) {
++        char body[320];
++
++        snprintf(body, sizeof body, "%s asks questions of its own.\nRun it from a Shell:\nupkg %s %s", name, cmd, name);
++        say_requester(wb, body);
++        return;
++    }
+     run_cmd(wb, cmd, name);
+ }
+ 
+-- 
+2.50.1 (Apple Git-155)
+
