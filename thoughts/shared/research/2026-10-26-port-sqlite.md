@@ -24,3 +24,9 @@ Status: amiga build green (68020 soft-float, __stack 262144, 1682976 bytes). Rig
 3. Lock test: open one db file from two shells, write in one while the other holds a read
    transaction; expect "database is locked", not "disk I/O error".
 4. PRAGMA journal_mode=wal: expect failure or fallback; record result.
+
+## Rig check (2026-10-26, rig 8, 060 --max, vtcon origin/main a0087f2d)
+- Reset count: 1 (one cold boot, no reset loop).
+- userland_rig.py --only sqlite: stopped at case 2. version: output differs from the host only in "(32-bit)" vs "(64-bit)" (expected: build width; the case needs a normaliser or a host-independent command, e.g. "sqlite3 -version | cut -d' ' -f1-3"). select (`sqlite3 :memory: "select 1+1;"`): HANGS, never prints, ignores Ctrl-C. Same for any command that opens a database (-batch, /ram/x.db, .databases). Cases 3-9 not run. Two-shell test not run.
+- Cause (unverified, measured symptoms only): the process is runnable (state "ready", stack 262144, ~6k used), and `wasabi snoop --entry` shows it calling FindTask(NULL) in a tight loop with no other DOS call. -version (no database open) works. Not fixed: needs a disassembly or ixemul-side look (spin in ixemul after sqlite3_initialize / first open), beyond a recipe or patch fault.
+- Note: a hung sqlite3 started via EXEC occupies a run slot and ignores Ctrl-C; `wasabi free N` stops it.
