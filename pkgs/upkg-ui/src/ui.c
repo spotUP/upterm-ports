@@ -525,7 +525,7 @@ static void draw_all(void)
 	default:
 		draw_menu(widget_row);
 		{
-			ch_hint mh[4];
+			ch_hint mh[6];
 			int mn = ch_menu_hints(mh, ui_opt.entry_flags && msel >= 0 && msel < ui_opt.nentries ?
 			                               ui_opt.entry_flags[msel] : 0);
 
