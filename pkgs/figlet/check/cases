@@ -1,0 +1,5 @@
+version	figlet -I 1
+basic	figlet Hi
+width	figlet -w 20 Hello
+file	figlet < in.txt
+missing	figlet -f nosuchfont Hi
