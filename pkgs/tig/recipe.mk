@@ -2,6 +2,7 @@
 # Runs git through pipes at run time (the git package). Built without readline and
 # pcre (tig's own prompt, POSIX regex); fork() is gone: the patch uses vfork.
 tig_VERSION   := 2.6.0
+tig_SUMMARY   := tig 2.6.0 text-mode interface for git in UP-Term:bin
 tig_URL       := https://github.com/jonas/tig/releases/download/tig-$(tig_VERSION)/tig-$(tig_VERSION).tar.gz
 tig_ARCHIVE   := $(DL)/tig-$(tig_VERSION).tar.gz
 tig_SHA256    := 99d4a0fdd3d93547ebacfe511195cb92e4f75b91644c06293c067f401addeb3e

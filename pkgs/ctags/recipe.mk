@@ -9,6 +9,7 @@
 # Host build: -D__GNUG__ stops general.h defining __unused__, which the macOS
 #   headers use.
 ctags_VERSION   := 5.8
+ctags_SUMMARY   := Exuberant ctags 5.8 source code tag generator in UP-Term:bin
 ctags_URL       := https://downloads.sourceforge.net/project/ctags/ctags/$(ctags_VERSION)/ctags-$(ctags_VERSION).tar.gz
 ctags_SHA256    := 0e44b45dcabe969e0bbbb11e30c246f81abe5d32012db37395eb57d66e9e99c7
 ctags_LICENSE   := GPL-2.0-or-later

@@ -1,5 +1,6 @@
 # ncdu 1.x (vtcon plan 3.6): the disk usage browser, C and ncurses (2.x is Zig).
 ncdu_VERSION   := 1.22
+ncdu_SUMMARY   := ncdu 1.22 disk usage browser in UP-Term:bin
 ncdu_URL       := https://dev.yorhel.nl/download/ncdu-$(ncdu_VERSION).tar.gz
 ncdu_SHA256    := 0ad6c096dc04d5120581104760c01b8f4e97d4191d6c9ef79654fa3c691a176b
 ncdu_LICENSE   := MIT

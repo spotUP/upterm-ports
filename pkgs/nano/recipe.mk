@@ -1,5 +1,6 @@
 # GNU nano (vtcon plan 1.5): the editor, against ncursesw (0.8), UTF-8.
 nano_VERSION   := 9.2
+nano_SUMMARY   := GNU nano 9.2 text editor in UP-Term:bin and UP-Term:share/nano
 nano_URL       := https://ftp.gnu.org/gnu/nano/nano-$(nano_VERSION).tar.xz
 nano_SHA256    := 05ecb99247b782e8a5b3a25ed4101dd034b0236902f7449bc9795b717642f7e9
 nano_LICENSE   := GPL-3.0-or-later

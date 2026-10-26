@@ -3,6 +3,7 @@
 # links curses when asked); here the ncurses terminfo path is used so that
 # TERM=vtcon resolves the same way as for nano and less.
 joe_VERSION   := 4.6
+joe_SUMMARY   := JOE 4.6 text editor in UP-Term:bin and UP-Term:share/joe
 joe_URL       := https://downloads.sourceforge.net/project/joe-editor/JOE%20sources/joe-$(joe_VERSION)/joe-$(joe_VERSION).tar.gz
 joe_SHA256    := 495a0a61f26404070fe8a719d80406dc7f337623788e445b92a9f6de512ab9de
 joe_LICENSE   := GPL-2.0-or-later

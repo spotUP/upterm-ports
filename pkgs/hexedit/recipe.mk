@@ -4,6 +4,7 @@
 # The configure script looks for -lcurses / -lncurses: a private lib directory with a copy of
 # libncursesw.a answers it. Colours (--color) are on: ncursesw has use_default_colors.
 hexedit_VERSION   := 1.6
+hexedit_SUMMARY   := hexedit 1.6 text-mode hex editor in UP-Term:bin
 hexedit_URL       := https://github.com/pixel/hexedit/archive/refs/tags/$(hexedit_VERSION).tar.gz
 hexedit_ARCHIVE   := $(DL)/hexedit-$(hexedit_VERSION).tar.gz
 hexedit_SHA256    := 598906131934f88003a6a937fab10542686ce5f661134bc336053e978c4baae3
