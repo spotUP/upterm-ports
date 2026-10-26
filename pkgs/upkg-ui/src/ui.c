@@ -638,6 +638,12 @@ static int key_menu(int fn, wint_t c)
 		case KEY_PPAGE: msel = msel - room < 0 ? 0 : msel - room; break;
 		case KEY_NPAGE: msel = msel + room > n - 1 ? n - 1 : msel + room; break;
 		case KEY_ENTER: return 0;
+		case KEY_LEFT: /* only a caller that lists UI_HOTKEY_LEFT hears it; for the rest Left does nothing */
+			if (ui_opt.hotkeys && strchr(ui_opt.hotkeys, UI_HOTKEY_LEFT)) {
+				hotkey = UI_HOTKEY_LEFT;
+				return 0;
+			}
+			break;
 		case KEY_BACKSPACE: /* keypad mode turns 8 and 127 into these: back to the bytes a hotkey list names */
 		case KEY_DC:
 			if (ui_opt.hotkeys && strchr(ui_opt.hotkeys, c == KEY_DC ? 127 : 8)) {

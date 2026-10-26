@@ -80,6 +80,10 @@ void ui_program_done(void);
 /* programbox from stdin or a pipe: begin, lines to the end, done */
 void ui_read_lines(FILE *in);
 
+/* menu hotkeys: put this byte (Ctrl-B) in ui_opt.hotkeys and the Left arrow ends the menu with
+ * ui_hotkey() == UI_HOTKEY_LEFT, as Backspace does with 8 or 127. Without it Left does nothing. */
+#define UI_HOTKEY_LEFT 2
+
 /* what the last widget answered */
 int ui_hotkey(void);              /* the --hotkeys key that ended a menu, 0 for Enter */
 int ui_selected(void);            /* the menu row */
