@@ -65,8 +65,12 @@
 # the run of install, remove and upgrade with an output sink and the rebuild after it); upkg browse and the Workbench window use
 # it, so there is one parser. Pure C, no curses. check/rows.sh + check/rows_test.c (ASan, over fixture list text).
 # patches/0030: main calls upkg_wb(struct WBStartup *) when argc == 0 (a Workbench icon), after the IXSTACK setup and the feed and
-# status load; any command line runs as before. upkg_wb is a stub that logs "window opened, N rows". check/wb_start.sh +
-# check/wb_exec.c (an exec with an empty argv): called once for argc == 0, never for a command line.
+# status load; any command line runs as before. check/wb_start.sh + check/wb_exec.c (an exec with an empty argv): called once
+# for argc == 0, never for a command line. A host build of upkg_wb has no window: it logs "window opened, N rows".
+# patches/0031 and 0032: on the Amiga upkg_wb is a GadTools (V37) window on the Workbench public screen: filter cycle, add-on listview
+# (rows from upkg_rows_load), Install, Remove, Upgrade, Update, a read-only log listview and Quit; the sentinel is written once the
+# list is filled. The filter, the buttons a row enables and the listview line are pure functions in upkg_rows.c (check/rows_test.c).
+# Install, Remove, Upgrade and Update do nothing yet (UPKG-WB-UI G3).
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

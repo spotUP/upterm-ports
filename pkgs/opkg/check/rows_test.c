@@ -125,6 +125,33 @@ int main(void)
     n = upkg_rows_load(&rows);
     CHECK(n == 6);
 
+    /* the window's decisions: which rows a filter shows, which buttons a row enables, the listview line */
+    {
+        size_t idx[16];
+        char *l;
+
+        CHECK(upkg_rows_filter(&rows, UPKG_FILTER_ALL, idx) == 6 && idx[0] == 0 && idx[5] == 5);
+        CHECK(upkg_rows_filter(&rows, UPKG_FILTER_INSTALLED, idx) == 2 && idx[0] == 2 && idx[1] == 3);
+        CHECK(upkg_rows_filter(&rows, UPKG_FILTER_UPGRADABLE, idx) == 1 && idx[0] == 3);
+        CHECK(upkg_rows_actions(NULL) == 0);
+        CHECK(upkg_rows_actions(by_name(&rows, "alpha")) == UPKG_ACT_INSTALL);
+        CHECK(upkg_rows_actions(by_name(&rows, "bravo")) == UPKG_ACT_INSTALL);
+        CHECK(upkg_rows_actions(by_name(&rows, "charlie")) == UPKG_ACT_REMOVE);
+        CHECK(upkg_rows_actions(by_name(&rows, "delta")) == (UPKG_ACT_REMOVE | UPKG_ACT_UPGRADE));
+        l = upkg_rows_label(by_name(&rows, "delta"));
+        CHECK(!strcmp(l, "delta  3.0  4.0  upgradable"));
+        free(l);
+        l = upkg_rows_label(by_name(&rows, "alpha"));
+        CHECK(!strcmp(l, "alpha  -  1.0  available"));
+        free(l);
+        l = upkg_rows_label(by_name(&rows, "bravo"));
+        CHECK(!strcmp(l, "bravo  -  2.0  new"));
+        free(l);
+        l = upkg_rows_label(by_name(&rows, "charlie"));
+        CHECK(!strcmp(l, "charlie  3.1  3.1  installed"));
+        free(l);
+    }
+
     /* run: the command runs once on the name with the sink on, the hash is rebuilt, the rows are loaded again */
     list_calls = 0;
     exec_rc = 7;
@@ -145,6 +172,6 @@ int main(void)
     for (i = 0; i < 3; i++)
         upkg_rows_free(&rows);
     CHECK(rows.n == 0 && rows.row == NULL);
-    printf("[OK] upkg_rows: four row kinds parsed, install/remove/upgrade run with the sink and rebuild the rows\n");
+    printf("[OK] upkg_rows: four row kinds parsed, filters and button actions decided, install/remove/upgrade run with the sink and rebuild the rows\n");
     return 0;
 }
