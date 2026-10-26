@@ -14,3 +14,15 @@ compares against. Needs bebbo's gcc 6.5 in `~/opt/amiga` (`AMIGA=`), and
 Not needed for the kit; the userland rig (`vtcon/tools/rig/userland_rig.py`) uses
 what it builds. The whole path: the `upterm` repo's README, "Set up the whole
 thing".
+
+## Starting upkg from Workbench
+
+`UP-Term:bin/upkg` also starts from Workbench (an icon start, no Shell). It opens the window "UP-Term Add-ons" on the Workbench screen:
+
+- A list of the packages the feed offers, each with its state (installed, upgrade, available). The cycle gadget filters the list (All, Installed, Upgradable).
+- Install and Remove buttons act on the selected package; Upgrade and Update do the same as `upkg upgrade` and `upkg update`. The window stays usable while a command runs, and the output scrolls in the log gadget.
+- A package that asks questions of its own while it installs is refused with a message ("<name> asks questions of its own. Run it from a Shell: upkg install <name>"); run it from a Shell instead.
+- If upkg cannot make its temporary drawer (TMP: is not assigned, or its volume is full), a requester names the reason and the hint `Assign TMP: T:`; before this, Workbench showed nothing.
+- A failure ends upkg with return code 20 (RETURN_FAIL), never a negative code, so a script or the Workbench start sees it.
+
+From a Shell nothing changes: `upkg list`, `upkg install <package>` and `upkg browse` work as before. The user text for the kit is `dist/README.txt` in the vtcon repo, section PACKAGES (upkg).
