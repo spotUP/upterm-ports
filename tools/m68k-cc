@@ -39,7 +39,7 @@ while [ $i -lt $n ]; do
 	case $a in
 	-o|-Xlinker)
 		ld+=("$a" "${args[$((i + 1))]}"); i=$((i + 2)); continue ;;
-	-I|-D|-U|-include|-imacros|-isystem|-idirafter|-iquote|-x|-MF|-MT|-MQ)
+	-I|-D|-U|-include|-imacros|-isystem|-idirafter|-iquote|-x|-MF|-MT|-MQ|--param|-Xassembler|-Xpreprocessor)
 		cc+=("$a" "${args[$((i + 1))]}"); i=$((i + 2)); continue ;;
 	-x*) cc+=("$a") ;;
 	-o?*|-l*|-L*|-Wl,*) ld+=("$a") ;;
