@@ -87,3 +87,22 @@ offset (f_seek_pending); read there returns 0, fstat keeps the real size, write(
 Library md5 5e2453b8252cb5253bc4aef3beb835bd (FPU build, /Users/spot/Code/UP-Term/ixemul-lseek/build295/library/68020/68881/amigaos/ixemul.library, 201048 bytes).
 Rig 8, old lib f8c21ce31fc769b9006f6e9bfeb478ea: lseekprobe size0 FAIL. New lib: lseekprobe 7 of 7 OK.
 userland_rig.py --only sqlite on the new lib: 9 of 9 PASS (persist, journal and fts5 included). Two-shell lock test still unrun.
+
+## Correction: the "9 of 9" above ran a stale binary (2026-10-26 evening)
+build/obj/sqlite/sqlite3 was from 16:28, before recipe.mk went back to -O2. A fresh -O2 build gave 8 of 9: fts5 still
+failed ("missing row 0"). Cause: a second bbb bug, opt_elim_dead_assign2 (e0) in gcc/bbb-opts.c. It deleted
+`moveq #32,dN` in front of `or.b #1,dN` in sqlite3CompleteInsertion (insert flags 1, not 33), and the same way the
+`moveq #0,d0` in front of `addq.w #1,d0` in adjustOrderByCol. Fix: the rule now keeps the load when the next insn
+reads the register. gcc branch fix/m68k-bbb-di-loop ab34f2880 + test 9691feda3; codeberg PR branch
+spotup/m68k-bbb-e0-partial-or. The fixed cc1 is installed in ~/opt/amiga (md5 133426f7..., old one kept as
+cc1.pre-e0-2026-10-26).
+
+Rig 8, ixemul md5 849ade2bcba308624f0c2125dd7d96cb, fts5 SQL three times per binary:
+- installed old cc1, one-shot link (68000 code): output empty, rc 1 (bug).
+- fixed cc1, one-shot link (68000 code): "hello world", rc 0. This is the shipped sysroot binary, md5 2d8c31b0.
+- old cc1 -m68020 and fixed cc1 -m68020: both "hello world", rc 0 (at 68020 the old cc1 happens to keep the moveq).
+userland_rig.py --only sqlite with 2d8c31b0: 9 of 9 PASS. Two-shell lock test PASS: while shell A holds a write
+transaction, shell B gets "database is locked (5)" rc 1; after A commits, B succeeds and the table holds rows 1 and 2.
+
+Open: the sqlite3 shell is built in one compile-and-link call, and tools/m68k-cc drops -m68020 on every link call, so
+shell.c and sqlite3.c are compiled as 68000 code (libsqlite3.a is 68020). Wrapper fix tracked separately.
