@@ -24,6 +24,7 @@ typedef struct {
 	wchar_t init[UI_MAX_INPUT];
 	entry *entries;
 	int nentries;
+	const unsigned *entry_flags; /* optional, one CH_ENTRY_* (chrome.h) per entry: what the menu footer offers; NULL is the plain footer */
 } ui_opts;
 
 extern ui_opts ui_opt;
