@@ -1,0 +1,143 @@
+# Pull request checks for recipes (docs/adding-a-package.md, "What the checks do").
+# Host side only: no emulator, no m68k toolchain. The owner builds, rig-checks and releases (docs, "Owner steps").
+# Safety: pull_request (never pull_request_target), no secrets, a read-only token, GitHub-hosted runners only.
+# The jobs run make on the PR's recipe, which is code from the contributor: that is why none of this may hold a secret.
+name: pull request
+
+on:
+  pull_request:
+    paths:
+      - 'pkgs/**'
+      - 'mk/**'
+      - 'tools/**'
+      - 'Makefile'
+      - '.github/workflows/pr.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changed:
+    name: changed recipes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      pkgs: ${{ steps.list.outputs.pkgs }}
+      host: ${{ steps.list.outputs.host }}
+      feed: ${{ steps.list.outputs.feed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: list
+        name: list the packages the PR touches
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+          # directory names come from the PR: only plain names go on, so none reaches a shell as code
+          pkgs=$(git diff --name-only "origin/$BASE_REF"...HEAD -- 'pkgs/*/*' | cut -d/ -f2 | sort -u | grep -E '^[A-Za-z0-9_-]+$' | while read -r p; do
+            [ -f "pkgs/$p/recipe.mk" ] && echo "$p"
+          done | tr '\n' ' ' | sed 's/ *$//')
+          host="" feed=""
+          for p in $pkgs; do
+            # D5: the host build runs only for recipes that give host commands
+            if grep -Eq "^${p}_HOST_(CONFIGURE|BUILD)_CMD" "pkgs/$p/recipe.mk"; then host="$host $p"; fi
+            # the feed rows are checked only for recipes that set _FEED_ID
+            if [ -n "$(make -s "print-${p}_FEED_ID")" ]; then feed="$feed $p"; fi
+          done
+          {
+            echo "pkgs=$pkgs"
+            echo "host=${host# }"
+            echo "feed=${feed# }"
+          } >> "$GITHUB_OUTPUT"
+          echo "changed: $pkgs | host build: $host | feed: $feed"
+
+  lint:
+    name: recipe lint
+    needs: changed
+    if: needs.changed.outputs.pkgs != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: sh tools/recipe_lint.sh ${{ needs.changed.outputs.pkgs }}
+
+  sha256:
+    name: sha256 of the download
+    needs: changed
+    if: needs.changed.outputs.pkgs != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: fetch each _URL and compare with _SHA256 (tools/fetch.sh prints want and got)
+        run: |
+          set -eu
+          for p in ${{ needs.changed.outputs.pkgs }}; do
+            if [ -n "$(make -s "print-${p}_OWN")$(make -s "print-${p}_LHA_URLS")" ]; then
+              echo "$p: own or prebuilt, checked by its own rules"; continue
+            fi
+            sh tools/fetch.sh "$(make -s "print-${p}_URL")" "$(make -s "print-${p}_SHA256")" "build/dl/$p.archive"
+          done
+
+  test:
+    name: make test
+    needs: changed
+    if: needs.changed.outputs.pkgs != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: mkdir -p build && make test
+
+  host-build:
+    name: host build (advisory)
+    needs: changed
+    if: needs.changed.outputs.host != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: UP-Term (vtcon) main, read only (the tty cases compile its terminfo)
+        run: git clone --depth 1 https://github.com/spotUP/UP-Term.git ../vtcon
+      - name: make host-PKG for each changed recipe that has host commands
+        run: |
+          set -eu
+          for p in ${{ needs.changed.outputs.host }}; do
+            make "host-$p" JOBS=2
+          done
+
+  feed-rows:
+    name: feed rows match vtcon
+    needs: changed
+    if: needs.changed.outputs.feed != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: UP-Term (vtcon) main, read only
+        run: git clone --depth 1 https://github.com/spotUP/UP-Term.git ../vtcon
+      - name: pkg_rows.py check for each changed recipe with _FEED_ID
+        run: |
+          set -eu
+          [ -f ../vtcon/tools/pkg_rows.py ] || { echo "vtcon main has no tools/pkg_rows.py yet: nothing to check"; exit 0; }
+          for p in ${{ needs.changed.outputs.feed }}; do
+            python3 -I ../vtcon/tools/pkg_rows.py check "$p" --ports "$PWD" --root ../vtcon
+          done

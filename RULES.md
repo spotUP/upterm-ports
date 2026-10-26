@@ -5,7 +5,8 @@ The plan is vtcon's `thoughts/shared/plans/2026-10-04-unix-tool-ports.md`;
 progress is ledgered in `thoughts/shared/plans/2026-10-04-phase0-progress.md`.
 
 1. **One recipe per package**, `pkgs/<pkg>/recipe.mk` (version, URL, sha256,
-   licence, configure flags, the programs it ships). Upstream changes live in
+   licence, configure flags, the programs it ships; optional feed fields
+   `_FEED_ID`, `_SUMMARY`, `_FEED_MIN_BASE`, see mk/common.mk). Upstream changes live in
    `pkgs/<pkg>/patches/` as `git format-patch` files (`make <pkg>-patches`
    writes them from `build/src/<pkg>`, which is a git tree tagged `upstream`).
 2. **Runtime: ixemul-vtcon.** Everything links `libixcompat.a` from the sibling
@@ -28,6 +29,7 @@ progress is ledgered in `thoughts/shared/plans/2026-10-04-phase0-progress.md`.
 | Build one package (fetch, patch, configure, build, install to the sysroot, check_bin) | `make <pkg>` (e.g. `make grep`; `JOBS=2` when the Mac is busy) |
 | The libraries the tools build against | `make sysroot` (libixcompat + ncurses today) |
 | macOS build of the same source + expected outputs of its check cases | `make host-<pkg>` (writes `build/expected/<pkg>/<case>.txt`) |
+| Lint a package recipe (fields, https URL, patch order, check dir) | `tools/recipe_lint.sh [pkg ...]` (changed recipes when no argument; also run by the PR workflow) |
 | Host checks of one binary | `tools/check_bin.sh <pkg> "<stack bytes or empty>" <binary>...` |
 | 68030+/FPU scan alone | `python3 tools/m68k_scan.py <binary>` |
 | Host tests of the build tools (m68k_scan.py) | `make test` |

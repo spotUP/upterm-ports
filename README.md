@@ -15,6 +15,8 @@ Not needed for the kit; the userland rig (`vtcon/tools/rig/userland_rig.py`) use
 what it builds. The whole path: the `upterm` repo's README, "Set up the whole
 thing".
 
+Adding a package: `CONTRIBUTING.md` and `docs/adding-a-package.md`.
+
 ## Starting upkg from Workbench
 
 `UP-Term:bin/upkg` also starts from Workbench (an icon start, no Shell). It opens the window "UP-Term Add-ons" on the Workbench screen:

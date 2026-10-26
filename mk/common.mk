@@ -88,6 +88,11 @@ CHECK_PATH = $($(1)_HOBJ)/inst/bin$(foreach d,$($(1)_CHECK_DEPS),:$(HOSTB)/$(d)/
 #                   <drawer>/ of the kit, takes <p>_LICENSE_FILES from inside it and the <p>_LHA_URLS
 #                   archives as source. A package with a drawer is an add-on in vtcon (dist/slim.txt)
 #   <p>_NO_KIT      non-empty: kit-stage leaves the package out (built and checked only)
+#   <p>_FEED_ID    optional: the package id in the UP-Term feed (up-bitchx). Empty: the package is a
+#                   base-kit program (tree), no feed rows. vtcon's tools/pkg_rows.py reads it
+#   <p>_SUMMARY    optional: the one line that becomes the feed's Packages Description
+#   <p>_FEED_MIN_BASE  optional: lowest base (up-term.lha) version the package needs; empty: the
+#                   current base version
 #   <p>_POST_INSTALL  shell run after make install (optional)
 #   <p>_LHA_URLS / <p>_LHA_SHA256S  a prebuilt payload: parallel lists of lha archives (the
 #                   author's binaries, installed unmodified). <p>_URL/_SHA256 are not
@@ -112,9 +117,11 @@ $(1)_CONFIGURE_CMD ?= $$(if $$($(1)_CMAKE),cd $$($(1)_OBJ) && $$(call CMAKE_M68K
 	--build=$(BUILD_TRIPLE) --host=m68k-amigaos --prefix=$(PREFIX) $$($(1)_CONFIGURE))
 $(1)_BUILD_CMD ?= $(MAKE) -C $$($(1)_OBJ) -j$(JOBS)
 $(1)_INSTALL_CMD ?= $(MAKE) -C $$($(1)_OBJ) install DESTDIR=$(SYSROOT)
-$(1)_HOST_CONFIGURE_CMD ?= $$(if $$($(1)_CMAKE),cd $$($(1)_HOBJ) && cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=$$($(1)_HOBJ)/inst \
+# a prebuilt package (<p>_LHA_URLS) has no source to build for macOS: host-<p> says so
+$(1)_HOST_CONFIGURE_CMD ?= $$(if $$($(1)_LHA_URLS),echo "$(1) is prebuilt ($(1)_LHA_URLS) and has no macOS build: its check is pkgs/$(1)/check/$(1)_rig.py" >&2; exit 1,\
+	$$(if $$($(1)_CMAKE),cd $$($(1)_HOBJ) && cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=$$($(1)_HOBJ)/inst \
 	$$($(1)_HOST_CONFIGURE) $$($(1)_SRC),cd $$($(1)_HOBJ) && $$($(1)_SRC)/configure --prefix=$$($(1)_HOBJ)/inst \
-	$$($(1)_HOST_CONFIGURE))
+	$$($(1)_HOST_CONFIGURE)))
 $(1)_HOST_BUILD_CMD ?= $(MAKE) -C $$($(1)_HOBJ) -j$(JOBS) install
 
 .PHONY: $(1) host-$(1) clean-$(1) $(1)-patches
@@ -123,8 +130,7 @@ $(1): $(STATE)/$(1).checked
 $(STATE)/$(1).fetched: pkgs/$(1)/recipe.mk
 	@mkdir -p $(STATE)
 	$$(if $$($(1)_OWN)$$($(1)_LHA_URLS),,$(ROOT)/tools/fetch.sh $$($(1)_URL) $$($(1)_SHA256) $$($(1)_ARCHIVE))
-	$$(foreach i,$$(if $$($(1)_LHA_URLS),$$(shell seq 1 $$(words $$($(1)_LHA_URLS)))),$(ROOT)/tools/fetch.sh $$(word $$(i),$$($(1)_LHA_URLS)) \
-		$$(word $$(i),$$($(1)_LHA_SHA256S)) $(DL)/$$(notdir $$(word $$(i),$$($(1)_LHA_URLS)));)
+	set --$$(foreach h,$$($(1)_LHA_SHA256S), '$$(h)'); $$(foreach u,$$($(1)_LHA_URLS),$(ROOT)/tools/fetch.sh $$(u) $$$$1 $(DL)/$$(notdir $$(u)) && shift;)
 	@touch $$@
 
 $(STATE)/$(1).unpacked: $(STATE)/$(1).fetched $$(wildcard pkgs/$(1)/patches/*.patch) $$(if $$($(1)_OWN),$$(wildcard pkgs/$(1)/src/*))
@@ -178,9 +184,7 @@ $(STATE)/host-$(1).expected: $(STATE)/host-$(1).built $$(wildcard pkgs/$(1)/chec
 	@touch $$@
 
 $(1)-patches:
-	rm -f pkgs/$(1)/patches/*.patch
-	git -C $$($(1)_SRC) format-patch -q -o $(ROOT)/pkgs/$(1)/patches upstream
-	ls pkgs/$(1)/patches
+	sh tools/patches.sh $$($(1)_SRC) $(ROOT)/pkgs/$(1)/patches
 
 clean-$(1):
 	rm -rf $$($(1)_SRC) $$($(1)_OBJ) $$($(1)_HOBJ) $(EXPECT)/$(1) $(STATE)/$(1).* $(STATE)/host-$(1).*

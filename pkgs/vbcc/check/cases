@@ -1,1 +1,0 @@
-hello	vc +upterm68k hello.c -o hello && hello

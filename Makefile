@@ -24,10 +24,13 @@ sysroot: ixcompat ncurses
 # host tests of the build tools (m68k_scan.py's flow rules)
 test:
 	python3 tools/test_m68k_scan.py
+	sh tools/test_m68k_cc.sh
 	sh tools/test_recipe_var.sh
 	sh tools/test_check_bin.sh
 	sh tools/test_kit_stage.sh
 	sh tools/test_bitchx_parallel.sh
+	sh tools/test_fetched_no_lha.sh
+	sh tools/test_patches.sh
 	cc -Wall -Wextra -o build/test_chrome pkgs/upkg-ui/src/test_chrome.c pkgs/upkg-ui/src/chrome.c && build/test_chrome
 
 sizes:

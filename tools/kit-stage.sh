@@ -127,6 +127,12 @@ done
 cp "$ROOT/Makefile" "$ROOT/RULES.md" "$KSRC/ports/"
 cp -R "$ROOT/mk" "$ROOT/tools" "$KSRC/ports/"
 cp "$KIT/SOURCES.txt" "$KSRC/"
+# which ports checkout this kit came from: the commit, plus -dirty when tracked files differ from it.
+# vtcon's make dist reads it and refuses a kit from a branch that is not on origin/main (2026-10-26:
+# a kit staged on port/htop, 21 commits behind, died later in slim.py)
+stamp=$(git -C "$ROOT" rev-parse HEAD)
+[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ] || stamp=$stamp-dirty
+echo "$stamp" > "$KIT/STAGED-FROM"
 
 # every shipped program has its package's row (a GPL binary without its
 # source would be a licence violation: plan risk 7)
