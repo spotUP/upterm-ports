@@ -11,6 +11,8 @@ bad=0
 err() { echo "recipe_lint: $1: $2" >&2; bad=1; }
 for p in "$@"; do
 	[ -f "$ROOT/pkgs/$p/recipe.mk" ] || { err "$p" "no pkgs/$p/recipe.mk"; continue; }
+	# A local recipe (_LOCAL) builds from a checkout on this machine, outside PKG_RULES and the kit (Makefile:10, 45): nothing to lint.
+	[ -z "$(var "$p" LOCAL)" ] || { echo "recipe_lint: $p: local recipe, skipped"; continue; }
 	own=$(var "$p" OWN)
 	lha=$(var "$p" LHA_URLS)
 	for f in VERSION LICENSE; do
