@@ -1,0 +1,367 @@
+From 7f939813301896fbf3b3e8f31fd4081c8c2c0f4e Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Mon, 26 Oct 2026 03:03:07 +0100
+Subject: [PATCH] upkg: the Workbench window skeleton, GadTools gadgets on the
+ Workbench screen and an event loop that quits cleanly
+
+---
+ libopkg/upkg_wb.c | 303 ++++++++++++++++++++++++++++++++++++++++++++--
+ libopkg/upkg_wb.h |   6 +-
+ 2 files changed, 295 insertions(+), 14 deletions(-)
+
+diff --git a/libopkg/upkg_wb.c b/libopkg/upkg_wb.c
+index 3543153..0bb4689 100644
+--- a/libopkg/upkg_wb.c
++++ b/libopkg/upkg_wb.c
+@@ -1,5 +1,13 @@
+-/* upkg_wb.c - upkg: the Workbench window of the add-on list (UP-Term). A stub: it logs that the
+- * window would open, with the row count, and returns. The GadTools window replaces the body.
++/* upkg_wb.c - upkg: the Workbench window of the add-on list (UP-Term).
++ *
++ * Amiga build: a GadTools (V37) window on the Workbench public screen with a listview of the add-ons, a
++ * cycle gadget (All, Installed, Upgradable), the buttons Install, Remove, Upgrade, Update and Quit, and a
++ * read-only listview as the log. The layout comes from the screen font (columns and rows of text), only
++ * the spacing between gadgets is a constant. The event loop is the only place that runs; the decisions
++ * (which rows a filter shows, which buttons a row enables) are in upkg_rows.c.
++ *
++ * Any other build: no window; the function loads the rows and writes the sentinel, so a host test can
++ * count the calls.
+  *
+  * SPDX-License-Identifier: GPL-2.0-or-later
+  */
+@@ -8,6 +16,7 @@
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
+ 
+ #include "upkg_rows.h"
+ #include "upkg_wb.h"
+@@ -18,16 +27,12 @@
+ #define WB_LOG (getenv("UPKG_WB_LOG"))
+ #endif
+ 
+-int upkg_wb(struct WBStartup *wb)
++/* the line the rig test reads once the list is filled */
++static int wb_sentinel(size_t n)
+ {
+-    upkg_rows_t rows = { NULL, 0 };
+-    const char *log = WB_LOG, *stack = getenv("IXSTACK");
++    const char *log = WB_LOG;
+     FILE *fp;
+-    size_t n;
+ 
+-    (void)wb;
+-    n = upkg_rows_load(&rows);
+-    upkg_rows_free(&rows);
+     if (!log || !*log)
+         return 0;
+     fp = fopen(log, "a");
+@@ -35,10 +40,284 @@ int upkg_wb(struct WBStartup *wb)
+         return 1;
+     fprintf(fp, "window opened, %lu rows\n", (unsigned long)n);
+ #ifndef __amigaos__
+-    fprintf(fp, "IXSTACK=%s\n", stack ? stack : "");
+-#else
+-    (void)stack;
++    {
++        const char *stack = getenv("IXSTACK");
++
++        fprintf(fp, "IXSTACK=%s\n", stack ? stack : "");
++    }
+ #endif
+     fclose(fp);
+     return 0;
+ }
++
++#ifndef __amigaos__
++
++int upkg_wb(struct WBStartup *wb)
++{
++    upkg_rows_t rows = { NULL, 0 };
++    size_t n;
++
++    (void)wb;
++    n = upkg_rows_load(&rows);
++    upkg_rows_free(&rows);
++    return wb_sentinel(n);
++}
++
++#else  /* __amigaos__ */
++
++/* The NDK devices/timer.h declares its own struct timeval, which clashes with ixemul's (see upkg_wrap.c). */
++#define timeval ndk_timeval
++#include <exec/types.h>
++#include <exec/lists.h>
++#include <exec/nodes.h>
++#include <intuition/intuition.h>
++#include <intuition/screens.h>
++#include <libraries/gadtools.h>
++#include <graphics/text.h>
++/* the library bases are this file's own, so they never meet one the C library defines */
++#define IntuitionBase upkg_wb_IntuitionBase
++#define GfxBase upkg_wb_GfxBase
++#define GadToolsBase upkg_wb_GadToolsBase
++#include <proto/exec.h>
++#include <proto/intuition.h>
++#include <proto/graphics.h>
++#include <proto/gadtools.h>
++#undef timeval
++
++struct IntuitionBase *IntuitionBase;
++struct GfxBase *GfxBase;
++struct Library *GadToolsBase;
++
++static void list_init(struct List *l)
++{
++    l->lh_Head = (struct Node *)&l->lh_Tail;
++    l->lh_Tail = NULL;
++    l->lh_TailPred = (struct Node *)&l->lh_Head;
++}
++
++#define SPACE_X 6               /* pixels between gadgets */
++#define SPACE_Y 4
++#define WB_COLUMNS 72           /* inner width in characters of the screen font, less on a narrow screen */
++#define LIST_ROWS 10
++#define LOG_ROWS 4
++
++enum { G_FILTER, G_LIST, G_INSTALL, G_REMOVE, G_UPGRADE, G_UPDATE, G_LOG, G_QUIT, G_COUNT };
++
++static const char *const filter_labels[] = { "All", "Installed", "Upgradable", NULL };
++
++typedef struct {
++    struct Screen *scr;
++    APTR vi;
++    struct Window *win;
++    struct Gadget *glist;
++    struct Gadget *gad[G_COUNT];
++    struct List list;           /* the add-on listview's labels */
++    struct List log;            /* the log listview's labels */
++    int width, height;          /* the window's outer size, from the gadget layout */
++} wb_t;
++
++static void list_free(struct List *l)
++{
++    struct Node *n;
++
++    while ((n = RemHead(l)) != NULL) {
++        free(n->ln_Name);
++        free(n);
++    }
++}
++
++static int list_add(struct List *l, const char *text)
++{
++    struct Node *n = calloc(1, sizeof *n);
++
++    if (!n)
++        return 0;
++    n->ln_Name = strdup(text);
++    if (!n->ln_Name) {
++        free(n);
++        return 0;
++    }
++    AddTail(l, n);
++    return 1;
++}
++
++/* The listview is detached while its labels change, then shown again with the last line in view. */
++static void log_line(wb_t *wb, const char *text)
++{
++    ULONG count = 0;
++    struct Node *n;
++
++    GT_SetGadgetAttrs(wb->gad[G_LOG], wb->win, NULL, GTLV_Labels, (ULONG)~0, TAG_DONE);
++    list_add(&wb->log, text);
++    for (n = wb->log.lh_Head; n->ln_Succ; n = n->ln_Succ)
++        count++;
++    GT_SetGadgetAttrs(wb->gad[G_LOG], wb->win, NULL, GTLV_Labels, (ULONG)&wb->log,
++                      GTLV_Top, count ? count - 1 : 0, TAG_DONE);
++}
++
++static void gadgets_free(wb_t *wb)
++{
++    if (wb->glist)
++        FreeGadgets(wb->glist);
++    wb->glist = NULL;
++}
++
++/* Create the gadgets from the screen font: every size is a multiple of the font's height or width. */
++static int gadgets_make(wb_t *wb)
++{
++    struct NewGadget ng;
++    struct Gadget *g;
++    struct RastPort *rp = &wb->scr->RastPort;
++    int cw = rp->TxWidth ? rp->TxWidth : 8, ch = rp->TxHeight ? rp->TxHeight : 8;
++    int bh = ch + 6;                                    /* a button is a line of text and its frame */
++    int cols = WB_COLUMNS, inner, x0, y, lw, bw, i;
++    static const char *const names[] = { "Install", "Remove", "Upgrade", "Update", "Quit" };
++
++    if ((wb->scr->Width - wb->scr->WBorLeft - wb->scr->WBorRight) / cw - 4 < cols)
++        cols = (wb->scr->Width - wb->scr->WBorLeft - wb->scr->WBorRight) / cw - 4;
++    inner = cols * cw;
++    x0 = wb->scr->WBorLeft + SPACE_X;
++    y = wb->scr->WBorTop + wb->scr->Font->ta_YSize + 1 + SPACE_Y;
++    lw = inner;
++    bw = (lw - 4 * SPACE_X) / 5;
++
++    g = CreateContext(&wb->glist);
++    if (!g)
++        return 0;
++    memset(&ng, 0, sizeof ng);
++    ng.ng_VisualInfo = wb->vi;
++    ng.ng_TextAttr = wb->scr->Font;
++
++    ng.ng_LeftEdge = x0; ng.ng_TopEdge = y; ng.ng_Width = 16 * cw; ng.ng_Height = bh;
++    ng.ng_GadgetID = G_FILTER;
++    g = CreateGadget(CYCLE_KIND, g, &ng, GTCY_Labels, (ULONG)filter_labels, TAG_DONE);
++    wb->gad[G_FILTER] = g;
++    y += bh + SPACE_Y;
++
++    ng.ng_TopEdge = y; ng.ng_Width = lw; ng.ng_Height = LIST_ROWS * ch + 4;
++    ng.ng_GadgetID = G_LIST;
++    g = CreateGadget(LISTVIEW_KIND, g, &ng, GTLV_Labels, (ULONG)&wb->list, GTLV_ShowSelected, 0,
++                     GTLV_ScrollWidth, ch + 4, TAG_DONE);
++    wb->gad[G_LIST] = g;
++    y += LIST_ROWS * ch + 4 + SPACE_Y;
++
++    ng.ng_Height = bh;
++    for (i = 0; i < 4; i++) {
++        ng.ng_LeftEdge = x0 + i * (bw + SPACE_X); ng.ng_TopEdge = y; ng.ng_Width = bw;
++        ng.ng_GadgetText = (UBYTE *)names[i]; ng.ng_GadgetID = G_INSTALL + i;
++        g = CreateGadget(BUTTON_KIND, g, &ng, GA_Disabled, i < 3, TAG_DONE);
++        wb->gad[G_INSTALL + i] = g;
++    }
++    y += bh + SPACE_Y;
++
++    ng.ng_LeftEdge = x0; ng.ng_TopEdge = y; ng.ng_Width = lw; ng.ng_Height = LOG_ROWS * ch + 4;
++    ng.ng_GadgetText = NULL; ng.ng_GadgetID = G_LOG;
++    g = CreateGadget(LISTVIEW_KIND, g, &ng, GTLV_Labels, (ULONG)&wb->log, GTLV_ReadOnly, TRUE,
++                     GTLV_ScrollWidth, ch + 4, TAG_DONE);
++    wb->gad[G_LOG] = g;
++    y += LOG_ROWS * ch + 4 + SPACE_Y;
++
++    ng.ng_LeftEdge = x0 + 4 * (bw + SPACE_X); ng.ng_TopEdge = y; ng.ng_Width = bw; ng.ng_Height = bh;
++    ng.ng_GadgetText = (UBYTE *)names[4]; ng.ng_GadgetID = G_QUIT;
++    g = CreateGadget(BUTTON_KIND, g, &ng, TAG_DONE);
++    wb->gad[G_QUIT] = g;
++    y += bh + SPACE_Y;
++
++    for (i = 0; i < G_COUNT; i++)
++        if (!wb->gad[i])
++            return 0;
++    wb->width = inner + wb->scr->WBorLeft + wb->scr->WBorRight + 2 * SPACE_X;
++    wb->height = y + wb->scr->WBorBottom;
++    return 1;
++}
++
++static int event_loop(wb_t *wb)
++{
++    int running = 1;
++
++    while (running) {
++        struct IntuiMessage *msg;
++
++        Wait(1UL << wb->win->UserPort->mp_SigBit);
++        while ((msg = GT_GetIMsg(wb->win->UserPort)) != NULL) {
++            ULONG cls = msg->Class;
++            struct Gadget *gad = (struct Gadget *)msg->IAddress;
++
++            GT_ReplyIMsg(msg);
++            switch (cls) {
++            case IDCMP_CLOSEWINDOW:
++                running = 0;
++                break;
++            case IDCMP_REFRESHWINDOW:
++                GT_BeginRefresh(wb->win);
++                GT_EndRefresh(wb->win, TRUE);
++                break;
++            case IDCMP_GADGETUP:
++                if (gad->GadgetID == G_QUIT)
++                    running = 0;
++                break;
++            }
++        }
++    }
++    return 0;
++}
++
++int upkg_wb(struct WBStartup *wbmsg)
++{
++    wb_t wb;
++    upkg_rows_t rows = { NULL, 0 };
++    int rc = 1;
++
++    (void)wbmsg;
++    memset(&wb, 0, sizeof wb);
++    list_init(&wb.list);
++    list_init(&wb.log);
++    IntuitionBase = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 37);
++    GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 37);
++    GadToolsBase = OpenLibrary((STRPTR)"gadtools.library", 37);
++    if (!IntuitionBase || !GfxBase || !GadToolsBase)
++        goto out;
++    wb.scr = LockPubScreen((STRPTR)"Workbench");
++    if (!wb.scr)
++        goto out;
++    wb.vi = GetVisualInfo(wb.scr, TAG_DONE);
++    if (!wb.vi)
++        goto out;
++    if (!gadgets_make(&wb))
++        goto out;
++    wb.win = OpenWindowTags(NULL,
++        WA_Left, 0, WA_Top, wb.scr->BarHeight + 1, WA_Width, wb.width, WA_Height, wb.height,
++        WA_Title, (ULONG)"UP-Term Add-ons", WA_PubScreen, (ULONG)wb.scr,
++        WA_Gadgets, (ULONG)wb.glist,
++        WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | LISTVIEWIDCMP | CYCLEIDCMP | BUTTONIDCMP,
++        WA_Flags, WFLG_CLOSEGADGET | WFLG_DRAGBAR | WFLG_DEPTHGADGET | WFLG_ACTIVATE | WFLG_SMART_REFRESH,
++        TAG_DONE);
++    if (!wb.win)
++        goto out;
++    GT_RefreshWindow(wb.win, NULL);
++    log_line(&wb, "Ready.");
++    upkg_rows_load(&rows);
++    rc = wb_sentinel(rows.n);
++    if (rc == 0)
++        rc = event_loop(&wb);
++out:
++    if (wb.win)
++        CloseWindow(wb.win);
++    gadgets_free(&wb);
++    list_free(&wb.list);
++    list_free(&wb.log);
++    upkg_rows_free(&rows);
++    if (wb.vi)
++        FreeVisualInfo(wb.vi);
++    if (wb.scr)
++        UnlockPubScreen(NULL, wb.scr);
++    if (GadToolsBase)
++        CloseLibrary(GadToolsBase);
++    if (GfxBase)
++        CloseLibrary((struct Library *)GfxBase);
++    if (IntuitionBase)
++        CloseLibrary((struct Library *)IntuitionBase);
++    return rc;
++}
++
++#endif  /* __amigaos__ */
+diff --git a/libopkg/upkg_wb.h b/libopkg/upkg_wb.h
+index 00b71e4..6b4f81c 100644
+--- a/libopkg/upkg_wb.h
++++ b/libopkg/upkg_wb.h
+@@ -14,8 +14,10 @@ struct WBStartup;
+ 
+ /* Run the Workbench window of the add-on list; WB is the message Workbench started upkg with.
+  * Called after the configuration, the feeds and the status files are loaded. Returns the exit code.
+- * For now it only logs "window opened, N rows" (N from upkg_rows_load) to UP-Term:log/upkg-wb.log on
+- * the Amiga; on a host build to the file named by $UPKG_WB_LOG, with the IXSTACK it saw. */
++ * On the Amiga it opens a GadTools window on the Workbench screen and returns when the window is closed;
++ * "window opened, N rows" goes to UP-Term:log/upkg-wb.log once the list is filled. A host build has no
++ * window: it loads the rows and writes the sentinel to the file named by $UPKG_WB_LOG, with the IXSTACK
++ * it saw, so a test can count the calls. */
+ int upkg_wb(struct WBStartup *wb);
+ 
+ #ifdef __cplusplus
+-- 
+2.50.1 (Apple Git-155)
+
