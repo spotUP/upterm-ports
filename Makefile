@@ -26,6 +26,7 @@ test:
 	python3 tools/test_m68k_scan.py
 	sh tools/test_m68k_cc.sh
 	sh tools/test_recipe_var.sh
+	sh tools/test_upterm_root.sh
 	sh tools/test_check_bin.sh
 	sh tools/test_kit_stage.sh
 	sh tools/test_bitchx_parallel.sh

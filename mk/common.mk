@@ -14,7 +14,9 @@ AMIGA   ?= $(HOME)/opt/amiga
 CROSS   := $(AMIGA)/bin/m68k-amigaos-
 # The workspace directory that holds this repo and its siblings (the upterm
 # meta-repo creates it); the sibling defaults below hang off it.
-UPTERM_ROOT ?= $(abspath $(CURDIR)/..)
+# A git worktree sits somewhere else (.claude/worktrees/<name>): the siblings are then
+# next to the MAIN checkout, which git's common dir names (<main>/.git).
+UPTERM_ROOT ?= $(abspath $(or $(addsuffix /../..,$(shell git -C $(CURDIR) rev-parse --path-format=absolute --git-common-dir 2>/dev/null)),$(CURDIR)/..))
 IXEMUL  ?= $(UPTERM_ROOT)/ixemul-vtcon
 VTCON   ?= $(UPTERM_ROOT)/vtcon
 
