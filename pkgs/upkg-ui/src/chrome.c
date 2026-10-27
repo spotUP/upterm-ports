@@ -301,3 +301,39 @@ int ch_menu_hints(ch_hint *out, unsigned flags)
 	out[n].key = "Escape", out[n].does = "Cancel", out[n++].keep = 1;
 	return n;
 }
+
+int ch_scroll(int top, int key, int room, int maxtop)
+{
+	switch (key) {
+	case CH_SCROLL_UP: top--; break;
+	case CH_SCROLL_DOWN: top++; break;
+	case CH_SCROLL_PPAGE: top -= room; break;
+	case CH_SCROLL_NPAGE: top += room; break;
+	case CH_SCROLL_HOME: top = 0; break;
+	case CH_SCROLL_END: top = maxtop; break;
+	}
+	if (top > maxtop)
+		top = maxtop;
+	return top < 0 ? 0 : top;
+}
+
+int ch_at_tail(int top, int maxtop)
+{
+	return top >= maxtop;
+}
+
+int ch_status_fit(const char *text, int w, int *hints_w, int *col)
+{
+	int n = text ? (int)strlen(text) : 0;
+
+	if (n > w)
+		n = w;
+	if (n <= 0) {
+		*hints_w = w;
+		*col = w;
+		return 0;
+	}
+	*col = w - n;
+	*hints_w = w - n - 2 >= 12 ? w - n - 2 : 0;
+	return n;
+}

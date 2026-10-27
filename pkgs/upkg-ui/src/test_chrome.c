@@ -204,6 +204,51 @@ int main(void)
 		   "Enter: Launch  Shift+I: Install All  Shift+U: Update All  Delete: Remove  Escape: Cancel");
 	}
 
+	/* tail follow (ui_follow): Up/PageUp/Home leave the tail, End and reaching maxtop re-arm it.
+	 * 30 rows, room 10: maxtop 20. */
+	{
+		int top = 20, fol = 1, hw, col, n;
+		top = ch_scroll(top, CH_SCROLL_UP, 10, 20);
+		fol = ch_at_tail(top, 20);
+		eqi("scroll up top", top, 19);
+		eqi("scroll up clears follow", fol, 0);
+		top = ch_scroll(top, CH_SCROLL_DOWN, 10, 20);
+		eqi("scroll down to maxtop re-arms", ch_at_tail(top, 20), 1);
+		top = ch_scroll(top, CH_SCROLL_PPAGE, 10, 20);
+		eqi("scroll pgup top", top, 10);
+		eqi("scroll pgup clears follow", ch_at_tail(top, 20), 0);
+		top = ch_scroll(top, CH_SCROLL_NPAGE, 10, 20);
+		eqi("scroll pgdn clamps to maxtop", top, 20);
+		eqi("scroll pgdn re-arms", ch_at_tail(top, 20), 1);
+		top = ch_scroll(top, CH_SCROLL_HOME, 10, 20);
+		eqi("scroll home top", top, 0);
+		eqi("scroll home clears follow", ch_at_tail(top, 20), 0);
+		top = ch_scroll(top, CH_SCROLL_DOWN, 10, 20);
+		eqi("scroll down mid keeps follow off", ch_at_tail(top, 20), 0);
+		top = ch_scroll(top, CH_SCROLL_END, 10, 20);
+		eqi("scroll end top", top, 20);
+		eqi("scroll end re-arms", ch_at_tail(top, 20), 1);
+		eqi("scroll up at 0 clamps", ch_scroll(0, CH_SCROLL_UP, 10, 20), 0);
+		eqi("text fits: always at tail", ch_at_tail(ch_scroll(0, CH_SCROLL_UP, 10, 0), 0), 1);
+
+		/* footer status: none leaves the hints the whole line; a text takes the right edge */
+		n = ch_status_fit(NULL, 76, &hw, &col);
+		eqi("status none len", n, 0);
+		eqi("status none hints_w", hw, 76);
+		n = ch_status_fit("", 76, &hw, &col);
+		eqi("status empty len", n, 0);
+		n = ch_status_fit("Running 12 lines", 76, &hw, &col);
+		eqi("status len", n, 16);
+		eqi("status col", col, 60);
+		eqi("status hints_w", hw, 58);
+		n = ch_status_fit("Running 12 lines", 20, &hw, &col);
+		eqi("status short line: hints give way", hw, 0);
+		eqi("status short line col", col, 4);
+		n = ch_status_fit("0123456789012345678901234", 20, &hw, &col);
+		eqi("status cut to width", n, 20);
+		eqi("status cut col", col, 0);
+	}
+
 	printf("test_chrome: %d checks, %d failed\n", checks, fails);
 	return fails ? 1 : 0;
 }

@@ -81,6 +81,19 @@ void ui_program_done(void);
 /* programbox from stdin or a pipe: begin, lines to the end, done */
 void ui_read_lines(FILE *in);
 
+/* A tick callback (ui_on_tick) that changed what is drawn calls this: the widget is redrawn after the
+ * tick, not only after a key. Without it the tick moves the rail and nothing else. */
+void ui_invalidate(void);
+/* textbox and programbox: keep the last page in view as lines are added. Up, PageUp and Home release
+ * it; End, or Down/PageDown reaching the last page, take it up again. ui_follow(0) turns it off.
+ * Off (the default) the keys scroll as before; ui_clear_lines and ui_prepare turn it off. */
+void ui_follow(int on);
+/* a status text in the footer, right-aligned next to the key hints (which give way when the line is
+ * short); ST picks the colour. NULL or UI_ST_NONE with no text: the footer is the key hints alone.
+ * The text is copied; ui_prepare clears it. */
+enum { UI_ST_NONE, UI_ST_DIM, UI_ST_OK, UI_ST_FAIL };
+void ui_status(const char *text, int st);
+
 /* menu hotkeys: put this byte (Ctrl-B) in ui_opt.hotkeys and the Left arrow ends the menu with
  * ui_hotkey() == UI_HOTKEY_LEFT, as Backspace does with 8 or 127. Without it Left does nothing. */
 #define UI_HOTKEY_LEFT 2

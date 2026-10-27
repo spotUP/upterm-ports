@@ -169,13 +169,24 @@ static void paint_rail(void)
 	text(1, 1, a_chrome, f, (int)strlen(f));
 }
 
+static char *status_text; /* ui_status: drawn right-aligned in the footer, NULL for none */
+static int status_st;
+
 static void draw_footer(const ch_hint *h, int n)
 {
 	int x = 1, i, first = 1, w = COLS - 2;
-	int y = LINES - 2;
-	ch_foot f = ch_footer_fit(h, n, RAIL, w);
+	int y = LINES - 2, hw, scol, sn;
+	ch_foot f;
 
+	sn = ch_status_fit(status_text, w, &hw, &scol);
 	spaces(y, 1, w, a_dim);
+	if (sn) {
+		attr_t a = status_st == UI_ST_OK ? a_col[2] : status_st == UI_ST_FAIL ? a_col[1] : a_dim;
+		text(y, 1 + scol, a, status_text, sn);
+		if (!hw) /* too short for both: the status stays */
+			return;
+	}
+	f = ch_footer_fit(h, n, RAIL, hw);
 	for (i = 0; i < n; i++) {
 		if (!(f.shown & (1u << i)))
 			continue;
@@ -241,6 +252,7 @@ static int nlines, lcap;
 static trow *rows;
 static int nrows, rcap, rows_lines, rows_w;
 static int tbtop, follow, pdone;
+static int follow_keys; /* ui_follow: the scroll keys release and re-arm follow */
 
 static int cell_w(wchar_t c)
 {
@@ -612,21 +624,23 @@ static int key_buttons(int fn, wint_t c)
 /* textbox and programbox: scrolling, the rest is the button row */
 static int key_text(int fn, wint_t c)
 {
-	int room = text_room(), maxtop = nrows > room ? nrows - room : 0;
+	int room = text_room(), maxtop = nrows > room ? nrows - room : 0, k;
 	if (fn) {
 		switch (c) {
-		case KEY_UP: tbtop--; break;
-		case KEY_DOWN: tbtop++; break;
-		case KEY_PPAGE: tbtop -= room; break;
-		case KEY_NPAGE: tbtop += room; break;
-		case KEY_HOME: tbtop = 0; break;
-		case KEY_END: tbtop = maxtop; break;
+		case KEY_UP: k = CH_SCROLL_UP; break;
+		case KEY_DOWN: k = CH_SCROLL_DOWN; break;
+		case KEY_PPAGE: k = CH_SCROLL_PPAGE; break;
+		case KEY_NPAGE: k = CH_SCROLL_NPAGE; break;
+		case KEY_HOME: k = CH_SCROLL_HOME; break;
+		case KEY_END: k = CH_SCROLL_END; break;
 		default: return key_buttons(fn, c);
 		}
-		if (tbtop > maxtop)
+		/* follow pins tbtop to maxtop in draw_textarea, so a stale tbtop is not scrolled from */
+		if (follow)
 			tbtop = maxtop;
-		if (tbtop < 0)
-			tbtop = 0;
+		tbtop = ch_scroll(tbtop, k, room, maxtop);
+		if (follow_keys)
+			follow = ch_at_tail(tbtop, maxtop);
 		return -1;
 	}
 	return key_buttons(fn, c);
@@ -686,6 +700,7 @@ static int key_menu(int fn, wint_t c)
 	return -1;
 }
 
+static int invalid; /* ui_invalidate: redraw after the tick */
 static int (*tick_fn)(void *ctx);
 static void *tick_ctx;
 
@@ -726,6 +741,10 @@ static int run(void)
 				paint_rail();
 				if (tick_fn && tick_fn(tick_ctx))
 					return UI_TICK;
+				if (invalid) {
+					invalid = 0;
+					redraw = 1;
+				}
 			}
 			continue;
 		}
@@ -887,7 +906,7 @@ static void clear_lines(void)
 	int i;
 	for (i = 0; i < nlines; i++)
 		free(lines[i]);
-	nlines = rows_lines = nrows = tbtop = follow = 0;
+	nlines = rows_lines = nrows = tbtop = follow = follow_keys = 0;
 }
 
 void ui_clear_lines(void) { clear_lines(); }
@@ -913,6 +932,20 @@ int ui_message(const char *fmt, const char *tag)
 }
 
 int ui_run(void) { return run(); }
+
+void ui_invalidate(void) { invalid = 1; }
+
+void ui_follow(int on)
+{
+	follow = follow_keys = on != 0;
+}
+
+void ui_status(const char *text, int st)
+{
+	free(status_text);
+	status_text = text && *text ? strdup(text) : NULL;
+	status_st = st;
+}
 int ui_hotkey(void) { return hotkey; }
 int ui_selected(void) { return msel; }
 void ui_osd(int on) { osd = on; }
@@ -997,7 +1030,11 @@ void ui_stop(void)
 	blen = bpos = boff = bx = by = 0;
 	msel = mtop = 0;
 	widget_row = 0;
-	tbtop = follow = pdone = 0;
+	tbtop = follow = follow_keys = pdone = 0;
+	free(status_text);
+	status_text = NULL;
+	status_st = UI_ST_NONE;
+	invalid = 0;
 	hotkey = 0;
 	tick = pair_n = 0;
 	osd = 0;

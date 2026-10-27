@@ -92,4 +92,18 @@ typedef struct {
 
 ch_osd ch_osd_layout(int lines, int cols, int top, int filter, int gap, int bottom, int pad);
 
+/* Tail follow for a textbox: the keys that move the top row, and whether the view then sits on the last
+ * page. ch_scroll returns the new top (clamped to 0..maxtop) after key `key` with `room` rows on a
+ * page; ch_at_tail is the follow state after any move: Up/PageUp/Home leave the tail (clear it), End
+ * and Down/PageDown reaching maxtop are on it (re-arm it). */
+enum { CH_SCROLL_UP, CH_SCROLL_DOWN, CH_SCROLL_PPAGE, CH_SCROLL_NPAGE, CH_SCROLL_HOME, CH_SCROLL_END };
+int ch_scroll(int top, int key, int room, int maxtop);
+int ch_at_tail(int top, int maxtop);
+
+/* Footer status text next to the key hints, on a line w cells wide. The text is cut to w; the hints
+ * get the cells left of it (two between them), `hints_w` 0 when fewer than 12 are left (the hints
+ * give way, the status never does). `col` is the cell where the text starts (right-aligned); the
+ * returned value is the cells the text takes (0 for NULL or empty: footer unchanged, hints_w = w). */
+int ch_status_fit(const char *text, int w, int *hints_w, int *col);
+
 #endif
