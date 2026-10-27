@@ -384,6 +384,26 @@ int main(int argc, char **argv)
         CHECK(!strcmp(rows.row[6].name, "unzip") && rows.row[6].src == UPKG_SRC_OPKG && !strcmp(rows.row[6].available, "6.0"));
         CHECK(!strcmp(rows.row[9].name, "unzip") && rows.row[9].src == UPKG_SRC_UHC && !strcmp(rows.row[9].available, "5.42"));
 
+        /* U4/D3: Install All and Update All never name a UHC row; the target of a UHC row is uhc:<n>, of a feed row <n> */
+        {
+            size_t ni, nu, j;
+            char **bi = upkg_rows_bulk_names(&rows, 'I', &ni), **bu = upkg_rows_bulk_names(&rows, 'U', &nu);
+            char *t1 = upkg_rows_target(&rows.row[6]), *t2 = upkg_rows_target(&rows.row[9]), *l;
+
+            for (j = 0; j < ni; j++)
+                CHECK(strcmp(bi[j], "lzx") && strcmp(bi[j], "curl"));      /* uhc-only names */
+            for (j = 0; j < nu; j++)
+                CHECK(strcmp(bu[j], "unzip"));                             /* the uhc row is the upgrade; the feed row is not */
+            CHECK(ni == 5 && nu == 1);      /* five feed rows, one of them the feed unzip; delta is the one feed upgrade */
+            CHECK(!strcmp(t1, "unzip") && !strcmp(t2, "uhc:unzip"));
+            CHECK(upkg_rows_interactive("uhc:asker") == 0);
+            l = upkg_rows_launch("uhc:charlie");
+            CHECK(l && !*l);
+            free(l); free(t1); free(t2);
+            upkg_rows_bulk_free(bi);
+            upkg_rows_bulk_free(bu);
+        }
+
         /* no drawer: only the feed rows */
         setenv("UPKG_UHC_DIR", "/nonexistent/uhc/drawer", 1);
         CHECK(upkg_rows_load(&rows) == 6);

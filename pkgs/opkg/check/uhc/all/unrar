@@ -1,0 +1,68 @@
+Set PKGNAME "unrar"
+Set PKGVERSION "2.50"
+Set PKGURLPATH "${UHC/AMINETMIRROR}util/arc/"
+Set PKGFILENAME "UnRAR250.lha"
+
+CPU >NIL: CHECK 68020
+IF WARN
+    Echo "This package needs a 68020 CPU or better."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+pkg-envcheck
+
+CPU >NIL: CHECK 68000
+IF NOT WARN
+    Set CPUFILE "UnRAR.000"
+ENDIF
+CPU >NIL: CHECK 68020
+IF NOT WARN
+    Set CPUFILE "UnRAR.020"
+ENDIF
+CPU >NIL: CHECK 68040
+IF NOT WARN
+    Set CPUFILE "UnRAR.040"
+ENDIF
+Set UHCRC 0
+MakeDir "${UHC/TEMPDIR}${PKGNAME}"
+pushd "${UHC/TEMPDIR}${PKGNAME}"
+
+Echo NOLINE "Fetching ${PKGURLPATH}${PKGFILENAME} ..."
+aget "${PKGURLPATH}${PKGFILENAME}" QUIET
+IF WARN
+    Echo "Download failed, aborting..."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+Echo NOLINE " Done!*nExtracting files ..."
+lha >NIL: e ${PKGFILENAME} ${CPUFILE} UnRAR250.readme
+IF WARN
+    Echo "Unarchiving failed, aborting..."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+Echo NOLINE " Done!*nInstalling files..."
+Copy "${CPUFILE}" "${UHC/EXTBIN}unrar"
+Copy "UnRAR250.readme" "${UHC/EXTDOC}"
+
+cd "${UHC/TEMPDIR}"
+Echo NOLINE " Done!*nRemoving temporary files..."
+Delete "${UHC/TEMPDIR}${PKGNAME}" ALL QUIET
+
+IF NOT EXISTS "${UHCBIN}Packages/Installed"
+    MakeDir >NIL: "${UHCBIN}Packages/Installed"
+ENDIF
+
+Echo "${PKGVERSION}" >"${UHCBIN}Packages/Installed/${PKGNAME}"
+Echo " Done!*nInstallation complete!"
+
+LAB CleanUp
+UnSet PKGNAME
+UnSet PKGVERSION
+UnSet PKGURLPATH
+UnSet PKGFILENAME
+popd
+SetResult $UHCRC

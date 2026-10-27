@@ -10,6 +10,8 @@
 
 #include "upkg_uhc.c"
 
+/* upkg_uhc.c runs scripts through xsystem; uhc_run_test.c covers that path, here it is never reached */
+int xsystem(const char *argv[]) { (void)argv; return 0; }
 void *xmalloc(size_t n) { void *p = malloc(n ? n : 1); if (!p) abort(); return p; }
 void *xrealloc(void *o, size_t n) { void *p = realloc(o, n ? n : 1); if (!p) abort(); return p; }
 char *xstrdup(const char *s) { return strcpy(xmalloc(strlen(s) + 1), s); }
