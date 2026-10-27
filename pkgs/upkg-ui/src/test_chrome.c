@@ -176,7 +176,7 @@ int main(void)
 	/* menu footer per selected entry: Enter reads Launch only for an entry with a launch command;
 	 * Delete: Remove only for an installed one; flags 0 is the plain menu footer */
 	{
-		ch_hint h[4];
+		ch_hint h[6];
 		char b[128];
 		ch_foot f;
 		int n = ch_menu_hints(h, 0);
@@ -192,6 +192,16 @@ int main(void)
 		f = ch_footer_fit(h, n, "", -1);
 		ch_footer_text(b, sizeof b, h, n, "", f);
 		eq("menu hints launch", b, "Up/Down: Move  Enter: Launch  Delete: Remove  Escape: Cancel");
+		/* bulk keys: Move makes room; at 76 columns Delete is the hint that gives way */
+		n = ch_menu_hints(h, CH_ENTRY_BULK);
+		f = ch_footer_fit(h, n, "", -1);
+		ch_footer_text(b, sizeof b, h, n, "", f);
+		eq("menu hints bulk", b, "Enter: Accept  Shift+I: Install All  Shift+U: Update All  Escape: Cancel");
+		n = ch_menu_hints(h, CH_ENTRY_BULK | CH_ENTRY_INSTALLED | CH_ENTRY_LAUNCH);
+		f = ch_footer_fit(h, n, "", -1);
+		ch_footer_text(b, sizeof b, h, n, "", f);
+		eq("menu hints bulk installed", b,
+		   "Enter: Launch  Shift+I: Install All  Shift+U: Update All  Delete: Remove  Escape: Cancel");
 	}
 
 	printf("test_chrome: %d checks, %d failed\n", checks, fails);

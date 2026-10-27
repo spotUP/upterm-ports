@@ -56,10 +56,12 @@ ch_foot ch_footer_fit(const ch_hint *hints, int n, const char *rail, int fit);
 void ch_footer_text(char *out, size_t cap, const ch_hint *hints, int n, const char *rail, ch_foot f);
 
 /* The menu footer for the selected entry. CH_ENTRY_INSTALLED adds "Delete: Remove"; CH_ENTRY_LAUNCH makes
- * Enter read "Launch" instead of "Accept". Flags 0 gives the plain menu footer. out holds 4 hints;
- * returns the count. */
+ * Enter read "Launch" instead of "Accept". CH_ENTRY_BULK adds "Shift+I: Install All" and
+ * "Shift+U: Update All" and leaves out "Up/Down: Move" for the room. Flags 0 gives the plain menu footer.
+ * out holds 6 hints; returns the count. */
 #define CH_ENTRY_INSTALLED 1u
 #define CH_ENTRY_LAUNCH    2u
+#define CH_ENTRY_BULK      4u
 int ch_menu_hints(ch_hint *out, unsigned flags);
 
 /* Word wrap: spans of `text` no wider than `width`, a word is never cut unless it is wider than a

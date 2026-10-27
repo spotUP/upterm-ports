@@ -1,0 +1,909 @@
+From 942aa13140d9e71373f156090fcf3ce2fb0ba3b7 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 00:19:55 +0100
+Subject: [PATCH 41/41] upkg: install --all, upgrade --all and Shift+I /
+ Shift+U in browse; Install All asks every install question once up front
+
+---
+ libopkg/CMakeLists.txt |   2 +
+ libopkg/opkg_install.c |   2 +
+ libopkg/pkg_extract.c  |  21 +++
+ libopkg/pkg_extract.h  |   1 +
+ libopkg/upkg_all.c     | 342 +++++++++++++++++++++++++++++++++++++++++
+ libopkg/upkg_all.h     |  38 +++++
+ libopkg/upkg_browse.c  |  78 +++++++++-
+ libopkg/upkg_rows.c    |  57 ++++++-
+ libopkg/upkg_rows.h    |  15 +-
+ libopkg/xsystem.c      |  15 +-
+ libopkg/xsystem.h      |   3 +
+ src/opkg.c             |  31 +++-
+ 12 files changed, 588 insertions(+), 17 deletions(-)
+ create mode 100644 libopkg/upkg_all.c
+ create mode 100644 libopkg/upkg_all.h
+
+diff --git a/libopkg/CMakeLists.txt b/libopkg/CMakeLists.txt
+index c6a4fda..7b35505 100644
+--- a/libopkg/CMakeLists.txt
++++ b/libopkg/CMakeLists.txt
+@@ -24,6 +24,7 @@ set(HEADER_FILES
+     opkg_message.h
+     upkg_wrap.h
+     upkg_rows.h
++    upkg_all.h
+     upkg_wb.h
+     opkg_remove.h
+     opkg_solver.h
+@@ -106,6 +107,7 @@ set(SOURCE_FILES
+     upkg_wrap.c
+     upkg_browse.c
+     upkg_rows.c
++    upkg_all.c
+     upkg_wb.c
+     opkg_remove.c
+     opkg_utils.c
+diff --git a/libopkg/opkg_install.c b/libopkg/opkg_install.c
+index 9b269e4..e795099 100644
+--- a/libopkg/opkg_install.c
++++ b/libopkg/opkg_install.c
+@@ -31,6 +31,7 @@
+ #include <stdlib.h>
+ 
+ #include "pkg.h"
++#include "upkg_all.h"
+ #include "pkg_hash.h"
+ #include "pkg_extract.h"
+ 
+@@ -838,6 +839,7 @@ static int install_data_files(pkg_t * pkg)
+     if (err) {
+         return err;
+     }
++    upkg_all_seed(pkg);     /* Install All: the questions file now holds the answers given up front */
+ 
+     opkg_msg(DEBUG, "Calling pkg_write_filelist.\n");
+     err = pkg_write_filelist(pkg);
+diff --git a/libopkg/pkg_extract.c b/libopkg/pkg_extract.c
+index 6189a66..2a4d70c 100644
+--- a/libopkg/pkg_extract.c
++++ b/libopkg/pkg_extract.c
+@@ -104,6 +104,27 @@ int pkg_extract_data_files_to_dir(pkg_t * pkg, const char *dir)
+     return r;
+ }
+ 
++int pkg_extract_data_file_to_stream(pkg_t * pkg, const char *name, FILE * stream)
++{
++    int r;
++    struct opkg_ar *ar;
++
++    ar = ar_open_pkg_data_archive(pkg->local_filename);
++    if (!ar) {
++        opkg_msg(ERROR, "Failed to extract data.tar.* from package '%s'.\n",
++                 pkg->local_filename);
++        return -1;
++    }
++
++    r = ar_extract_file_to_stream(ar, name, stream);
++    if (r < 0)
++        opkg_msg(ERROR, "Failed to extract '%s' from package '%s'.\n", name,
++                 pkg->local_filename);
++
++    ar_close(ar);
++    return r;
++}
++
+ int pkg_extract_data_file_names_to_stream(pkg_t * pkg, FILE * stream)
+ {
+     int r;
+diff --git a/libopkg/pkg_extract.h b/libopkg/pkg_extract.h
+index 46e0dd4..149cb72 100644
+--- a/libopkg/pkg_extract.h
++++ b/libopkg/pkg_extract.h
+@@ -34,6 +34,7 @@ int pkg_extract_control_files_to_dir_with_prefix(pkg_t * pkg,
+                                                  const char *prefix);
+ int pkg_extract_data_files_to_dir(pkg_t * pkg, const char *dir);
+ int pkg_extract_data_file_names_to_stream(pkg_t * pkg, FILE * file);
++int pkg_extract_data_file_to_stream(pkg_t * pkg, const char *name, FILE * file);
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/libopkg/upkg_all.c b/libopkg/upkg_all.c
+new file mode 100644
+index 0000000..6561079
+--- /dev/null
++++ b/libopkg/upkg_all.c
+@@ -0,0 +1,342 @@
++/* upkg_all.c - Install All: ask every install question once, then install unattended. See upkg_all.h. */
++#include "config.h"
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <sys/stat.h>
++
++#include "opkg_conf.h"
++#include "opkg_cmd.h"
++#include "opkg_download.h"
++#include "opkg_message.h"
++#include "pkg_extract.h"
++#include "pkg_hash.h"
++#include "sprintf_alloc.h"
++#include "xfuncs.h"
++#include "xsystem.h"
++#include "upkg_rows.h"
++#include "upkg_all.h"
++
++#define STAGE_DIR "T/upkg-stage/"
++#define QUESTIONS_TAIL "/Files/questions"
++
++typedef struct {
++    char *name;
++    char *member;               /* archive path of the questions file, "T/upkg-stage/NAME/Files/questions" */
++    char *answered;             /* file holding the answered questions */
++} seed_t;
++
++static seed_t *seeds;
++static size_t nseeds;
++static char *tmpdir;
++
++static char *slurp(const char *path)
++{
++    FILE *fp = fopen(path, "rb");
++    char *buf;
++    long len;
++
++    if (!fp)
++        return NULL;
++    fseek(fp, 0, SEEK_END);
++    len = ftell(fp);
++    fseek(fp, 0, SEEK_SET);
++    buf = xmalloc((size_t)len + 1);
++    len = (long)fread(buf, 1, (size_t)len, fp);
++    buf[len] = '\0';
++    fclose(fp);
++    return buf;
++}
++
++/* The value of KEY in ANSWERS (lines KEY='value', ' written '\''); malloc, NULL when absent. */
++static char *answer_for(const char *answers, const char *key, size_t kl)
++{
++    const char *p = answers;
++
++    while (p && *p) {
++        const char *e = strchr(p, '\n');
++
++        if (strncmp(p, key, kl) == 0 && p[kl] == '=' && p[kl + 1] == '\'') {
++            const char *v = p + kl + 2, *end = e ? e : v + strlen(v);
++            char *out = xmalloc((size_t)(end - v) + 1), *o = out;
++
++            while (v < end) {
++                if (strncmp(v, "'\\''", 4) == 0) {
++                    *o++ = '\'';
++                    v += 4;
++                } else if (*v == '\'' && v + 1 >= end) {
++                    break;
++                } else {
++                    *o++ = *v++;
++                }
++            }
++            *o = '\0';
++            return out;
++        }
++        p = e ? e + 1 : NULL;
++    }
++    return NULL;
++}
++
++char *upkg_all_apply(const char *questions, const char *answers)
++{
++    size_t cap = strlen(questions) + strlen(answers) + 2, len = 0;
++    char *out = xmalloc(cap);
++    const char *p = questions;
++
++    while (*p) {
++        const char *e = strchr(p, '\n'), *end = e ? e : p + strlen(p);
++        const char *bar[4] = { NULL, NULL, NULL, NULL };
++        const char *q;
++        int nb = 0;
++        char *ans = NULL;
++
++        if (*p != '#')
++            for (q = p; q < end && nb < 4; q++)
++                if (*q == '|')
++                    bar[nb++] = q;
++        if (nb >= 3)
++            ans = answer_for(answers, p, (size_t)(bar[0] - p));
++        if (ans && (strpbrk(ans, "|\r\n") || *ans == '<')) {
++            free(ans);
++            ans = NULL;
++        }
++        if (ans) {
++            const char *tail = nb == 4 ? bar[3] : end;     /* from the '|' that opens the choices */
++
++            len += (size_t)snprintf(out + len, cap - len, "%.*s|%s%.*s", (int)(bar[2] - p), p, ans,
++                                     (int)(end - tail), tail);
++            free(ans);
++        } else {
++            len += (size_t)snprintf(out + len, cap - len, "%.*s", (int)(end - p), p);
++        }
++        if (e)
++            out[len++] = '\n';
++        out[len] = '\0';
++        p = e ? e + 1 : end;
++    }
++    return out;
++}
++
++/* The archive path of the questions file in PKG's data archive, or NULL. */
++static char *questions_member(pkg_t *pkg)
++{
++    FILE *fp = tmpfile();
++    char line[1024], *found = NULL;
++
++    if (!fp)
++        return NULL;
++    if (pkg_extract_data_file_names_to_stream(pkg, fp) < 0) {
++        fclose(fp);
++        return NULL;
++    }
++    rewind(fp);
++    while (!found && fgets(line, sizeof line, fp)) {
++        char *tab = strchr(line, '\t'), *path = line;
++        size_t n;
++
++        if (tab)
++            *tab = '\0';
++        if (strncmp(path, "./", 2) == 0)
++            path += 2;
++        n = strlen(path);
++        if (strncmp(path, STAGE_DIR, strlen(STAGE_DIR)) == 0 && n > strlen(STAGE_DIR) + strlen(QUESTIONS_TAIL)
++            && strcmp(path + n - strlen(QUESTIONS_TAIL), QUESTIONS_TAIL) == 0)
++            found = xstrdup(path);
++    }
++    fclose(fp);
++    return found;
++}
++
++/* The archive name between T/upkg-stage/ and /Files/questions (upkg-ask's NAME argument). */
++static char *member_archive(const char *member)
++{
++    size_t a = strlen(STAGE_DIR), n = strlen(member) - a - strlen(QUESTIONS_TAIL);
++    char *s = xmalloc(n + 1);
++
++    memcpy(s, member + a, n);
++    s[n] = '\0';
++    return s;
++}
++
++static int ask_one(pkg_t *pkg)
++{
++    const char *cmd = getenv("UPKG_ASK_CMD");
++    char *member = questions_member(pkg), *archive, *orig, *ans, *text, *answers, *answered, *script, *applied;
++    const char *argv[8];
++    FILE *fp;
++    int rc;
++
++    if (!member)
++        return 0;               /* interactive in the index, but no questions file: nothing to seed */
++    archive = member_archive(member);
++    sprintf_alloc(&orig, "%s/%s.orig", tmpdir, pkg->name);
++    sprintf_alloc(&ans, "%s/%s.ans", tmpdir, pkg->name);
++    sprintf_alloc(&answered, "%s/%s.q", tmpdir, pkg->name);
++
++    fp = fopen(orig, "wb");
++    if (!fp || pkg_extract_data_file_to_stream(pkg, member, fp) < 0) {
++        if (fp)
++            fclose(fp);
++        opkg_msg(ERROR, "Cannot read the questions of %s.\n", pkg->name);
++        return -1;
++    }
++    fclose(fp);
++
++    if (!cmd || !*cmd)
++        cmd = "[ -f UP-Term:bin/upkg-ask ] && vsh UP-Term:bin/upkg-ask";
++    sprintf_alloc(&script, "%s \"$0\" \"$1\" \"$2\"", cmd);
++    argv[0] = "sh";
++    argv[1] = "-c";
++    argv[2] = script;
++    argv[3] = orig;
++    argv[4] = ans;
++    argv[5] = archive;
++    argv[6] = NULL;
++    rc = xsystem(argv);
++    answers = rc == 0 ? slurp(ans) : NULL;
++    text = slurp(orig);
++    unlink(orig);
++    unlink(ans);
++    free(script);
++    if (!answers || !text) {
++        free(answers);
++        free(text);
++        opkg_msg(ERROR, "The questions of %s were not answered.\n", pkg->name);
++        return -1;
++    }
++    applied = upkg_all_apply(text, answers);
++    fp = fopen(answered, "wb");
++    if (!fp || fputs(applied, fp) < 0) {
++        opkg_msg(ERROR, "Cannot write the answers of %s.\n", pkg->name);
++        return -1;
++    }
++    fclose(fp);
++    free(applied);
++    free(answers);
++    free(text);
++
++    seeds = xrealloc(seeds, (nseeds + 1) * sizeof *seeds);
++    seeds[nseeds].name = xstrdup(pkg->name);
++    seeds[nseeds].member = member;
++    seeds[nseeds].answered = answered;
++    nseeds++;
++    free(archive);
++    free(orig);
++    free(ans);
++    return 0;
++}
++
++int upkg_all_ask(char **names, size_t n)
++{
++    size_t i;
++    char *base;
++
++    sprintf_alloc(&base, "%s/upkg-all.XXXXXX", opkg_config && opkg_config->tmp_dir ? opkg_config->tmp_dir : "/tmp");
++    tmpdir = mkdtemp(base);
++    if (!tmpdir) {
++        opkg_msg(ERROR, "Cannot make a work directory under %s.\n", base);
++        free(base);
++        return -1;
++    }
++    for (i = 0; i < n; i++) {
++        pkg_t *pkg;
++
++        if (!upkg_rows_interactive(names[i]))
++            continue;
++        pkg = pkg_hash_fetch_best_installation_candidate_by_name(names[i]);
++        if (!pkg)
++            continue;
++        if (opkg_download_pkg(pkg) != 0) {
++            opkg_msg(ERROR, "Cannot download %s to ask its questions.\n", names[i]);
++            return -1;
++        }
++        if (ask_one(pkg) != 0)
++            return -1;
++    }
++    upkg_xsystem_unattended(1);
++    return 0;
++}
++
++void upkg_all_seed(pkg_t *pkg)
++{
++    size_t i;
++
++    for (i = 0; i < nseeds; i++) {
++        char *dest, *text;
++        FILE *fp;
++
++        if (strcmp(seeds[i].name, pkg->name) != 0)
++            continue;
++        text = slurp(seeds[i].answered);
++        sprintf_alloc(&dest, "%s/%s", pkg->dest->root_dir, seeds[i].member);
++        fp = text ? fopen(dest, "wb") : NULL;
++        if (fp) {
++            fputs(text, fp);
++            fclose(fp);
++        } else {
++            opkg_msg(ERROR, "Cannot write the answers of %s to %s.\n", pkg->name, dest);
++        }
++        free(text);
++        free(dest);
++    }
++}
++
++void upkg_all_end(void)
++{
++    size_t i;
++
++    upkg_xsystem_unattended(0);
++    for (i = 0; i < nseeds; i++) {
++        unlink(seeds[i].answered);
++        free(seeds[i].name);
++        free(seeds[i].member);
++        free(seeds[i].answered);
++    }
++    free(seeds);
++    seeds = NULL;
++    nseeds = 0;
++    if (tmpdir) {
++        rmdir(tmpdir);
++        free(tmpdir);
++        tmpdir = NULL;
++    }
++}
++
++unsigned long upkg_all_bytes(char **names, size_t n)
++{
++    unsigned long total = 0;
++    size_t i;
++
++    for (i = 0; i < n; i++) {
++        pkg_t *pkg = pkg_hash_fetch_best_installation_candidate_by_name(names[i]);
++
++        if (pkg)
++            total += pkg->size;
++    }
++    return total;
++}
++
++int upkg_all_install_cli(void)
++{
++    upkg_rows_t rows = { 0 };
++    char **names;
++    size_t n;
++    int rc = 0;
++
++    upkg_rows_load(&rows);
++    names = upkg_rows_bulk_names(&rows, 'I', &n);
++    if (n == 0) {
++        printf("Every add-on in the feeds is installed.\n");
++    } else if (upkg_all_ask(names, n) != 0) {
++        rc = -1;
++    } else {
++        rc = upkg_rows_run_names(&rows, "install", (int)n, (const char **)names, NULL);
++    }
++    upkg_all_end();
++    upkg_rows_bulk_free(names);
++    upkg_rows_free(&rows);
++    return rc;
++}
+diff --git a/libopkg/upkg_all.h b/libopkg/upkg_all.h
+new file mode 100644
+index 0000000..2d89217
+--- /dev/null
++++ b/libopkg/upkg_all.h
+@@ -0,0 +1,38 @@
++/* upkg_all.h - Install All: ask every install question once, then install unattended.
++ *
++ * A package that asks questions carries them in its archive (T/upkg-stage/NAME/Files/questions, lines
++ * "key|type|prompt|default|choices"); its postinst runs UP-Term:bin/upkg-ask over that file. Install All
++ * runs the very same upkg-ask for every such package before any install, then rewrites the default field
++ * of each question to the answer given and copies the file over the one the package extracts. The
++ * unchanged postinst then runs upkg-ask without a terminal, which answers with the defaults: the answers
++ * given up front. */
++#ifndef UPKG_ALL_H
++#define UPKG_ALL_H
++
++#include <stddef.h>
++#include "pkg.h"
++
++/* QUESTIONS with the default field of every question that ANSWERS (shell lines KEY='value' as upkg-ask
++ * writes them) answers replaced by the answer; malloc. An answer that holds '|', a line break or starts
++ * with '<' (a default file reference) cannot be a default field and leaves that question as it was. */
++char *upkg_all_apply(const char *questions, const char *answers);
++
++/* Download the packages of NAMES that ask questions (UP-Term-Interactive) and ask their questions through
++ * upkg-ask (the command in $UPKG_ASK_CMD, else UP-Term:bin/upkg-ask), on the terminal. Keeps the answers
++ * for upkg_all_seed and makes script children read nothing from the terminal. Returns 0, or -1 when a
++ * download or the asking failed (nothing has been installed then; call upkg_all_end). */
++int upkg_all_ask(char **names, size_t n);
++
++/* Called when PKG's data files are extracted: replaces its questions file with the answered one. */
++void upkg_all_seed(pkg_t *pkg);
++
++/* Forget the answers, delete the files, let script children read the terminal again. */
++void upkg_all_end(void);
++
++/* The download size in bytes of the best candidate of every name of NAMES. */
++unsigned long upkg_all_bytes(char **names, size_t n);
++
++/* `upkg install --all`: every package of the feeds that is not installed. Returns the command's rc. */
++int upkg_all_install_cli(void);
++
++#endif
+diff --git a/libopkg/upkg_browse.c b/libopkg/upkg_browse.c
+index 769a47b..a916bbb 100644
+--- a/libopkg/upkg_browse.c
++++ b/libopkg/upkg_browse.c
+@@ -29,8 +29,9 @@
+ #include "xfuncs.h"
+ #include "upkg_browse.h"
+ #include "upkg_rows.h"
++#include "upkg_all.h"
+ 
+-#define USAGE "usage: upkg browse\nkeys: Up Down move, Enter info (launch when the add-on has a Launch line), i install, Delete remove, u upgrade, q quit"
++#define USAGE "usage: upkg browse\nkeys: Up Down move, Enter info (launch when the add-on has a Launch line), i install, Delete remove, u upgrade, I install all, U update all, q quit"
+ #define TITLE "UP-TERM ADD-ONS"
+ #define PROMPT "Enter info or launch   i install   Delete remove   u upgrade   q quit"
+ 
+@@ -105,6 +106,7 @@ static void menu_build(void)
+             sprintf_alloc(&items[i], "%s%s", colour, status[i]);
+         }
+         free(status[i]);
++        eflags[i] |= CH_ENTRY_BULK;     /* the footer names Shift+I and Shift+U on every row */
+         if (r->kind == UPKG_ROW_INSTALLED || r->kind == UPKG_ROW_UPGRADE)
+             eflags[i] |= CH_ENTRY_INSTALLED | (r->launch && *r->launch ? CH_ENTRY_LAUNCH : 0);
+         ents[i].tag = r->name;
+@@ -173,9 +175,11 @@ static void box_sink_end(void)
+ /* Run the opkg command CMDNAME on TAG. A package with install questions of its own runs in the
+  * plain window; any other shows its output in a box that waits for OK. Returns 0, or 1 when the
+  * terminal went away. */
++static int run_box(const char *title, const char *cmdname, int argc, const char **argv);
++
+ static int run_action(const char *cmdname, const char *tag)
+ {
+-    char *title, *closing;
++    char *title;
+     int rc;
+ 
+     sprintf_alloc(&title, "upkg %s %s", cmdname, tag);
+@@ -198,8 +202,20 @@ static int run_action(const char *cmdname, const char *tag)
+         return 0;
+     }
+ 
++    rc = run_box(title, cmdname, tag ? 1 : 0, &tag);
++    free(title);
++    return rc;
++}
++
++/* Run CMDNAME on ARGC names in ARGV and show its output in a box titled TITLE that waits for OK.
++ * Returns 1 when the terminal went away, else 0. */
++static int run_box(const char *title, const char *cmdname, int argc, const char **argv)
++{
++    char *closing;
++    int rc;
++
+     ui_program_begin(title);
+-    rc = upkg_rows_run(&rows, cmdname, tag, box_sink);
++    rc = upkg_rows_run_names(&rows, cmdname, argc, argv, box_sink);
+     box_sink_end();
+     if (rc == 0) {
+         sprintf_alloc(&closing, "[OK] %s\n", title);
+@@ -210,10 +226,60 @@ static int run_action(const char *cmdname, const char *tag)
+     free(closing);
+     ui_program_done();
+     rc = ui_view(K_PROGRAM, title, NULL);
+-    free(title);
+     return rc == EXIT_NO_TERMINAL;
+ }
+ 
++/* Shift+I (OP 'I', Install All) and Shift+U (OP 'U', Update All): a yes/no with the count and the total
++ * download, No does nothing; Yes asks every install question first (Install All), then runs the install or
++ * the upgrade of everything in one box. Returns 1 when the add-ons changed, 2 when the terminal went away,
++ * else 0. */
++static int act_bulk(int op)
++{
++    size_t n;
++    char **names = upkg_rows_bulk_names(&rows, op, &n), *q, title[64];
++    int r, ret = 0;
++
++    if (n == 0) {
++        msg(op == 'I' ? "Every add-on is installed." : "Every installed add-on is up to date.", NULL);
++        upkg_rows_bulk_free(names);
++        return 0;
++    }
++    q = upkg_rows_bulk_text(op, n, upkg_all_bytes(names, n));
++    ui_opt.defaultno = 1;
++    r = ui_view(K_YESNO, q, NULL);
++    ui_opt.defaultno = 0;
++    free(q);
++    if (r == EXIT_NO_TERMINAL) {
++        upkg_rows_bulk_free(names);
++        return 2;
++    }
++    if (r != 0) {
++        upkg_rows_bulk_free(names);
++        return 0;
++    }
++    if (op == 'I') {
++        int asked;
++
++        ui_suspend();
++        asked = upkg_all_ask(names, n);
++        ui_resume();
++        if (asked != 0) {
++            upkg_all_end();
++            msg("The questions were not answered. Nothing was installed.", NULL);
++            upkg_rows_bulk_free(names);
++            return 0;
++        }
++        snprintf(title, sizeof title, "upkg install --all");
++        ret = run_box(title, "install", (int)n, (const char **)names) ? 2 : 1;
++        upkg_all_end();
++    } else {
++        snprintf(title, sizeof title, "upkg upgrade --all");
++        ret = run_box(title, "upgrade", 0, NULL) ? 2 : 1;
++    }
++    upkg_rows_bulk_free(names);
++    return ret;
++}
++
+ /* The key's action on TAG, with its checks. Returns 1 when the add-ons changed, 2 when the
+  * terminal went away, else 0. */
+ static int act(int key, const char *tag, int isinst, int isupg)
+@@ -221,6 +287,8 @@ static int act(int key, const char *tag, int isinst, int isupg)
+     const char *cmd = NULL;
+     int r;
+ 
++    if (key == 'I' || key == 'U')
++        return act_bulk(key);
+     switch (key) {
+     case 'i':
+         if (isinst)
+@@ -325,7 +393,7 @@ int upkg_browse(int argc, char **argv)
+         ui_opt.entry_flags = eflags;
+         ui_opt.nentries = (int)rows.n;
+         ui_opt.default_item = last;
+-        ui_opt.hotkeys = "iu\177q";
++        ui_opt.hotkeys = "iuIU\177q";
+         ui_opt.colors = 1;
+         ui_prepare();
+         rc = ui_view(K_MENU, PROMPT, NULL);
+diff --git a/libopkg/upkg_rows.c b/libopkg/upkg_rows.c
+index 692fc7b..828f178 100644
+--- a/libopkg/upkg_rows.c
++++ b/libopkg/upkg_rows.c
+@@ -235,22 +235,19 @@ static void hash_reload(void)
+     pkg_hash_load_status_files();
+ }
+ 
+-int upkg_rows_run(upkg_rows_t *rows, const char *cmdname, const char *name, upkg_sink_fn sink)
++int upkg_rows_run_names(upkg_rows_t *rows, const char *cmdname, int argc, const char **argv, upkg_sink_fn sink)
+ {
+     opkg_cmd_t *cmd = opkg_cmd_find(cmdname);
+-    const char *argv[2];
+     int rc;
+ 
+     if (!cmd)
+         return UPKG_RC_FAIL;
+-    argv[0] = name;
+-    argv[1] = NULL;     /* NAME NULL: a command without a package, as `upkg update` */
+     upkg_wrap_flush();
+     fflush(stdout);
+     fflush(stderr);
+     if (sink)
+         upkg_set_sink(sink);
+-    rc = opkg_cmd_exec(cmd, name ? 1 : 0, argv);
++    rc = opkg_cmd_exec(cmd, argc, argv);
+     upkg_wrap_flush();
+     fflush(stdout);
+     fflush(stderr);
+@@ -261,6 +258,54 @@ int upkg_rows_run(upkg_rows_t *rows, const char *cmdname, const char *name, upkg
+     return upkg_rc(rc);
+ }
+ 
++int upkg_rows_run(upkg_rows_t *rows, const char *cmdname, const char *name, upkg_sink_fn sink)
++{
++    const char *argv[2];
++
++    argv[0] = name;
++    argv[1] = NULL;     /* NAME NULL: a command without a package, as `upkg update` */
++    return upkg_rows_run_names(rows, cmdname, name ? 1 : 0, argv, sink);
++}
++
++char **upkg_rows_bulk_names(const upkg_rows_t *rows, int op, size_t *n)
++{
++    char **names = xcalloc(rows->n + 1, sizeof *names);
++    size_t i, k = 0;
++
++    for (i = 0; i < rows->n; i++) {
++        upkg_row_kind_t kind = rows->row[i].kind;
++
++        if (op == 'I' ? (kind == UPKG_ROW_AVAILABLE || kind == UPKG_ROW_NEW) : kind == UPKG_ROW_UPGRADE)
++            names[k++] = xstrdup(rows->row[i].name);
++    }
++    *n = k;
++    return names;
++}
++
++void upkg_rows_bulk_free(char **names)
++{
++    size_t i;
++
++    for (i = 0; names && names[i]; i++)
++        free(names[i]);
++    free(names);
++}
++
++char *upkg_rows_bulk_text(int op, size_t count, unsigned long bytes)
++{
++    char *s, size[32];
++
++    if (bytes < 1024UL)
++        snprintf(size, sizeof size, "%lu bytes", bytes);
++    else if (bytes < 1024UL * 1024UL)
++        snprintf(size, sizeof size, "%.1f KB", bytes / 1024.0);
++    else
++        snprintf(size, sizeof size, "%.1f MB", bytes / (1024.0 * 1024.0));
++    sprintf_alloc(&s, "%s all %lu add-on%s? Total download: %s.", op == 'I' ? "Install" : "Update",
++                  (unsigned long)count, count == 1 ? "" : "s", size);
++    return s;
++}
++
+ /* The buttons enabled while a run goes (none: a second run or a quit would meet the first) and otherwise the
+  * ones the row enables, plus Update and Quit. */
+ unsigned upkg_rows_buttons(int running, unsigned act)
+@@ -403,6 +448,8 @@ int upkg_rows_key_action(int hotkey, const upkg_row_t *row)
+         return installed ? 'r' : 0;
+     case 'i':
+     case 'u':
++    case 'I':
++    case 'U':
+         return hotkey;
+     default:
+         return 0;
+diff --git a/libopkg/upkg_rows.h b/libopkg/upkg_rows.h
+index 0c90dfd..3dd39f5 100644
+--- a/libopkg/upkg_rows.h
++++ b/libopkg/upkg_rows.h
+@@ -54,9 +54,9 @@ char *upkg_rows_control_field(const char *path, const char *field);
+  * UPKG_INFO_DIR overrides the directory); malloc, "" when the package has none or is not installed. */
+ char *upkg_rows_launch(const char *name);
+ 
+-/* What a key does on ROW in the browse list. HOTKEY is ui_hotkey(): 0 Enter, 'i' install, 'u' upgrade, 127 Delete.
++/* What a key does on ROW in the browse list. HOTKEY is ui_hotkey(): 0 Enter, 'i' install, 'u' upgrade, 'I' install all, 'U' update all, 127 Delete.
+  * Returns the action letter: 'l' launch (Enter on an installed row with a Launch line), 'r' remove (Delete on an
+- * installed row), 'i', 'u' as typed, 0 for Enter on any other row (the info box) and for every key that does
++ * installed row), 'i', 'u', 'I', 'U' as typed (the last two on any row, none selected included), 0 for Enter on any other row (the info box) and for every key that does
+  * nothing (a letter 'r' no longer removes). */
+ int upkg_rows_key_action(int hotkey, const upkg_row_t *row);
+ 
+@@ -121,6 +121,17 @@ void upkg_lines_end(upkg_lines_t *l, upkg_line_fn emit, void *ctx);   /* the unf
+  * Returns the command's exit code, or -1 for an unknown CMD (nothing ran). */
+ int upkg_rows_run(upkg_rows_t *rows, const char *cmd, const char *name, upkg_sink_fn sink);
+ 
++/* upkg_rows_run for several packages: ARGV holds ARGC names (0: the command without a package, as `upgrade`). */
++int upkg_rows_run_names(upkg_rows_t *rows, const char *cmd, int argc, const char **argv, upkg_sink_fn sink);
++
++/* The names the bulk action OP covers: 'I' install all (rows in a feed, not installed), 'U' update all (rows with
++ * a newer version). NULL-terminated array of malloc'd names, *N the count; free with upkg_rows_bulk_free. */
++char **upkg_rows_bulk_names(const upkg_rows_t *rows, int op, size_t *n);
++void upkg_rows_bulk_free(char **names);
++
++/* The yes/no question of a bulk action: "Install all 3 add-ons? Total download: 1.2 MB."; malloc */
++char *upkg_rows_bulk_text(int op, size_t count, unsigned long bytes);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/libopkg/xsystem.c b/libopkg/xsystem.c
+index 2626042..b9057cc 100644
+--- a/libopkg/xsystem.c
++++ b/libopkg/xsystem.c
+@@ -37,6 +37,13 @@
+    Otherwise, the 8-bit return value of the program ala WEXITSTATUS
+    as defined in <sys/wait.h>.
+ */
++static int unattended;
++
++void upkg_xsystem_unattended(int on)
++{
++    unattended = on;
++}
++
+ int xsystem(const char *argv[])
+ {
+     int status;
+@@ -50,8 +57,10 @@ int xsystem(const char *argv[])
+     if (upkg_sink_active()) {
+         if (pipe(pfd) != 0)
+             pfd[0] = pfd[1] = -1;
+-        nullfd = open("/dev/null", O_RDONLY);
+     }
++    /* Install All asked every question up front: scripts read nothing from the terminal. */
++    if (upkg_sink_active() || unattended)
++        nullfd = open("/dev/null", O_RDONLY);
+     pid = vfork();
+ 
+     switch (pid) {
+@@ -66,11 +75,11 @@ int xsystem(const char *argv[])
+         return -1;
+     case 0:
+         /* child */
++        if (nullfd >= 0)
++            dup2(nullfd, 0);
+         if (pfd[1] >= 0) {
+             dup2(pfd[1], 1);
+             dup2(pfd[1], 2);
+-            if (nullfd >= 0)
+-                dup2(nullfd, 0);
+             close(pfd[0]);
+             close(pfd[1]);
+         }
+diff --git a/libopkg/xsystem.h b/libopkg/xsystem.h
+index 9605594..382d442 100644
+--- a/libopkg/xsystem.h
++++ b/libopkg/xsystem.h
+@@ -35,6 +35,9 @@ extern "C" {
+ */
+ int xsystem(const char *argv[]);
+ 
++/* While ON is nonzero the children of xsystem read /dev/null, not the terminal (Install All). */
++void upkg_xsystem_unattended(int on);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/src/opkg.c b/src/opkg.c
+index 29b578f..2290ec4 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -40,6 +40,8 @@
+ #include "xfuncs.h"
+ #include "upkg_wrap.h"
+ #include "upkg_wb.h"
++#include "upkg_all.h"
++#include "xsystem.h"
+ 
+ /* every message follows the console width; piped it is a plain printf / fprintf */
+ #define printf upkg_printf
+@@ -76,10 +78,14 @@ enum {
+     ARGS_OPT_HOST_CACHE_DIR,
+     ARGS_OPT_SHORT_DESCRIPTION,
+     ARGS_OPT_FIELDS_FILTER,
++    ARGS_OPT_ALL,
+ };
+ 
++static int all_flag;           /* --all: install every package not installed yet, or upgrade every one */
++
+ static struct option long_options[] = {
+     {"query-all", 0, 0, 'A'},
++    {"all", 0, 0, ARGS_OPT_ALL},
+     {"autoremove", 0, 0, ARGS_OPT_AUTOREMOVE},
+     {"conf-file", 1, 0, 'f'},
+     {"conf", 1, 0, 'f'},
+@@ -344,6 +350,9 @@ static int args_parse_stage2(int argc, char *argv[])
+         case ARGS_OPT_SHORT_DESCRIPTION:
+            opkg_config->short_description = 1;
+            break;
++        case ARGS_OPT_ALL:
++            all_flag = 1;
++            break;
+         case ARGS_OPT_FIELDS_FILTER:
+             store_str_arg(&opkg_config->fields_filter, optarg);
+             break;
+@@ -482,8 +491,10 @@ static void usage(int status)
+     upkg_help_text("\nPackage Manipulation:\n");
+     upkg_help_row("update", "Update list of available packages");
+     upkg_help_row("upgrade", "Upgrade installed packages");
++    upkg_help_row("upgrade --all", "Same as upgrade");
+     upkg_help_row("dist-upgrade", "Upgrade operation that allows package removal\n(libsolv backend)");
+     upkg_help_row("install <pkgs>", "Install package(s)");
++    upkg_help_row("install --all", "Install every package not installed yet,\nafter asking all their questions first");
+     upkg_help_row("configure <pkgs>", "Configure unpacked package(s)");
+     upkg_help_row("remove <pkgs|glob>", "Remove package(s)");
+     upkg_help_row("clean", "Clean internal cache");
+@@ -718,7 +729,12 @@ int main(int argc, char *argv[])
+             goto err1;
+     }
+ 
+-    if (cmd->requires_args && opts == argc) {
++    if (all_flag && !strcmp(cmd_name, "install") && opts != argc) {
++        fprintf(stderr, "%s: install --all takes no package names\n", argv[0]);
++        usage(1);
++    }
++
++    if (cmd->requires_args && opts == argc && !(all_flag && !strcmp(cmd_name, "install"))) {
+         fprintf(stderr, "%s: the ``%s'' command requires at least one argument\n",
+                 argv[0], cmd_name);
+         usage(1);
+@@ -727,8 +743,19 @@ int main(int argc, char *argv[])
+     argc = full_argc;
+     if (wb)
+         err = upkg_wb((struct WBStartup *)argv);
+-    else
++    else if (all_flag && !strcmp(cmd_name, "install"))
++        err = upkg_all_install_cli();
++    else {
++        /* Update All asks no questions: a script of an upgraded package reads nothing from the terminal, so
++         * upkg-ask takes the defaults, and a "<PATH" default is the answer the earlier install kept. */
++        int upgrading = !strcmp(cmd_name, "upgrade");
++
++        if (upgrading)
++            upkg_xsystem_unattended(1);
+         err = opkg_cmd_exec(cmd, argc - opts, (const char **)(argv + opts));
++        if (upgrading)
++            upkg_xsystem_unattended(0);
++    }
+ 
+     opkg_download_cleanup();
+  err1:
+-- 
+2.50.1 (Apple Git-155)
+

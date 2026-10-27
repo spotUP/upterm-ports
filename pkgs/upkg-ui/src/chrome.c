@@ -289,8 +289,13 @@ int ch_menu_hints(ch_hint *out, unsigned flags)
 {
 	int n = 0;
 
-	out[n].key = "Up/Down", out[n].does = "Move", out[n++].keep = 0;
+	if (!(flags & CH_ENTRY_BULK))
+		out[n].key = "Up/Down", out[n].does = "Move", out[n++].keep = 0;
 	out[n].key = "Enter", out[n].does = (flags & CH_ENTRY_LAUNCH) ? "Launch" : "Accept", out[n++].keep = 1;
+	if (flags & CH_ENTRY_BULK) {
+		out[n].key = "Shift+I", out[n].does = "Install All", out[n++].keep = 0;
+		out[n].key = "Shift+U", out[n].does = "Update All", out[n++].keep = 0;
+	}
 	if (flags & CH_ENTRY_INSTALLED)
 		out[n].key = "Delete", out[n].does = "Remove", out[n++].keep = 0;
 	out[n].key = "Escape", out[n].does = "Cancel", out[n++].keep = 1;
