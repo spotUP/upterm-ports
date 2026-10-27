@@ -1,0 +1,247 @@
+From 194dac65e1838c235c273fc59bed5d3b07c7741c Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 02:16:20 +0100
+Subject: [PATCH 42/42] upkg: read the UHC catalogue drawer
+ (UP-Term:uhc/Packages) into entries: name, PKGVERSION, desc, installed
+ version
+
+---
+ libopkg/CMakeLists.txt |   2 +
+ libopkg/upkg_uhc.c     | 148 +++++++++++++++++++++++++++++++++++++++++
+ libopkg/upkg_uhc.h     |  49 ++++++++++++++
+ 3 files changed, 199 insertions(+)
+ create mode 100644 libopkg/upkg_uhc.c
+ create mode 100644 libopkg/upkg_uhc.h
+
+diff --git a/libopkg/CMakeLists.txt b/libopkg/CMakeLists.txt
+index 7b35505..f004fbc 100644
+--- a/libopkg/CMakeLists.txt
++++ b/libopkg/CMakeLists.txt
+@@ -24,6 +24,7 @@ set(HEADER_FILES
+     opkg_message.h
+     upkg_wrap.h
+     upkg_rows.h
++    upkg_uhc.h
+     upkg_all.h
+     upkg_wb.h
+     opkg_remove.h
+@@ -107,6 +108,7 @@ set(SOURCE_FILES
+     upkg_wrap.c
+     upkg_browse.c
+     upkg_rows.c
++    upkg_uhc.c
+     upkg_all.c
+     upkg_wb.c
+     opkg_remove.c
+diff --git a/libopkg/upkg_uhc.c b/libopkg/upkg_uhc.c
+new file mode 100644
+index 0000000..364b730
+--- /dev/null
++++ b/libopkg/upkg_uhc.c
+@@ -0,0 +1,148 @@
++/* upkg_uhc.c - upkg: read the UHC catalogue drawer (UP-Term). See upkg_uhc.h.
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++#include "config.h"
++
++#include <ctype.h>
++#include <dirent.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <strings.h>
++#include <sys/stat.h>
++
++#include "sprintf_alloc.h"
++#include "xfuncs.h"
++#include "upkg_uhc.h"
++
++const char *upkg_uhc_dir(void)
++{
++    const char *d = getenv("UPKG_UHC_DIR");
++
++    return d && *d ? d : UPKG_UHC_DIR_DEFAULT;
++}
++
++/* the first line of the file PATH without its line end and without blanks at both ends (malloc), NULL when it cannot be read */
++static char *first_line(const char *path)
++{
++    char buf[256], *s, *e;
++    FILE *fp = fopen(path, "r");
++
++    if (!fp)
++        return NULL;
++    if (!fgets(buf, sizeof buf, fp))
++        buf[0] = '\0';
++    fclose(fp);
++    for (s = buf; *s && isspace((unsigned char)*s); s++)
++        ;
++    e = s + strlen(s);
++    while (e > s && isspace((unsigned char)e[-1]))
++        e--;
++    *e = '\0';
++    return xstrdup(s);
++}
++
++/* PKGVERSION of the script at PATH (malloc), NULL when no line `Set PKGVERSION <v>` exists */
++static char *script_version(const char *path)
++{
++    char line[512];
++    char *v = NULL;
++    FILE *fp = fopen(path, "r");
++
++    if (!fp)
++        return NULL;
++    while (!v && fgets(line, sizeof line, fp)) {
++        char *s = line, *e;
++
++        if (strncasecmp(s, "Set", 3) || !isspace((unsigned char)s[3]))
++            continue;
++        for (s += 3; isspace((unsigned char)*s); s++)
++            ;
++        if (strncasecmp(s, "PKGVERSION", 10) || !isspace((unsigned char)s[10]))
++            continue;
++        for (s += 10; isspace((unsigned char)*s); s++)
++            ;
++        if (*s == '"') {
++            s++;
++            e = strchr(s, '"');
++            if (!e)
++                e = s + strlen(s);
++        } else {
++            e = s;
++            while (*e && !isspace((unsigned char)*e))
++                e++;
++        }
++        *e = '\0';
++        v = xstrdup(s);
++    }
++    fclose(fp);
++    return v;
++}
++
++static int by_name(const void *a, const void *b)
++{
++    return strcmp(((const upkg_uhc_pkg_t *)a)->name, ((const upkg_uhc_pkg_t *)b)->name);
++}
++
++void upkg_uhc_free(upkg_uhc_t *u)
++{
++    size_t i;
++
++    for (i = 0; i < u->n; i++) {
++        free(u->pkg[i].name);
++        free(u->pkg[i].version);
++        free(u->pkg[i].desc);
++        free(u->pkg[i].installed);
++    }
++    free(u->pkg);
++    u->pkg = NULL;
++    u->n = 0;
++}
++
++size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir)
++{
++    DIR *d;
++    struct dirent *de;
++    size_t cap = 0;
++
++    upkg_uhc_free(u);
++    d = opendir(dir);
++    if (!d)
++        return 0;
++    while ((de = readdir(d)) != NULL) {
++        const char *nm = de->d_name;
++        size_t nl = strlen(nm);
++        char *path = NULL, *ver, *desc, *inst;
++        struct stat st;
++        upkg_uhc_pkg_t *p;
++
++        if (nm[0] == '.' || (nl > 5 && !strcmp(nm + nl - 5, ".desc")))
++            continue;
++        sprintf_alloc(&path, "%s/%s", dir, nm);
++        if (stat(path, &st) != 0 || !S_ISREG(st.st_mode) || (ver = script_version(path)) == NULL) {
++            free(path);
++            continue;
++        }
++        free(path);
++        sprintf_alloc(&path, "%s/%s.desc", dir, nm);
++        desc = first_line(path);
++        free(path);
++        sprintf_alloc(&path, "%s/Installed/%s", dir, nm);
++        inst = first_line(path);
++        free(path);
++        if (u->n == cap) {
++            cap = cap ? cap * 2 : 16;
++            u->pkg = xrealloc(u->pkg, cap * sizeof *u->pkg);
++        }
++        p = &u->pkg[u->n++];
++        p->name = xstrdup(nm);
++        p->version = ver;
++        p->desc = desc ? desc : xstrdup("");
++        p->installed = inst ? inst : xstrdup("");
++    }
++    closedir(d);
++    if (u->n)
++        qsort(u->pkg, u->n, sizeof *u->pkg, by_name);
++    return u->n;
++}
+diff --git a/libopkg/upkg_uhc.h b/libopkg/upkg_uhc.h
+new file mode 100644
+index 0000000..c956da4
+--- /dev/null
++++ b/libopkg/upkg_uhc.h
+@@ -0,0 +1,49 @@
++/* upkg_uhc.h - upkg: UHC (Ultimate Handy Commands) as a second add-on source (UP-Term).
++ *
++ * UHC keeps its catalogue in one local drawer: every package is an AmigaDOS script `<name>` that sets
++ * `Set PKGVERSION "<v>"` and installs the package when executed, beside a one-line `<name>.desc`; the
++ * subdrawer Installed/ holds a file `<name>` per installed package whose first line is the installed version.
++ * This reader turns the drawer into entries. It runs nothing and writes nothing; upkg_rows.c merges the
++ * entries into the rows as src=uhc (UPKG_SRC_UHC).
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++#ifndef UPKG_UHC_H
++#define UPKG_UHC_H
++
++#include <stddef.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* The catalogue drawer: the one place its path is written. UPKG_UHC_DIR in the environment overrides it (the tests
++ * point it at a fixture drawer). */
++#define UPKG_UHC_DIR_DEFAULT "UP-Term:uhc/Packages"
++
++typedef struct {
++    char *name;                 /* the script's file name */
++    char *version;              /* PKGVERSION of the script */
++    char *desc;                 /* first line of <name>.desc, trimmed; "" when the file is absent */
++    char *installed;            /* first line of Installed/<name>, trimmed; "" when not installed */
++} upkg_uhc_pkg_t;
++
++typedef struct {
++    upkg_uhc_pkg_t *pkg;        /* sorted by name */
++    size_t n;
++} upkg_uhc_t;
++
++/* UPKG_UHC_DIR or UPKG_UHC_DIR_DEFAULT */
++const char *upkg_uhc_dir(void);
++
++/* Read the drawer DIR into U (replacing what it held). A file is a package when it is not <x>.desc, not a dot file
++ * and holds a line `Set PKGVERSION "<v>"` (quotes optional); Installed/ and anything else is skipped. A missing
++ * drawer gives no packages. Returns the count. */
++size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir);
++
++void upkg_uhc_free(upkg_uhc_t *u);
++
++#ifdef __cplusplus
++}
++#endif
++#endif                          /* UPKG_UHC_H */
+-- 
+2.50.1 (Apple Git-155)
+

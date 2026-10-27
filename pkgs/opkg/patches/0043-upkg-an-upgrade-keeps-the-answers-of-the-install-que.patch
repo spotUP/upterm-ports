@@ -1,7 +1,7 @@
-From 8dc90a3cb4126d09e45ba4ea6f6f21cb886e466e Mon Sep 17 00:00:00 2001
+From bc6f9870221d46471c2010639240b5b09920a3d3 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Tue, 27 Oct 2026 03:17:21 +0100
-Subject: [PATCH 42/42] upkg: an upgrade keeps the answers of the install
+Subject: [PATCH 43/50] upkg: an upgrade keeps the answers of the install
  questions and asks only the questions the old version never asked
 
 upkg-ask records each question it asked in info_dir/NAME.answered (upkg passes the path as UPKG_ASK_STATE to the postinst and to the Install All question pass); the upgrade keeps that file when it removes the old package's info files, and no longer runs its scripts unattended, so a question that is new in the upgraded version is asked. UPKG_ASK_UNATTENDED=1 (Install All, a progress box) tells upkg-ask the missing terminal is on purpose.
@@ -151,10 +151,10 @@ index 6561079..14d0dd6 100644
      text = slurp(orig);
      unlink(orig);
 diff --git a/libopkg/xsystem.c b/libopkg/xsystem.c
-index b9057cc..54c6800 100644
+index c93ffe2..b9adba7 100644
 --- a/libopkg/xsystem.c
 +++ b/libopkg/xsystem.c
-@@ -44,6 +44,11 @@ void upkg_xsystem_unattended(int on)
+@@ -45,6 +45,11 @@ void upkg_xsystem_unattended(int on)
      unattended = on;
  }
  

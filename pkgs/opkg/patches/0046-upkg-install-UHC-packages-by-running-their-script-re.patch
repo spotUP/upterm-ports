@@ -1,0 +1,652 @@
+From 9e5a02f4d09aebfffac48dba693a5157c263b741 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 02:41:30 +0100
+Subject: [PATCH 44/46] upkg: install UHC packages by running their script,
+ remove them from the script's Copy lines
+
+A UHC row installs through xsystem 'Execute <UP-Term:uhc>/Packages/<n>' with the pkg wrapper (and its Ask) skipped, rc taken from UHCRC.
+Remove parses the script's Copy lines, deletes those files and Installed/<n>, and refuses when the parse finds nothing.
+uhc:<n> names the UHC package on a clash; Install All and Update All, launch and interactive skip UHC rows.
+---
+ libopkg/opkg_cmd.c    |  23 ++-
+ libopkg/upkg_browse.c |  11 +-
+ libopkg/upkg_rows.c   |  11 ++
+ libopkg/upkg_rows.h   |   3 +
+ libopkg/upkg_uhc.c    | 355 ++++++++++++++++++++++++++++++++++++++++++
+ libopkg/upkg_uhc.h    |  40 +++++
+ libopkg/upkg_wb.c     |   5 +-
+ 7 files changed, 440 insertions(+), 8 deletions(-)
+
+diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
+index 1354ac2..01967e3 100644
+--- a/libopkg/opkg_cmd.c
++++ b/libopkg/opkg_cmd.c
+@@ -49,6 +49,7 @@
+ #include "opkg_solver.h"
+ #include "upkg_wrap.h"
+ #include "upkg_browse.h"
++#include "upkg_uhc.h"
+ #include "opkg_archive.h"
+ #include "pkg_src.h"
+ 
+@@ -439,9 +440,15 @@ static int opkg_install_cmd(int argc, char **argv)
+     char *arg;
+     int err = 0;
+     int r;
++    int uran, urc;
+ 
+     signal(SIGINT, sigint_handler);
+ 
++    /* uhc:<n> installs the UHC package (D3); the other names are ipks */
++    urc = upkg_uhc_run_args("install", &argc, argv, &uran);
++    if (uran && !argc)
++        return urc;
++
+     /*
+      * Now scan through package names and install
+      */
+@@ -464,16 +471,21 @@ static int opkg_install_cmd(int argc, char **argv)
+     if (write_status_files_if_changed() != 0)
+         err = -1;
+ 
+-    return err;
++    return err ? err : urc;
+ }
+ 
+ static int opkg_upgrade_cmd(int argc, char **argv)
+ {
+     int err = 0;
+     int r;
++    int uran, urc;
+ 
+     signal(SIGINT, sigint_handler);
+ 
++    urc = upkg_uhc_run_args("upgrade", &argc, argv, &uran);
++    if (uran && !argc)
++        return urc;
++
+     pkg_info_preinstall_check();
+ 
+     err = opkg_solver_upgrade(argc, argv);
+@@ -485,7 +497,7 @@ static int opkg_upgrade_cmd(int argc, char **argv)
+     if (write_status_files_if_changed() != 0)
+         err = -1;
+ 
+-    return err;
++    return err ? err : urc;
+ }
+ 
+ static int opkg_distupgrade_cmd(int argc, char **argv)
+@@ -978,16 +990,21 @@ static int opkg_clean_cmd(int argc, char **argv)
+ static int opkg_remove_cmd(int argc, char **argv)
+ {
+     int err = 0;
++    int uran, urc;
+ 
+     signal(SIGINT, sigint_handler);
+ 
++    urc = upkg_uhc_run_args("remove", &argc, argv, &uran);
++    if (uran && !argc)
++        return urc;
++
+     pkg_info_preinstall_check();
+ 
+     err = opkg_solver_remove(argc, argv);
+ 
+     if (write_status_files_if_changed() != 0)
+         err = -1;
+-    return err;
++    return err ? err : urc;
+ }
+ 
+ /** \brief opkg_is_state_flag: tells whether the flag is state flag
+diff --git a/libopkg/upkg_browse.c b/libopkg/upkg_browse.c
+index a916bbb..57a2a05 100644
+--- a/libopkg/upkg_browse.c
++++ b/libopkg/upkg_browse.c
+@@ -280,9 +280,9 @@ static int act_bulk(int op)
+     return ret;
+ }
+ 
+-/* The key's action on TAG, with its checks. Returns 1 when the add-ons changed, 2 when the
++/* The key's action on TAG (TARGET: the name the commands take, "uhc:<n>" for a UHC row), with its checks. Returns 1 when the add-ons changed, 2 when the
+  * terminal went away, else 0. */
+-static int act(int key, const char *tag, int isinst, int isupg)
++static int act(int key, const char *tag, const char *target, int isinst, int isupg)
+ {
+     const char *cmd = NULL;
+     int r;
+@@ -322,7 +322,7 @@ static int act(int key, const char *tag, int isinst, int isupg)
+     }
+     if (!cmd)
+         return 0;
+-    return run_action(cmd, tag) ? 2 : 1;
++    return run_action(cmd, target) ? 2 : 1;
+ }
+ 
+ /* the info text of TAG in a scrollable box with the buttons that apply; returns the label of
+@@ -449,7 +449,10 @@ int upkg_browse(int argc, char **argv)
+             action = upkg_rows_key_action(key, &rows.row[sel]);
+         }
+         if (action) {
+-            int r = act(action, last, isinst, isupg);
++            char *target = upkg_rows_target(&rows.row[sel]);
++            int r = act(action, last, target, isinst, isupg);
++
++            free(target);
+ 
+             if (r == 2) {
+                 ui_stop();
+diff --git a/libopkg/upkg_rows.c b/libopkg/upkg_rows.c
+index c5b6a6c..af645af 100644
+--- a/libopkg/upkg_rows.c
++++ b/libopkg/upkg_rows.c
+@@ -184,6 +184,11 @@ size_t upkg_rows_load(upkg_rows_t *rows)
+     return rows->n;
+ }
+ 
++char *upkg_rows_target(const upkg_row_t *r)
++{
++    return r->src == UPKG_SRC_UHC ? upkg_uhc_target(r->name) : xstrdup(r->name);
++}
++
+ char *upkg_rows_status(const upkg_row_t *r)
+ {
+     char *s = NULL;
+@@ -300,6 +305,8 @@ char **upkg_rows_bulk_names(const upkg_rows_t *rows, int op, size_t *n)
+     for (i = 0; i < rows->n; i++) {
+         upkg_row_kind_t kind = rows->row[i].kind;
+ 
++        if (rows->row[i].src == UPKG_SRC_UHC)
++            continue;       /* UHC scripts are installed one by one: Install All and Update All never send them to opkg */
+         if (op == 'I' ? (kind == UPKG_ROW_AVAILABLE || kind == UPKG_ROW_NEW) : kind == UPKG_ROW_UPGRADE)
+             names[k++] = xstrdup(rows->row[i].name);
+     }
+@@ -381,6 +388,8 @@ int upkg_rows_interactive(const char *name)
+     struct dirent *de;
+     int found = 0;
+ 
++    if (upkg_uhc_name(name))
++        return 0;       /* a UHC script asks nothing here: the feeds say nothing about it */
+     if (!dir || !*dir)
+         dir = opkg_config && opkg_config->lists_dir ? opkg_config->lists_dir : LISTS_DEFAULT;
+     d = opendir(dir);
+@@ -452,6 +461,8 @@ char *upkg_rows_launch(const char *name)
+     const char *dir = getenv("UPKG_INFO_DIR");
+     char *path, *value;
+ 
++    if (upkg_uhc_name(name))
++        return xstrdup("");     /* UHC rows have no Launch line */
+     if (!dir || !*dir)
+         dir = opkg_config && opkg_config->default_dest ? opkg_config->default_dest->info_dir : NULL;
+     if (!dir || !*dir)
+diff --git a/libopkg/upkg_rows.h b/libopkg/upkg_rows.h
+index ee72a74..37e3bfb 100644
+--- a/libopkg/upkg_rows.h
++++ b/libopkg/upkg_rows.h
+@@ -67,6 +67,9 @@ char *upkg_rows_control_field(const char *path, const char *field);
+  * UPKG_INFO_DIR overrides the directory); malloc, "" when the package has none or is not installed. */
+ char *upkg_rows_launch(const char *name);
+ 
++/* The name the install/remove/upgrade commands take for ROW (malloc): its name, or "uhc:<name>" for a UHC row (D3). */
++char *upkg_rows_target(const upkg_row_t *r);
++
+ /* What a key does on ROW in the browse list. HOTKEY is ui_hotkey(): 0 Enter, 'i' install, 'u' upgrade, 'I' install all, 'U' update all, 127 Delete.
+  * Returns the action letter: 'l' launch (Enter on an installed row with a Launch line), 'r' remove (Delete on an
+  * installed row), 'i', 'u', 'I', 'U' as typed (the last two on any row, none selected included), 0 for Enter on any other row (the info box) and for every key that does
+diff --git a/libopkg/upkg_uhc.c b/libopkg/upkg_uhc.c
+index 364b730..d00f5cd 100644
+--- a/libopkg/upkg_uhc.c
++++ b/libopkg/upkg_uhc.c
+@@ -11,9 +11,11 @@
+ #include <string.h>
+ #include <strings.h>
+ #include <sys/stat.h>
++#include <unistd.h>
+ 
+ #include "sprintf_alloc.h"
+ #include "xfuncs.h"
++#include "xsystem.h"
+ #include "upkg_uhc.h"
+ 
+ const char *upkg_uhc_dir(void)
+@@ -146,3 +148,356 @@ size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir)
+         qsort(u->pkg, u->n, sizeof *u->pkg, by_name);
+     return u->n;
+ }
++
++const char *upkg_uhc_name(const char *arg)
++{
++    size_t n = strlen(UPKG_UHC_PREFIX);
++
++    return arg && !strncasecmp(arg, UPKG_UHC_PREFIX, n) && arg[n] ? arg + n : NULL;
++}
++
++char *upkg_uhc_target(const char *name)
++{
++    char *s;
++
++    sprintf_alloc(&s, "%s%s", UPKG_UHC_PREFIX, name);
++    return s;
++}
++
++char *upkg_uhc_script_path(const char *dir, const char *name)
++{
++    size_t n = strlen(dir);
++    char *s;
++
++    sprintf_alloc(&s, "%s%s%s", dir, n && (dir[n - 1] == '/' || dir[n - 1] == ':') ? "" : "/", name);
++    return s;
++}
++
++char *upkg_uhc_wrapper_path(const char *name)
++{
++    const char *t = getenv("UPKG_UHC_TMP");
++    char *base, *p;
++
++    sprintf_alloc(&base, "upkg-uhc-%s", name);
++    p = upkg_uhc_script_path(t && *t ? t : "T:", base);
++    free(base);
++    return p;
++}
++
++char *upkg_uhc_install_line(const char *dir, const char *name)
++{
++    char *w = upkg_uhc_wrapper_path(name), *s;
++
++    (void)dir;
++    sprintf_alloc(&s, "Execute %s", w);
++    free(w);
++    return s;
++}
++
++char *upkg_uhc_wrapper_text(const char *dir, const char *name)
++{
++    char *path = upkg_uhc_script_path(dir, name), *s;
++
++    sprintf_alloc(&s, "Path UHC:C UHC:S ADD\nExecute %s\n", path);
++    free(path);
++    return s;
++}
++
++int upkg_uhc_rc(int rc)
++{
++    return rc < 0 ? 20 : rc;
++}
++
++/* the argv upkg spawns for a UHC install: a real shell runs `Execute <script>`. C:Execute does not run the script
++ * itself, it points the calling CLI's input at it and returns 0, so execvp'd directly (no CLI loop after it) nothing ran.
++ * Same spawn as pkg_run_script (/bin/sh -c). LINE is upkg_uhc_install_line. */
++void upkg_uhc_install_argv(const char *line, const char *argv[4])
++{
++    argv[0] = "/bin/sh";
++    argv[1] = "-c";
++    argv[2] = line;
++    argv[3] = NULL;
++}
++
++static int uhc_install(const char *name)
++{
++    const char *argv[4];
++    char *line = upkg_uhc_install_line(upkg_uhc_dir(), name);
++    char *w = upkg_uhc_wrapper_path(name), *text = upkg_uhc_wrapper_text(upkg_uhc_dir(), name);
++    FILE *f = fopen(w, "w");
++    int rc = 20;
++
++    if (!f || fputs(text, f) < 0 || fclose(f) != 0) {
++        fprintf(stderr, "upkg: cannot write %s\n", w);
++    } else {
++        printf("%s\n", line);
++        fflush(stdout);
++        upkg_uhc_install_argv(line, argv);
++        rc = upkg_uhc_rc(xsystem(argv));
++        remove(w);
++    }
++    free(text);
++    free(w);
++    free(line);
++    return rc;
++}
++
++/* --- the Copy lines --- */
++
++static int is_kw(const char *t)
++{
++    static const char *const kw[] = { "ALL", "QUIET", "CLONE", "DATES", "NOPRO", "COM", "NOREQ", "FROM", "TO", NULL };
++    int i;
++
++    if (t[0] == '>' || !strncasecmp(t, "BUF=", 4) || !strncasecmp(t, "BUFFER=", 7))
++        return 1;
++    for (i = 0; kw[i]; i++)
++        if (!strcasecmp(t, kw[i]))
++            return 1;
++    return 0;
++}
++
++/* the next token of *P: blank separated, "..." quotes dropped (malloc); NULL at the end of the line */
++static char *next_token(const char **p)
++{
++    const char *s = *p;
++    char *t, *o;
++
++    while (*s && isspace((unsigned char)*s))
++        s++;
++    if (!*s)
++        return NULL;
++    o = t = xmalloc(strlen(s) + 1);
++    if (*s == '"') {
++        for (s++; *s && *s != '"'; s++)
++            *o++ = *s;
++        if (*s)
++            s++;
++    } else {
++        for (; *s && !isspace((unsigned char)*s); s++)
++            *o++ = *s;
++    }
++    *o = '\0';
++    *p = s;
++    return t;
++}
++
++/* T with the ${var} expanded (malloc); NULL when a variable is unset, or the text has a "#?" wildcard.
++ * *ENDS_VAR is set when T ends on a variable (the target is then a drawer). */
++static char *expand(const char *t, int *ends_var)
++{
++    const char *envp = getenv("UPKG_UHC_ENV");
++    char *out = xstrdup(""), *tmp;
++
++    *ends_var = 0;
++    while (*t) {
++        if (t[0] == '$' && t[1] == '{') {
++            const char *e = strchr(t, '}');
++            char var[128], *path, *val;
++
++            if (!e || (size_t)(e - t - 2) >= sizeof var) {
++                free(out);
++                return NULL;
++            }
++            memcpy(var, t + 2, (size_t)(e - t - 2));
++            var[e - t - 2] = '\0';
++            sprintf_alloc(&path, "%s%s", envp && *envp ? envp : "ENV:", var);
++            val = first_line(path);
++            free(path);
++            if (!val || !*val) {
++                free(val);
++                free(out);
++                return NULL;
++            }
++            sprintf_alloc(&tmp, "%s%s", out, val);
++            free(val);
++            free(out);
++            out = tmp;
++            t = e + 1;
++            *ends_var = !*t;
++        } else {
++            size_t n = strlen(out);
++
++            out = xrealloc(out, n + 2);
++            out[n] = *t++;
++            out[n + 1] = '\0';
++            *ends_var = 0;
++        }
++    }
++    if (strstr(out, "#?") || strchr(out, '?') || strchr(out, '*')) {
++        free(out);
++        return NULL;
++    }
++    return out;
++}
++
++static const char *base_of(const char *p)
++{
++    const char *b = p, *q;
++
++    for (q = p; *q; q++)
++        if (*q == '/' || *q == ':')
++            b = q + 1;
++    return b;
++}
++
++static void add_file(char ***files, size_t *n, char *path)
++{
++    size_t i;
++
++    for (i = 0; i < *n; i++)
++        if (!strcmp((*files)[i], path)) {
++            free(path);
++            return;
++        }
++    *files = xrealloc(*files, (*n + 1) * sizeof **files);
++    (*files)[(*n)++] = path;
++}
++
++size_t upkg_uhc_files(const char *script, char ***files, size_t *skipped)
++{
++    char line[1024];
++    size_t n = 0, skip = 0;
++    FILE *fp = fopen(script, "r");
++
++    *files = NULL;
++    if (skipped)
++        *skipped = 0;
++    if (!fp)
++        return 0;
++    while (fgets(line, sizeof line, fp)) {
++        const char *p = line;
++        char *tok, *tokens[16];
++        size_t nt = 0, i;
++        int all = 0;
++
++        while (isspace((unsigned char)*p))
++            p++;
++        if (!strncasecmp(p, "C:", 2))
++            p += 2;
++        if (strncasecmp(p, "Copy", 4) || !isspace((unsigned char)p[4]))
++            continue;
++        p += 4;
++        while ((tok = next_token(&p)) != NULL) {
++            if (!strcasecmp(tok, "ALL"))
++                all = 1;
++            if (is_kw(tok) || tok[0] == ';' || nt == 16) {
++                int comment = tok[0] == ';';
++
++                free(tok);
++                if (comment)
++                    break;
++                continue;
++            }
++            tokens[nt++] = tok;
++        }
++        if (nt >= 2) {
++            int dest_var = 0, dummy;
++            char *dest = expand(tokens[nt - 1], &dest_var);
++            const char *tdest = tokens[nt - 1];
++            size_t dl = strlen(tdest);
++            int is_dir = dest_var || (dl && (tdest[dl - 1] == '/' || tdest[dl - 1] == ':'));
++
++            for (i = 0; i + 1 < nt; i++) {
++                char *src = expand(tokens[i], &dummy), *path = NULL;
++
++                if (dest && !all && (src || !is_dir)) {
++                    if (is_dir) {
++                        size_t l = strlen(dest);
++
++                        sprintf_alloc(&path, "%s%s%s", dest, l && dest[l - 1] != '/' && dest[l - 1] != ':' ? "/" : "",
++                                      base_of(src));
++                    } else {
++                        path = xstrdup(dest);
++                    }
++                }
++                if (path)
++                    add_file(files, &n, path);
++                else
++                    skip++;
++                free(src);
++            }
++            free(dest);
++        }
++        for (i = 0; i < nt; i++)
++            free(tokens[i]);
++    }
++    fclose(fp);
++    if (skipped)
++        *skipped = skip;
++    return n;
++}
++
++void upkg_uhc_files_free(char **files, size_t n)
++{
++    size_t i;
++
++    for (i = 0; i < n; i++)
++        free(files[i]);
++    free(files);
++}
++
++static int uhc_remove(const char *name)
++{
++    char *script = upkg_uhc_script_path(upkg_uhc_dir(), name), *rec, **files;
++    size_t n, skipped, i;
++    int rc = 0;
++
++    n = upkg_uhc_files(script, &files, &skipped);
++    if (!n) {
++        printf("upkg: cannot tell which files %s installed (its script has no Copy line that names a file); nothing removed\n", name);
++        fflush(stdout);
++        free(script);
++        return 20;
++    }
++    for (i = 0; i < n; i++) {
++        if (unlink(files[i]) == 0)
++            printf("Deleted %s\n", files[i]);
++        else
++            printf("Not deleted %s (already gone)\n", files[i]);
++    }
++    if (skipped)
++        printf("upkg: %lu Copy line%s of %s name no single file and %s left alone\n", (unsigned long)skipped,
++               skipped == 1 ? "" : "s", name, skipped == 1 ? "was" : "were");
++    {
++        char *rel;
++
++        sprintf_alloc(&rel, "Installed/%s", name);
++        rec = upkg_uhc_script_path(upkg_uhc_dir(), rel);
++        free(rel);
++    }
++    if (unlink(rec) != 0)
++        rc = 20;
++    else
++        printf("Deleted %s\n", rec);
++    fflush(stdout);
++    upkg_uhc_files_free(files, n);
++    free(rec);
++    free(script);
++    return rc;
++}
++
++int upkg_uhc_run_args(const char *cmd, int *argc, char **argv, int *ran)
++{
++    int i, k = 0, rc = 0;
++
++    *ran = 0;
++    for (i = 0; i < *argc; i++) {
++        const char *name = upkg_uhc_name(argv[i]);
++        int r;
++
++        if (!name) {
++            argv[k++] = argv[i];
++            continue;
++        }
++        if (!strcmp(cmd, "remove"))
++            r = uhc_remove(name);
++        else
++            r = uhc_install(name);
++        (*ran)++;
++        if (r && !rc)
++            rc = r;
++    }
++    *argc = k;
++    return rc;
++}
+diff --git a/libopkg/upkg_uhc.h b/libopkg/upkg_uhc.h
+index c956da4..9f6fb97 100644
+--- a/libopkg/upkg_uhc.h
++++ b/libopkg/upkg_uhc.h
+@@ -43,6 +43,46 @@ size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir);
+ 
+ void upkg_uhc_free(upkg_uhc_t *u);
+ 
++/* A name prefixed "uhc:" picks the UHC package of that name (D3: a bare name picks the ipk). */
++#define UPKG_UHC_PREFIX "uhc:"
++
++/* the name behind the prefix of ARG, NULL when ARG has no "uhc:" prefix */
++const char *upkg_uhc_name(const char *arg);
++
++/* "uhc:" + NAME (malloc): what the browse list and the window pass for a UHC row */
++char *upkg_uhc_target(const char *name);
++
++/* DIR/NAME: the package script (malloc). DIR ends in a volume colon or a slash for no extra slash. */
++char *upkg_uhc_script_path(const char *dir, const char *name);
++
++/* A vsh runs `Path` as a child, so a Path in the spawned sh never reaches the Execute that follows (measured on a rig).
++ * A real Shell runs the Execute'd wrapper, so its own Path ADD sticks for the script nested after it. The wrapper
++ * lives in $UPKG_UHC_TMP (default T:) as upkg-uhc-NAME. */
++char *upkg_uhc_wrapper_path(const char *name);
++
++/* The wrapper's text (malloc): "Path UHC:C UHC:S ADD" then "Execute <script>". The Path puts the UHC command and script
++ * drawers on the path: a shell started before the up-uhc User-Startup block lacks them and the script's first command
++ * (pkg-envcheck) is "Unknown command". The script is run itself, not through the `pkg` script, so the "already
++ * installed, proceed anyway (y/n)?" Ask of `pkg install` is never reached. */
++char *upkg_uhc_wrapper_text(const char *dir, const char *name);
++
++/* The command line that installs NAME: "Execute <wrapper path>" (malloc). */
++char *upkg_uhc_install_line(const char *dir, const char *name);
++
++/* UHCRC (the script ends in SetResult $UHCRC, so it is the exit code of Execute) as the upkg exit code:
++ * 0 stays 0, a negative (the command could not start) is 20, any other value is kept. */
++int upkg_uhc_rc(int rc);
++
++/* The files the Copy lines of the script SCRIPT put on disk (malloc'd paths in *FILES, the array too). Variables
++ * `${UHC/EXTBIN}` are read from the file `<UPKG_UHC_ENV or ENV:><var>`. A Copy whose target cannot be named (a
++ * wildcard, ALL, an unset variable) is counted in *SKIPPED, not listed. Returns the count; 0 means refuse. */
++size_t upkg_uhc_files(const char *script, char ***files, size_t *skipped);
++void upkg_uhc_files_free(char **files, size_t n);
++
++/* Run (install, upgrade) or take away (remove) the "uhc:<n>" entries of ARGV for the opkg command CMD, and delete
++ * them from ARGV (*ARGC drops). *RAN is how many ran. Returns 0, or the first failing exit code. */
++int upkg_uhc_run_args(const char *cmd, int *argc, char **argv, int *ran);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/libopkg/upkg_wb.c b/libopkg/upkg_wb.c
+index 07fe083..0b5d26e 100644
+--- a/libopkg/upkg_wb.c
++++ b/libopkg/upkg_wb.c
+@@ -393,20 +393,23 @@ static void action(wb_t *wb, int id)
+ {
+     const char *cmd = id == G_INSTALL ? "install" : id == G_REMOVE ? "remove" : id == G_UPGRADE ? "upgrade" : "update";
+     const char *name = NULL;
++    char *target = NULL;
+ 
+     if (id != G_UPDATE) {
+         if (wb->sel < 0)
+             return;
+-        name = wb->rows.row[wb->idx[wb->sel]].name;
++        name = target = upkg_rows_target(&wb->rows.row[wb->idx[wb->sel]]);
+     }
+     if (name && upkg_rows_interactive(name)) {
+         char body[320];
+ 
+         snprintf(body, sizeof body, "%s asks questions of its own.\nRun it from a Shell:\nupkg %s %s", name, cmd, name);
+         say_requester(wb, body);
++        free(target);
+         return;
+     }
+     run_cmd(wb, cmd, name);
++    free(target);
+ }
+ 
+ /* All waiting messages. While a command runs, closing the window is refused with a requester. */
+-- 
+2.50.1 (Apple Git-155)
+

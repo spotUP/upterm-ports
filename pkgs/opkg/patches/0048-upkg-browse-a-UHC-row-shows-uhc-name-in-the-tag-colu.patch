@@ -1,0 +1,59 @@
+From 2c352e63c6b83efa15603a498f1e657f90bf9cba Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 02:55:19 +0100
+Subject: [PATCH] upkg browse: a UHC row shows uhc:<name> in the tag column and
+ selects, shows and runs its commands under that tag, so a name in both
+ sources is two entries
+
+---
+ libopkg/upkg_browse.c | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/libopkg/upkg_browse.c b/libopkg/upkg_browse.c
+index 57a2a05..ffcf849 100644
+--- a/libopkg/upkg_browse.c
++++ b/libopkg/upkg_browse.c
+@@ -44,6 +44,7 @@
+ static upkg_rows_t rows;
+ static entry *ents;
+ static char **items;
++static char **tags;             /* the entry tags: the name of an ipk row, "uhc:<name>" for a UHC row (also the target its commands take) */
+ static unsigned *eflags;
+ static char status[160];
+ static size_t nitems;
+@@ -52,8 +53,12 @@ static void menu_free(void)
+ {
+     size_t i;
+ 
+-    for (i = 0; i < nitems; i++)
++    for (i = 0; i < nitems; i++) {
+         free(items[i]);
++        free(tags[i]);
++    }
++    free(tags);
++    tags = NULL;
+     free(ents);
+     free(items);
+     free(eflags);
+@@ -87,6 +92,7 @@ static void menu_build(void)
+     menu_free();
+     status = xcalloc(rows.n, sizeof *status);
+     items = xcalloc(rows.n, sizeof *items);
++    tags = xcalloc(rows.n, sizeof *tags);
+     ents = xcalloc(rows.n, sizeof *ents);
+     eflags = xcalloc(rows.n, sizeof *eflags);
+     nitems = rows.n;
+@@ -109,7 +115,9 @@ static void menu_build(void)
+         eflags[i] |= CH_ENTRY_BULK;     /* the footer names Shift+I and Shift+U on every row */
+         if (r->kind == UPKG_ROW_INSTALLED || r->kind == UPKG_ROW_UPGRADE)
+             eflags[i] |= CH_ENTRY_INSTALLED | (r->launch && *r->launch ? CH_ENTRY_LAUNCH : 0);
+-        ents[i].tag = r->name;
++        /* a UHC row shows its source in the tag column; a name in both sources stays two distinct entries */
++        tags[i] = upkg_rows_target(r);
++        ents[i].tag = tags[i];
+         ents[i].item = items[i];
+     }
+     free(status);
+-- 
+2.50.1 (Apple Git-155)
+

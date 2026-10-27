@@ -1,0 +1,56 @@
+Set PKGNAME "system"
+Set PKGVERSION "1.7"
+Set PKGURLPATH "${UHC/AMINETMIRROR}util/cli/"
+Set PKGFILENAME "System.lha"
+
+CPU >NIL: CHECK 68020
+IF WARN
+    Echo "This package needs a 68020 CPU or better."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+pkg-envcheck
+
+Set UHCRC 0
+MakeDir "${UHC/TEMPDIR}${PKGNAME}"
+pushd "${UHC/TEMPDIR}${PKGNAME}"
+
+Echo NOLINE "Fetching ${PKGURLPATH}${PKGFILENAME} ..."
+aget "${PKGURLPATH}${PKGFILENAME}" QUIET
+IF WARN
+    Echo "Download failed, aborting..."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+Echo NOLINE " Done!*nExtracting files ..."
+lha >NIL: e ${PKGFILENAME} system/System system/System.readme
+IF WARN
+    Echo "Unarchiving failed, aborting..."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+Echo NOLINE " Done!*nInstalling files..."
+Copy "system/System" "${UHC/EXTBIN}"
+Copy "system/System.readme" "${UHC/EXTDOC}"
+
+cd "${UHC/TEMPDIR}"
+Echo NOLINE " Done!*nRemoving temporary files..."
+Delete "${UHC/TEMPDIR}${PKGNAME}" ALL QUIET
+
+IF NOT EXISTS "${UHCBIN}Packages/Installed"
+    MakeDir >NIL: "${UHCBIN}Packages/Installed"
+ENDIF
+
+Echo "${PKGVERSION}" >"${UHCBIN}Packages/Installed/${PKGNAME}"
+Echo " Done!*nInstallation complete!"
+
+LAB CleanUp
+UnSet PKGNAME
+UnSet PKGVERSION
+UnSet PKGURLPATH
+UnSet PKGFILENAME
+popd
+SetResult $UHCRC

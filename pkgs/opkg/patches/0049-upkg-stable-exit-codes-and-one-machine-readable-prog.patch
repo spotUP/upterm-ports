@@ -1,0 +1,609 @@
+From ce3d0cfae9f0e33c532370b7490192d1bf719662 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 10:22:54 +0100
+Subject: [PATCH 49/50] upkg: stable exit codes and one machine-readable
+ progress line per step
+
+Front-ends (Amarchy, scripts) need to tell a missing package from a dead
+network from a failing package script without parsing messages.
+
+Exit codes sit on the AmigaDOS bands: 0 ok, 5 WARN (nothing matched or
+nothing to remove), 10 ERROR (reserved), 11 usage (also browse without a
+terminal), 12 package not found, 13 network, 14 package script failed
+(preinst, postinst, prerm, postrm, or a uhc: script returning nonzero; the
+script's own number goes to stderr), 15 interactive package without a
+terminal, 20 FAIL (start-up failure, unclassified). The first failure noted
+with upkg_note_fail() decides the class of a negative internal result;
+upkg_rc() maps it. update with failed feeds now returns that class instead
+of the failure count. install --all asks up front, so it is exempt from the
+rc 15 check (upkg_all_seeded()).
+
+Progress: with stdout not a terminal, or UPKG_PROGRESS=1, each step prints
+"[PROGRESS n/m] <phase> <name>" through opkg_msg(NOTICE): update, install,
+download, unpack, configure, remove, and script for uhc: packages. No
+dependence on terminal width; tty output is unchanged. upkg --help points
+at doc/upkg-api.txt.
+---
+ libopkg/opkg_cmd.c                            | 48 +++++++++++++++++--
+ libopkg/opkg_cmd.h                            | 30 ++++++++++--
+ libopkg/opkg_download.c                       |  2 +
+ libopkg/opkg_download_wget.c                  |  2 +
+ libopkg/opkg_install.c                        |  2 +
+ libopkg/pkg.c                                 |  2 +
+ libopkg/pkg_src.c                             |  1 +
+ libopkg/solvers/internal/opkg_action.c        |  6 ++-
+ .../solvers/internal/opkg_install_internal.c  |  5 ++
+ libopkg/upkg_all.c                            |  8 ++++
+ libopkg/upkg_all.h                            |  2 +
+ libopkg/upkg_browse.c                         |  2 +-
+ libopkg/upkg_rows.c                           | 33 +++++++++++++
+ libopkg/upkg_uhc.c                            | 18 +++++--
+ src/opkg.c                                    | 13 +++--
+ 15 files changed, 155 insertions(+), 19 deletions(-)
+
+diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
+index 4536da6..360206d 100644
+--- a/libopkg/opkg_cmd.c
++++ b/libopkg/opkg_cmd.c
+@@ -51,6 +51,7 @@
+ #include "upkg_browse.h"
+ #include "upkg_uhc.h"
+ #include "upkg_rows.h"
++#include "upkg_all.h"
+ #include "opkg_archive.h"
+ #include "pkg_src.h"
+ 
+@@ -183,10 +184,20 @@ static int opkg_update_cmd(int argc, char **argv)
+         free(url);
+     }
+ 
++    {
++        int feeds = 0;
++
++        for (iter = void_list_first(&opkg_config->pkg_src_list); iter;
++                iter = void_list_next(&opkg_config->pkg_src_list, iter))
++            feeds++;
++        upkg_progress_plan(feeds);
++    }
+     for (iter = void_list_first(&opkg_config->pkg_src_list); iter;
+             iter = void_list_next(&opkg_config->pkg_src_list, iter)) {
+         src = (pkg_src_t *) iter->data;
+ 
++        upkg_progress_next();
++        upkg_progress("update", src->name);
+         err = pkg_src_update(src);
+         if (err)
+             failures++;
+@@ -194,7 +205,10 @@ static int opkg_update_cmd(int argc, char **argv)
+     rmdir(tmp);
+     free(tmp);
+ 
+-    return failures;
++    /* upkg: a failed feed is a failed download (13), not the count of feeds */
++    if (failures)
++        upkg_note_fail(UPKG_RC_NETWORK);
++    return failures ? -1 : 0;
+ }
+ 
+ struct opkg_intercept {
+@@ -400,6 +414,15 @@ static int opkg_configure_packages(char *pkg_name)
+         goto error;
+     }
+ 
++    {
++        unsigned int todo = 0;
++
++        for (i = 0; i < ordered->len; i++)
++            if (!(pkg_name && fnmatch(pkg_name, ordered->pkgs[i]->name, 0)) &&
++                ordered->pkgs[i]->state_status == SS_UNPACKED)
++                todo++;
++        upkg_progress_plan(todo);
++    }
+     for (i = 0; i < ordered->len; i++) {
+         pkg = ordered->pkgs[i];
+ 
+@@ -408,6 +431,8 @@ static int opkg_configure_packages(char *pkg_name)
+ 
+         if (pkg->state_status == SS_UNPACKED) {
+             opkg_msg(NOTICE, "Configuring %s.\n", pkg->name);
++            upkg_progress_next();
++            upkg_progress("configure", pkg->name);
+             r = opkg_configure(pkg);
+             if (r == 0) {
+                 pkg->state_status = SS_INSTALLED;
+@@ -450,6 +475,18 @@ static int opkg_install_cmd(int argc, char **argv)
+     if (uran && !argc)
+         return urc;
+ 
++    /* a package that asks questions (UP-Term-Interactive) cannot run its postinst without a terminal */
++    if (!isatty(0) && !upkg_all_seeded()) {
++        for (i = 0; i < argc; i++) {
++            if (upkg_rows_interactive(argv[i])) {
++                opkg_msg(ERROR, "%s asks questions and needs a terminal; run upkg install %s in a console.\n",
++                         argv[i], argv[i]);
++                upkg_note_fail(UPKG_RC_ANSWERS);
++                return -1;
++            }
++        }
++    }
++
+     /*
+      * Now scan through package names and install
+      */
+@@ -542,6 +579,7 @@ static int opkg_download_cmd(int argc, char **argv)
+         if (pkg == NULL) {
+             err = -1;
+             opkg_msg(ERROR, "Cannot find package %s.\n", arg);
++            upkg_note_fail(UPKG_RC_NOTFOUND);
+             continue;
+         }
+ 
+@@ -830,7 +868,7 @@ static int upkg_list_find(FILE *out, int argc, char **argv, int use_desc, int on
+     /* upkg: a glob that matches nothing is an error, not silence (list only; find takes a regexp) */
+     if (pkg_name && !use_desc && !shown) {
+         fprintf(stderr, "upkg: no package matches \"%s\"\n", pkg_name);
+-        return 1;
++        return UPKG_RC_NOTHING;
+     }
+ 
+     return 0;
+@@ -952,7 +990,7 @@ static int upkg_list_installed(FILE *out, int argc, char **argv, int uhc_which)
+     /* upkg: a glob that matches nothing is an error, not silence */
+     if (pkg_name && !shown) {
+         fprintf(stderr, "upkg: no package matches \"%s\"\n", pkg_name);
+-        return 1;
++        return UPKG_RC_NOTHING;
+     }
+ 
+     /* upkg: on a terminal an empty list says so; a pipe or $(...) still gets nothing */
+@@ -1014,13 +1052,13 @@ static int opkg_list_upgradable_cmd(int argc, char **argv)
+     return rc;
+ }
+ 
+-/* UP-Term (upkg): `upkg info uhc:NAME`, the catalogue entry in the layout of an ipk info block; 1 when no such
++/* UP-Term (upkg): `upkg info uhc:NAME`, the catalogue entry in the layout of an ipk info block; UPKG_RC_NOTFOUND when no such
+  * package is in the drawer (D3: a bare NAME is the ipk) */
+ static int upkg_uhc_info(const char *name)
+ {
+     upkg_uhc_t u = { 0 };
+     size_t i;
+-    int err = 1;
++    int err = UPKG_RC_NOTFOUND;
+ 
+     upkg_uhc_read(&u, upkg_uhc_dir());
+     for (i = 0; i < u.n; i++) {
+diff --git a/libopkg/opkg_cmd.h b/libopkg/opkg_cmd.h
+index 0ba3b95..efd34ac 100644
+--- a/libopkg/opkg_cmd.h
++++ b/libopkg/opkg_cmd.h
+@@ -41,16 +41,38 @@ typedef struct opkg_cmd opkg_cmd_t;
+ opkg_cmd_t *opkg_cmd_find(const char *name);
+ int opkg_cmd_exec(opkg_cmd_t * cmd, int argc, const char **argv);
+ 
+-/* AmigaOS RETURN_FAIL */
+-#define UPKG_RC_FAIL 20
++/* upkg exit codes (doc/upkg-api.txt). The bands are the AmigaDOS ones a script tests with If WARN / ERROR / FAIL:
++ * 5 is WARN, 10 up to 19 are ERROR, 20 is FAIL. */
++#define UPKG_RC_OK 0
++#define UPKG_RC_NOTHING 5      /* WARN: the command matched nothing or had nothing to do */
++#define UPKG_RC_ERROR 10       /* ERROR: a command failed for a reason with no code of its own */
++#define UPKG_RC_USAGE 11       /* ERROR: bad command, option or arguments; no terminal for browse */
++#define UPKG_RC_NOTFOUND 12    /* ERROR: no package of that name in the feeds */
++#define UPKG_RC_NETWORK 13     /* ERROR: a download failed */
++#define UPKG_RC_SCRIPT 14      /* ERROR: a package script (preinst, postinst, prerm, postrm, UHC script) failed */
++#define UPKG_RC_ANSWERS 15     /* ERROR: the package asks questions and there is no terminal to ask on */
++#define UPKG_RC_FAIL 20        /* FAIL: start-up failed, or the failure has no class (never a negative code) */
++
++/* The first failure class a command notes (UPKG_RC_NOTFOUND ... UPKG_RC_ANSWERS); upkg_rc turns the -1 the
++ * command returns into it. Later notes do not replace the first: it is the cause, the rest follow from it. */
++extern int upkg_fail_class;
++void upkg_note_fail(int cls);
++
++/* Machine-readable progress, `[PROGRESS n/m] phase name` (doc/upkg-api.txt): printed when stdout is not a
++ * terminal, or UPKG_PROGRESS=1. upkg_progress_plan(m) starts a run of m steps, upkg_progress_next() counts the
++ * next step, upkg_progress prints the line for the current step. Goes through opkg_msg(NOTICE), the path of
++ * every other progress line. */
++void upkg_progress_plan(int m);
++void upkg_progress_next(void);
++void upkg_progress(const char *phase, const char *name);
+ 
+ /* The code upkg reports for a command result: a failure is RETURN_FAIL (20), never the -1 several commands
+  * return (the AmigaOS Shell reads a negative code as "Unknown command"); success 0 and the positive codes a
+- * command returns itself (1: nothing matched) stay. One mapping for the Shell exit, browse and the Workbench
++ * command returns itself (UPKG_RC_NOTHING: nothing matched) stay. One mapping for the Shell exit, browse and the Workbench
+  * window, so all three show the same code. */
+ static inline int upkg_rc(int err)
+ {
+-    return err < 0 ? UPKG_RC_FAIL : err;
++    return err < 0 ? (upkg_fail_class ? upkg_fail_class : UPKG_RC_FAIL) : err;
+ }
+ 
+ extern int opkg_state_changed;
+diff --git a/libopkg/opkg_download.c b/libopkg/opkg_download.c
+index f37df5c..85dc21c 100644
+--- a/libopkg/opkg_download.c
++++ b/libopkg/opkg_download.c
+@@ -22,6 +22,7 @@
+ */
+ 
+ #include "config.h"
++#include "opkg_cmd.h"
+ 
+ #include <stdlib.h>
+ #include <string.h>
+@@ -571,6 +572,7 @@ int opkg_prepare_url_for_install(const char *url, char **namep)
+ 
+     /* Can't find anything matching the requested URL. */
+     opkg_msg(ERROR, "Couldn't find anything to satisfy '%s'.\n", url);
++    upkg_note_fail(UPKG_RC_NOTFOUND);
+     r = -1;
+ 
+ CLEANUP:
+diff --git a/libopkg/opkg_download_wget.c b/libopkg/opkg_download_wget.c
+index 6526c7b..5a0253a 100644
+--- a/libopkg/opkg_download_wget.c
++++ b/libopkg/opkg_download_wget.c
+@@ -21,6 +21,7 @@
+ */
+ 
+ #include "config.h"
++#include "opkg_cmd.h"
+ 
+ #include <errno.h>
+ #include <stdlib.h>
+@@ -121,6 +122,7 @@ int opkg_download_backend(const char *src, const char *dest,
+ 
+     if (res) {
+         opkg_msg(ERROR, "Failed to download %s, curl returned %d (is curl installed and in PATH?).\n", src, res);
++        upkg_note_fail(UPKG_RC_NETWORK);
+         return -1;
+     }
+ 
+diff --git a/libopkg/opkg_install.c b/libopkg/opkg_install.c
+index 2860e5b..af32211 100644
+--- a/libopkg/opkg_install.c
++++ b/libopkg/opkg_install.c
+@@ -974,6 +974,7 @@ int opkg_install_pkg(pkg_t * pkg, pkg_t * old_pkg)
+         return 0;
+ 
+     if (pkg->local_filename == NULL && !opkg_config->download_first) {
++        upkg_progress("download", pkg->name);
+         err = opkg_download_pkg(pkg);
+         if (err) {
+             opkg_msg(ERROR,
+@@ -987,6 +988,7 @@ int opkg_install_pkg(pkg_t * pkg, pkg_t * old_pkg)
+         return 0;
+ 
+     if (pkg->tmp_unpack_dir == NULL) {
++        upkg_progress("unpack", pkg->name);
+         err = unpack_pkg_control_files(pkg);
+         if (err == -1) {
+             opkg_msg(ERROR, "Failed to unpack control files from %s.\n",
+diff --git a/libopkg/pkg.c b/libopkg/pkg.c
+index 670b5e7..3f75d5b 100644
+--- a/libopkg/pkg.c
++++ b/libopkg/pkg.c
+@@ -43,6 +43,7 @@
+ #include "xsystem.h"
+ #include "opkg_conf.h"
+ #include "upkg_wrap.h"
++#include "opkg_cmd.h"
+ 
+ /* pkg_formatted_info writes to stdout for `upkg info`; on a console it wraps to the width, to a
+  * file (the status database) upkg_fprintf is a plain fprintf. */
+@@ -1413,6 +1414,7 @@ int pkg_run_script(pkg_t * pkg, const char *script, const char *args)
+         if (!opkg_config->offline_root)
+             opkg_msg(ERROR, "package \"%s\" %s script returned status %d.\n",
+                      pkg->name, script, err);
++        upkg_note_fail(UPKG_RC_SCRIPT);
+         return err;
+     }
+ 
+diff --git a/libopkg/pkg_src.c b/libopkg/pkg_src.c
+index b8d2c3c..61a02f7 100644
+--- a/libopkg/pkg_src.c
++++ b/libopkg/pkg_src.c
+@@ -19,6 +19,7 @@
+ */
+ 
+ #include "config.h"
++#include "opkg_cmd.h"
+ 
+ #include <stdlib.h>
+ #include <unistd.h>
+diff --git a/libopkg/solvers/internal/opkg_action.c b/libopkg/solvers/internal/opkg_action.c
+index 3c001dd..59be3a2 100644
+--- a/libopkg/solvers/internal/opkg_action.c
++++ b/libopkg/solvers/internal/opkg_action.c
+@@ -17,6 +17,7 @@
+ */
+ 
+ #include "config.h"
++#include "opkg_cmd.h"
+ #include <unistd.h>
+ #include "opkg_install_internal.h"
+ #include "opkg_solver_internal.h"
+@@ -135,11 +136,14 @@ int opkg_solver_remove(int num_pkgs, char **pkg_names)
+         if (!matched) {
+             fprintf(stderr, "%s is not installed.\n", pkg_names[i]);
+             if (!err)
+-                err = 1;
++                err = UPKG_RC_NOTHING;
+         }
+     }
+ 
++    upkg_progress_plan(pkgs_to_remove->len);
+     for (i = 0; i < pkgs_to_remove->len; i++) {
++        upkg_progress_next();
++        upkg_progress("remove", pkgs_to_remove->pkgs[i]->name);
+         if (opkg_remove_pkg(pkgs_to_remove->pkgs[i])) {
+             err = -1;
+             break;
+diff --git a/libopkg/solvers/internal/opkg_install_internal.c b/libopkg/solvers/internal/opkg_install_internal.c
+index a33fa51..9ecb536 100644
+--- a/libopkg/solvers/internal/opkg_install_internal.c
++++ b/libopkg/solvers/internal/opkg_install_internal.c
+@@ -17,6 +17,7 @@
+ */
+ 
+ #include "opkg_install_internal.h"
++#include "opkg_cmd.h"
+ #include "opkg_solver_internal.h"
+ #include "pkg_depends.h"
+ #include "opkg_install.h"
+@@ -102,6 +103,7 @@ static int opkg_prepare_install_by_name(const char *pkg_name, pkg_t **pkg)
+ 
+     if (new == NULL) {
+         opkg_msg(NOTICE, "Unknown package '%s'.\n", pkg_name);
++        upkg_note_fail(UPKG_RC_NOTFOUND);
+         return -1;
+     }
+ 
+@@ -174,6 +176,7 @@ int opkg_execute_install(pkg_t *pkg, pkg_vec_t *pkgs_to_install, pkg_vec_t *repl
+     }
+ 
+     /* Install packages */
++    upkg_progress_plan(pkgs_to_install->len);
+     for (i = 0; i < pkgs_to_install->len; i++) {
+         dependency = pkgs_to_install->pkgs[i];
+ 
+@@ -188,6 +191,8 @@ int opkg_execute_install(pkg_t *pkg, pkg_vec_t *pkgs_to_install, pkg_vec_t *repl
+         if (!opkg_config->download_only) {
+             opkg_msg(NOTICE, "%s %s (%s) on %s.\n", from_upgrade ? "Upgrading" : "Installing",
+                      dependency->name, dependency->version, dependency->dest->name);
++            upkg_progress_next();
++            upkg_progress("install", dependency->name);
+         }
+ 
+         /* Set all pkgs to auto_installed except the top level */
+diff --git a/libopkg/upkg_all.c b/libopkg/upkg_all.c
+index 14d0dd6..277197b 100644
+--- a/libopkg/upkg_all.c
++++ b/libopkg/upkg_all.c
+@@ -30,6 +30,7 @@ typedef struct {
+ 
+ static seed_t *seeds;
+ static size_t nseeds;
++static int asked;               /* upkg_all_ask finished: script children run unattended */
+ static char *tmpdir;
+ 
+ static char *slurp(const char *path)
+@@ -265,9 +266,15 @@ int upkg_all_ask(char **names, size_t n)
+             return -1;
+     }
+     upkg_xsystem_unattended(1);
++    asked = 1;
+     return 0;
+ }
+ 
++int upkg_all_seeded(void)
++{
++    return asked;
++}
++
+ void upkg_all_seed(pkg_t *pkg)
+ {
+     size_t i;
+@@ -297,6 +304,7 @@ void upkg_all_end(void)
+     size_t i;
+ 
+     upkg_xsystem_unattended(0);
++    asked = 0;
+     for (i = 0; i < nseeds; i++) {
+         unlink(seeds[i].answered);
+         free(seeds[i].name);
+diff --git a/libopkg/upkg_all.h b/libopkg/upkg_all.h
+index 2d89217..136f5c6 100644
+--- a/libopkg/upkg_all.h
++++ b/libopkg/upkg_all.h
+@@ -24,6 +24,8 @@ char *upkg_all_apply(const char *questions, const char *answers);
+ int upkg_all_ask(char **names, size_t n);
+ 
+ /* Called when PKG's data files are extracted: replaces its questions file with the answered one. */
++/* Nonzero while Install All has asked every question up front: no terminal is needed then. */
++int upkg_all_seeded(void);
+ void upkg_all_seed(pkg_t *pkg);
+ 
+ /* Forget the answers, delete the files, let script children read the terminal again. */
+diff --git a/libopkg/upkg_browse.c b/libopkg/upkg_browse.c
+index ffcf849..9d1c6f2 100644
+--- a/libopkg/upkg_browse.c
++++ b/libopkg/upkg_browse.c
+@@ -373,7 +373,7 @@ int upkg_browse(int argc, char **argv)
+     }
+     if (!isatty(0)) {
+         fprintf(stderr, "upkg browse needs a terminal. Use upkg list.\n");
+-        return 2;
++        return UPKG_RC_USAGE;
+     }
+ 
+     upkg_rows_load(&rows);
+diff --git a/libopkg/upkg_rows.c b/libopkg/upkg_rows.c
+index 4ffca04..c5a21bb 100644
+--- a/libopkg/upkg_rows.c
++++ b/libopkg/upkg_rows.c
+@@ -19,6 +19,8 @@
+ #include "upkg_browse.h"
+ #include "upkg_rows.h"
+ #include "xsystem.h"
++#include <unistd.h>
++#include "opkg_message.h"
+ 
+ #define LISTS_DEFAULT "/UP-Term/pkg/upkg/lists"
+ 
+@@ -546,3 +548,34 @@ int upkg_rows_launch_run(upkg_rows_t *rows, const char *name, const char *line)
+     upkg_rows_load(rows);
+     return rc;
+ }
++
++/* --- exit class and progress lines (doc/upkg-api.txt) --- */
++
++int upkg_fail_class;
++static int prog_n, prog_m;
++
++void upkg_note_fail(int cls)
++{
++    if (!upkg_fail_class)
++        upkg_fail_class = cls;
++}
++
++void upkg_progress_plan(int m)
++{
++    prog_n = 0;
++    prog_m = m;
++}
++
++void upkg_progress_next(void)
++{
++    prog_n++;
++}
++
++void upkg_progress(const char *phase, const char *name)
++{
++    const char *e = getenv("UPKG_PROGRESS");
++
++    if (isatty(1) && !(e && *e == '1'))
++        return;
++    opkg_msg(NOTICE, "[PROGRESS %d/%d] %s %s\n", prog_n, prog_m, phase, name);
++}
+diff --git a/libopkg/upkg_uhc.c b/libopkg/upkg_uhc.c
+index 7bb3348..492b9d6 100644
+--- a/libopkg/upkg_uhc.c
++++ b/libopkg/upkg_uhc.c
+@@ -17,6 +17,7 @@
+ #include "xfuncs.h"
+ #include "xsystem.h"
+ #include "upkg_uhc.h"
++#include "opkg_cmd.h"
+ 
+ const char *upkg_uhc_dir(void)
+ {
+@@ -203,9 +204,11 @@ char *upkg_uhc_wrapper_text(const char *dir, const char *name)
+     return s;
+ }
+ 
++/* the code upkg exits with for a UHC script's result (its SetResult / Exit value): 0 stays 0, any other
++ * result is UPKG_RC_SCRIPT (the script's own number is printed by uhc_install), a spawn failure FAIL */
+ int upkg_uhc_rc(int rc)
+ {
+-    return rc < 0 ? 20 : rc;
++    return rc < 0 ? UPKG_RC_FAIL : rc ? UPKG_RC_SCRIPT : 0;
+ }
+ 
+ /* the argv upkg spawns for a UHC install: a real shell runs `Execute <script>`. C:Execute does not run the script
+@@ -233,7 +236,10 @@ static int uhc_install(const char *name)
+         printf("%s\n", line);
+         fflush(stdout);
+         upkg_uhc_install_argv(line, argv);
+-        rc = upkg_uhc_rc(xsystem(argv));
++        rc = xsystem(argv);
++        if (rc > 0)
++            fprintf(stderr, "upkg: the script of uhc:%s returned %d\n", name, rc);
++        rc = upkg_uhc_rc(rc);
+         remove(w);
+     }
+     free(text);
+@@ -514,9 +520,13 @@ static int uhc_remove(const char *name)
+ 
+ int upkg_uhc_run_args(const char *cmd, int *argc, char **argv, int *ran)
+ {
+-    int i, k = 0, rc = 0;
++    int i, k = 0, rc = 0, total = 0;
+ 
+     *ran = 0;
++    for (i = 0; i < *argc; i++)
++        if (upkg_uhc_name(argv[i]))
++            total++;
++    upkg_progress_plan(total);
+     for (i = 0; i < *argc; i++) {
+         const char *name = upkg_uhc_name(argv[i]);
+         int r;
+@@ -525,6 +535,8 @@ int upkg_uhc_run_args(const char *cmd, int *argc, char **argv, int *ran)
+             argv[k++] = argv[i];
+             continue;
+         }
++        upkg_progress_next();
++        upkg_progress(!strcmp(cmd, "remove") ? "remove" : "script", argv[i]);
+         if (!strcmp(cmd, "remove"))
+             r = uhc_remove(name);
+         else
+diff --git a/src/opkg.c b/src/opkg.c
+index 26c728b..36242ea 100644
+--- a/src/opkg.c
++++ b/src/opkg.c
+@@ -587,6 +587,9 @@ static void usage(int status)
+                    " empty; tabs and\n"
+                    " newlines in a value become spaces. A UHC package is a row with\n"
+                    " src uhc (install it as uhc:<name>). upkg list --tsv '*x*' filters.\n");
++    upkg_help_para(" Exit codes, and the [PROGRESS n/m] lines a pipe gets: doc/upkg-api.txt\n"
++                   " (0 ok, 5 nothing matched, 10 error, 11 usage, 12 not found, 13 network,\n"
++                   " 14 script failed, 15 needs a terminal for questions, 20 fail).\n");
+ 
+     /* --force-removal-of-essential-packages        Let opkg remove essential packages.
+      * Using this option is almost guaranteed to break your system, hence this option
+@@ -669,7 +672,7 @@ int main(int argc, char *argv[])
+         opts = args_parse_stage1(argc, argv);
+         if (opts == argc || opts < 0) {
+             fprintf(stderr, "upkg must have one sub-command argument\n");
+-            usage(1);
++            usage(UPKG_RC_USAGE);
+         }
+ 
+         cmd_name = argv[opts++];
+@@ -710,7 +713,7 @@ int main(int argc, char *argv[])
+     cmd = opkg_cmd_find(cmd_name);
+     if (cmd == NULL) {
+         fprintf(stderr, "%s: unknown sub-command %s\n", argv[0], cmd_name);
+-        usage(1);
++        usage(UPKG_RC_USAGE);
+     }
+ 
+     opkg_config->pfm = cmd->pfm;
+@@ -722,7 +725,7 @@ int main(int argc, char *argv[])
+ 
+     if (!wb && args_parse_stage2(argc, argv) < 0) {
+         fprintf(stderr, "Stage 2 argument parsing failed.\n");
+-        usage(1);
++        usage(UPKG_RC_USAGE);
+     }
+ 
+     if (!noloadconf) {
+@@ -748,13 +751,13 @@ int main(int argc, char *argv[])
+ 
+     if (all_flag && !strcmp(cmd_name, "install") && opts != argc) {
+         fprintf(stderr, "%s: install --all takes no package names\n", argv[0]);
+-        usage(1);
++        usage(UPKG_RC_USAGE);
+     }
+ 
+     if (cmd->requires_args && opts == argc && !(all_flag && !strcmp(cmd_name, "install"))) {
+         fprintf(stderr, "%s: the ``%s'' command requires at least one argument\n",
+                 argv[0], cmd_name);
+-        usage(1);
++        usage(UPKG_RC_USAGE);
+     }
+ 
+     argc = full_argc;
+-- 
+2.50.1 (Apple Git-155)
+

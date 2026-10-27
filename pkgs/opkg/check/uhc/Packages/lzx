@@ -1,0 +1,71 @@
+Set PKGNAME "lzx"
+Set PKGVERSION "1.21r"
+Set PKGURLPATH "${UHC/AMINETMIRROR}util/arc/"
+Set PKGFILENAME "lzx121r1.lha"
+
+CPU >NIL: CHECK 68020
+IF WARN
+    Echo "This package needs a 68020 CPU or better."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+pkg-envcheck
+
+CPU >NIL: CHECK 68000
+IF NOT WARN
+    Set CPUFILE "LZX_68000EC-r"
+ENDIF
+CPU >NIL: CHECK 68020
+IF NOT WARN
+    Set CPUFILE "LZX_68020r"
+ENDIF
+CPU >NIL: CHECK 68040
+IF NOT WARN
+    Set CPUFILE "LZX_68040r"
+ENDIF
+Set UHCRC 0
+MakeDir "${UHC/TEMPDIR}${PKGNAME}"
+pushd "${UHC/TEMPDIR}${PKGNAME}"
+
+Echo NOLINE "Fetching ${PKGURLPATH}${PKGFILENAME} ..."
+aget "${PKGURLPATH}${PKGFILENAME}" QUIET
+IF WARN
+    Echo "Download failed, aborting..."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+Echo NOLINE " Done!*nExtracting files ..."
+lha >NIL: e ${PKGFILENAME} ${CPUFILE} LZX.guide readme.txt unlzx LZX.Keyfile
+IF WARN
+    Echo "Unarchiving failed, aborting..."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+Echo NOLINE " Done!*nInstalling files..."
+Copy "${CPUFILE}" "${UHC/EXTBIN}lzx"
+Copy "LZX.guide" "${UHC/EXTDOC}"
+Copy "readme.txt" "${UHC/EXTDOC}lzx.readme.txt"
+Copy "unlzx" "${UHC/EXTBIN}"
+Copy "LZX.Keyfile" "L:"
+
+cd "${UHC/TEMPDIR}"
+Echo NOLINE " Done!*nRemoving temporary files..."
+Delete "${UHC/TEMPDIR}${PKGNAME}" ALL QUIET
+
+IF NOT EXISTS "${UHCBIN}Packages/Installed"
+    MakeDir >NIL: "${UHCBIN}Packages/Installed"
+ENDIF
+
+Echo "${PKGVERSION}" >"${UHCBIN}Packages/Installed/${PKGNAME}"
+Echo " Done!*nInstallation complete!"
+
+LAB CleanUp
+UnSet PKGNAME
+UnSet PKGVERSION
+UnSet PKGURLPATH
+UnSet PKGFILENAME
+popd
+SetResult $UHCRC

@@ -8,6 +8,14 @@
 #include <string.h>
 #include <unistd.h>
 
+/* upkg_progress (at the end of upkg_rows.c) prints through opkg_msg: stub it */
+#include "opkg_message.h"
+void opkg_message(message_level_t level, const char *fmt, ...)
+{
+    (void)level;
+    (void)fmt;
+}
+
 #include "upkg_rows.c"
 
 void *xmalloc(size_t n) { void *p = malloc(n ? n : 1); if (!p) abort(); return p; }
@@ -116,7 +124,7 @@ static void expect(const upkg_rows_t *r, const char *name, upkg_row_kind_t kind,
     free(s);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     upkg_rows_t rows = {0};
     size_t n, i;
@@ -342,6 +350,72 @@ int main(void)
         remove(path);
         rmdir(dir);
         unsetenv("UPKG_INFO_DIR");
+    }
+
+    /* UHC rows (patch 0045): the fixture drawer (curl current, lzx not installed, unzip 5.40 installed and 5.42 in the script)
+     * is appended after the feed rows with src=uhc; a feed package of the same name keeps its own row (D3) */
+    {
+        const char *saved = lists[0];
+        char *clash;
+        size_t k, uhc_rows = 0, idx_all[16];
+        const upkg_row_t *r;
+
+        CHECK(argc == 2);
+        setenv("UPKG_UHC_DIR", argv[1], 1);
+        n = upkg_rows_load(&rows);
+        CHECK(n == 9 && rows.n == 9);
+        for (k = 0; k < rows.n; k++)
+            CHECK((k < 6) == (rows.row[k].src == UPKG_SRC_OPKG));           /* feed rows first, all src=opkg */
+        CHECK(!strcmp(rows.row[6].name, "curl") && !strcmp(rows.row[7].name, "lzx") && !strcmp(rows.row[8].name, "unzip"));
+        r = &rows.row[6];
+        CHECK(r->kind == UPKG_ROW_INSTALLED && !strcmp(r->installed, "7.10.5") && !strcmp(r->available, "7.10.5") && r->desc[0]);
+        r = &rows.row[7];
+        CHECK(r->kind == UPKG_ROW_AVAILABLE && !strcmp(r->installed, "") && !strcmp(r->available, "1.21r") && !strcmp(r->launch, ""));
+        r = &rows.row[8];
+        CHECK(r->kind == UPKG_ROW_UPGRADE && !strcmp(r->installed, "5.40") && !strcmp(r->available, "5.42")
+              && !strcmp(r->desc, "Extractor for zip-archives"));
+        CHECK(upkg_rows_actions(r) == (UPKG_ACT_REMOVE | UPKG_ACT_UPGRADE));
+        CHECK(upkg_rows_filter(&rows, UPKG_FILTER_UPGRADABLE, idx_all) == 2);   /* delta (feed) and unzip (uhc) */
+        for (k = 0; k < rows.n; k++)
+            uhc_rows += rows.row[k].src == UPKG_SRC_UHC;
+        CHECK(uhc_rows == 3);
+
+        /* a feed package called unzip: both rows stay */
+        clash = xmalloc(strlen(saved) + 64);
+        strcpy(clash, saved);
+        strcat(clash, "unzip - 6.0 - Feed copy\n");
+        lists[0] = clash;
+        n = upkg_rows_load(&rows);
+        lists[0] = saved;
+        free(clash);
+        CHECK(n == 10);
+        CHECK(!strcmp(rows.row[6].name, "unzip") && rows.row[6].src == UPKG_SRC_OPKG && !strcmp(rows.row[6].available, "6.0"));
+        CHECK(!strcmp(rows.row[9].name, "unzip") && rows.row[9].src == UPKG_SRC_UHC && !strcmp(rows.row[9].available, "5.42"));
+
+        /* U4/D3: Install All and Update All never name a UHC row; the target of a UHC row is uhc:<n>, of a feed row <n> */
+        {
+            size_t ni, nu, j;
+            char **bi = upkg_rows_bulk_names(&rows, 'I', &ni), **bu = upkg_rows_bulk_names(&rows, 'U', &nu);
+            char *t1 = upkg_rows_target(&rows.row[6]), *t2 = upkg_rows_target(&rows.row[9]), *l;
+
+            for (j = 0; j < ni; j++)
+                CHECK(strcmp(bi[j], "lzx") && strcmp(bi[j], "curl"));      /* uhc-only names */
+            for (j = 0; j < nu; j++)
+                CHECK(strcmp(bu[j], "unzip"));                             /* the uhc row is the upgrade; the feed row is not */
+            CHECK(ni == 5 && nu == 1);      /* five feed rows, one of them the feed unzip; delta is the one feed upgrade */
+            CHECK(!strcmp(t1, "unzip") && !strcmp(t2, "uhc:unzip"));
+            CHECK(upkg_rows_interactive("uhc:asker") == 0);
+            l = upkg_rows_launch("uhc:charlie");
+            CHECK(l && !*l);
+            free(l); free(t1); free(t2);
+            upkg_rows_bulk_free(bi);
+            upkg_rows_bulk_free(bu);
+        }
+
+        /* no drawer: only the feed rows */
+        setenv("UPKG_UHC_DIR", "/nonexistent/uhc/drawer", 1);
+        CHECK(upkg_rows_load(&rows) == 6);
+        unsetenv("UPKG_UHC_DIR");
     }
 
     for (i = 0; i < 3; i++)

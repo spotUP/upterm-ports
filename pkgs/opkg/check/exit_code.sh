@@ -2,7 +2,7 @@
 # exit_code.sh UPKG: host check of patches/0036: upkg never exits with a negative code. main() started with err = -1
 # and returned it on a failed start or command (host rc 255); on AmigaOS a negative rc makes the Shell print
 # "Unknown command" after the real error message. A failure now exits RETURN_FAIL (20), success 0, and the
-# positive codes a command returns itself (1 for "no package matches") are left alone.
+# positive codes a command returns itself (5 for "no package matches", the WARN code of doc/upkg-api.txt) are left alone.
 #   sh pkgs/opkg/check/exit_code.sh build/host/opkg/inst/bin/upkg
 set -eu
 upkg=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")

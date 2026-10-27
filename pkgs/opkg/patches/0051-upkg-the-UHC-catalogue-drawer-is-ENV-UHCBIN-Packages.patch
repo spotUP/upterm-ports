@@ -1,0 +1,71 @@
+From c3d9672b47ecbc67ed3f8e9c39a2c416fe4bd9e9 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 11:06:08 +0100
+Subject: [PATCH 51/51] upkg: the UHC catalogue drawer is <ENV:UHCBIN>Packages
+ (SYS:UHC/Packages when UHCBIN is unset), not the fixed UP-Term:uhc/Packages
+
+---
+ libopkg/upkg_uhc.c | 17 ++++++++++++++++-
+ libopkg/upkg_uhc.h |  7 ++++---
+ 2 files changed, 20 insertions(+), 4 deletions(-)
+
+diff --git a/libopkg/upkg_uhc.c b/libopkg/upkg_uhc.c
+index 492b9d6..91478a1 100644
+--- a/libopkg/upkg_uhc.c
++++ b/libopkg/upkg_uhc.c
+@@ -19,11 +19,26 @@
+ #include "upkg_uhc.h"
+ #include "opkg_cmd.h"
+ 
++static char *expand(const char *t, int *ends_var);
++
++/* UPKG_UHC_DIR; else <ENV:UHCBIN>Packages (uhcinstall sets UHCBIN to the UHC root with its trailing slash; read through
++ * expand() like ${UHC/EXTBIN}); else the default */
+ const char *upkg_uhc_dir(void)
+ {
++    static char *dir;
+     const char *d = getenv("UPKG_UHC_DIR");
++    char *root;
++    int dummy;
+ 
+-    return d && *d ? d : UPKG_UHC_DIR_DEFAULT;
++    if (d && *d)
++        return d;
++    root = expand("${UHCBIN}", &dummy);
++    if (!root)
++        return UPKG_UHC_DIR_DEFAULT;
++    free(dir);
++    sprintf_alloc(&dir, "%s%sPackages", root, *root && root[strlen(root) - 1] != '/' && root[strlen(root) - 1] != ':' ? "/" : "");
++    free(root);
++    return dir;
+ }
+ 
+ /* the first line of the file PATH without its line end and without blanks at both ends (malloc), NULL when it cannot be read */
+diff --git a/libopkg/upkg_uhc.h b/libopkg/upkg_uhc.h
+index 952e9d7..72b953c 100644
+--- a/libopkg/upkg_uhc.h
++++ b/libopkg/upkg_uhc.h
+@@ -18,8 +18,9 @@ extern "C" {
+ #endif
+ 
+ /* The catalogue drawer: the one place its path is written. UPKG_UHC_DIR in the environment overrides it (the tests
+- * point it at a fixture drawer). */
+-#define UPKG_UHC_DIR_DEFAULT "UP-Term:uhc/Packages"
++ * point it at a fixture drawer), else ENV:UHCBIN (where uhcinstall put UHC) + "Packages"; this is the default for a new
++ * install, SYS:UHC. */
++#define UPKG_UHC_DIR_DEFAULT "SYS:UHC/Packages"
+ 
+ typedef struct {
+     char *name;                 /* the script's file name */
+@@ -33,7 +34,7 @@ typedef struct {
+     size_t n;
+ } upkg_uhc_t;
+ 
+-/* UPKG_UHC_DIR or UPKG_UHC_DIR_DEFAULT */
++/* UPKG_UHC_DIR, else ENV:UHCBIN + "Packages", else UPKG_UHC_DIR_DEFAULT */
+ const char *upkg_uhc_dir(void);
+ 
+ /* Read the drawer DIR into U (replacing what it held). A file is a package when it is not <x>.desc, not a dot file
+-- 
+2.50.1 (Apple Git-155)
+

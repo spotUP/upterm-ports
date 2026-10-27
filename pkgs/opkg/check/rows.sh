@@ -14,8 +14,8 @@ w=$(mktemp -d "${TMPDIR:-/tmp}/rows.XXXXXX")
 trap 'rm -rf "$w"' EXIT
 [ -f "$src/libopkg/upkg_rows.c" ] || { echo "[FAIL] rows: $src/libopkg/upkg_rows.c does not exist"; exit 1; }
 cc -O1 -g -Wall -Wextra -Wno-unused-parameter -fsanitize=address,undefined -I"$here" -I"$src/libopkg" -I"$src/src" -I"$hobj" \
-  -o "$w/rows_test" "$here/rows_test.c" 2> "$w/cc.err" || { cat "$w/cc.err"; echo "[FAIL] rows_test.c does not build"; exit 1; }
-"$w/rows_test"
+  -o "$w/rows_test" "$here/rows_test.c" "$src/libopkg/upkg_uhc.c" 2> "$w/cc.err" || { cat "$w/cc.err"; echo "[FAIL] rows_test.c does not build"; exit 1; }
+"$w/rows_test" "$here/uhc/Packages"
 # one parser: browse keeps no list text of its own
 if grep -n 'after_name\|find_name\|lines_set\|upkg_browse_list' "$src/libopkg/upkg_browse.c"; then
   echo "[FAIL] rows: upkg_browse.c still parses the lists itself"; exit 1

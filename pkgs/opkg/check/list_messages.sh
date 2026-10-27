@@ -39,11 +39,11 @@ u update >/dev/null 2>&1 || fail "update"
 
 # 0018 no match
 rc=0; u list 'zz*' >"$w/o" 2>"$w/e" || rc=$?
-[ "$rc" = 1 ] || fail "list zz* rc=$rc, want 1"
+[ "$rc" = 5 ] || fail "list zz* rc=$rc, want 5"
 [ ! -s "$w/o" ] || fail "list zz* wrote stdout: $(cat "$w/o")"
 [ "$(cat "$w/e")" = 'upkg: no package matches "zz*"' ] || fail "list zz* stderr: $(cat "$w/e")"
 rc=0; u list-installed 'zz*' >"$w/o" 2>"$w/e" || rc=$?
-[ "$rc" = 1 ] && [ "$(cat "$w/e")" = 'upkg: no package matches "zz*"' ] || fail "list-installed zz*: rc=$rc $(cat "$w/e")"
+[ "$rc" = 5 ] && [ "$(cat "$w/e")" = 'upkg: no package matches "zz*"' ] || fail "list-installed zz*: rc=$rc $(cat "$w/e")"
 # match unchanged
 u list 'al*' >"$w/o" 2>&1 || fail "list al* rc=$?"
 [ "$(cat "$w/o")" = 'alpha - 1.0 - alpha check' ] || [ "$(cat "$w/o")" = 'alpha - 1.0' ] || fail "list al*: $(cat "$w/o")"
@@ -63,7 +63,7 @@ done
 
 # 0021 remove of a missing package
 rc=0; u remove alpha >"$w/o" 2>&1 || rc=$?
-[ "$rc" = 1 ] || fail "remove of a missing package rc=$rc, want 1"
+[ "$rc" = 5 ] || fail "remove of a missing package rc=$rc, want 5"
 grep -q '^alpha is not installed\.$' "$w/o" || fail "remove of a missing package: $(cat "$w/o")"
 
 # installed

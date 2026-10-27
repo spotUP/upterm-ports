@@ -1,0 +1,75 @@
+Set PKGNAME "amigae"
+Set PKGVERSION "3.3a"
+Set PKGURLPATH "${UHC/AMINETMIRROR}dev/e/"
+Set PKGFILENAME "amigae33a.lha"
+
+CPU >NIL: CHECK 68020
+IF WARN
+    Echo "This package needs a 68020 CPU or better."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+pkg-envcheck
+
+Set UHCRC 0
+MakeDir "${UHC/TEMPDIR}${PKGNAME}"
+pushd "${UHC/TEMPDIR}${PKGNAME}"
+
+Echo NOLINE "Fetching ${PKGURLPATH}${PKGFILENAME} ..."
+aget "${PKGURLPATH}${PKGFILENAME}" QUIET
+IF WARN
+    Echo "Download failed, aborting..."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+Echo NOLINE " Done!*nExtracting files ..."
+lha >NIL: e ${PKGFILENAME} #?
+IF WARN
+    Echo "Unarchiving failed, aborting..."
+    Set UHCRC 20
+    SKIP CleanUp
+ENDIF
+
+Echo NOLINE " Done!*nInstalling files..."
+Echo "*n*e[7mNOTE:*e[0m AmigaE binaries and modules will be contained in ${UHC/EXTBIN}AmigaE/"
+Echo "      Documentation will be contained in ${UHC/EXTDOC}AmigaE/"
+MakeDir "${UHC/EXTBIN}AmigaE" "${UHC/EXTDOC}AmigaE"
+Copy >NIL: E_v3.3a/Bin#? "${UHC/EXTBIN}AmigaE/" ALL
+Copy >NIL: E_v3.3a/Docs#? "${UHC/EXTDOC}AmigaE/" ALL
+Copy >NIL: E_v3.3a/README "${UHC/EXTDOC}AmigaE/"
+Echo NOLINE "Extracting modules ..."
+lha -q x E_v3.3a/Modules.lha "${UHC/EXTBIN}AmigaE/"
+Echo NOLINE " Done!*nFetching and extracting registered compiler from aminet ..."
+aget QUIET ${UHC/AMINETMIRROR}dev/e/ec33a.lha "${UHC/TEMPDIR}"
+pushd "${UHC/TEMPDIR}"
+lha -q e ec33a.lha ec33a/EC ec33a/ec33a.readme
+Copy >NIL: ec33a/EC "${UHC/EXTBIN}AmigaE/Bin/"
+Copy >NIL: ec33a/ec33a.readme "${UHC/EXTDOC}AmigaE/"
+Delete >NIL: "${UHC/TEMPDIR}ec33a.lha "${UHC/TEMPDIR}ec33a" ALL
+popd
+Echo NOLINE " Done!*nAdding Path-entry and EModules-assign to ${UHCBIN}UHC-User-Startup/amigae ..."
+Path "${UHC/EXTBIN}AmigaE/Bin" ADD
+Assign EMODULES: "${UHC/EXTBIN}AmigaE/Modules"
+Echo "Path *${UHC/EXTBIN}AmigaE/Bin ADD*nAssign EMODULES: *${UHC/EXTBIN}AmigaE/Modules" >${UHCBIN}UHC-User-Startup/amigae
+
+
+cd "${UHC/TEMPDIR}"
+Echo NOLINE " Done!*nRemoving temporary files..."
+Delete "${UHC/TEMPDIR}${PKGNAME}" ALL QUIET
+
+IF NOT EXISTS "${UHCBIN}Packages/Installed"
+    MakeDir >NIL: "${UHCBIN}Packages/Installed"
+ENDIF
+
+Echo "${PKGVERSION}" >"${UHCBIN}Packages/Installed/${PKGNAME}"
+Echo " Done!*nInstallation complete!"
+
+LAB CleanUp
+UnSet PKGNAME
+UnSet PKGVERSION
+UnSet PKGURLPATH
+UnSet PKGFILENAME
+popd
+SetResult $UHCRC

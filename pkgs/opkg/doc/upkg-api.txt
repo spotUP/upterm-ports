@@ -1,0 +1,120 @@
+upkg exit codes and progress lines: the interface for front-ends
+=================================================================
+
+A program that runs upkg (Amarchy, a script) reads two things: the exit code
+and, with stdout not a terminal, one progress line per step.
+
+EXIT CODES
+
+The codes sit on the AmigaDOS bands: 5 is WARN, 10 to 19 is ERROR, 20 is FAIL.
+Both ipk and uhc: packages use the same codes.
+
+     0  OK           the command did what it was asked
+     5  WARN         nothing to do: list or list-installed with a glob that
+                     matches nothing; remove of a package that is not installed
+    10  ERROR        an error with no finer class (reserved; not raised today)
+    11  usage        no sub-command, an unknown sub-command, a bad option or
+                     argument list; upkg browse without a terminal
+    12  not found    install, download or info of a package no feed lists
+                     (info uhc:NAME for a name not in the UHC drawer)
+    13  network      a feed or a package file could not be fetched; update with
+                     any feed failing
+    14  script       a package script failed: preinst, postinst, prerm, postrm,
+                     or the script of a uhc: package returned nonzero (its own
+                     number is on stderr: "upkg: the script of uhc:NAME
+                     returned N")
+    15  answers      the package asks questions (UP-Term-Interactive: yes) and
+                     stdin is not a terminal; nothing was installed. upkg
+                     install --all asks first and is not refused
+    20  FAIL         start-up failure (no config, no lists directory), a
+                     program that could not be started, or any failure with no
+                     class above
+
+When one command meets several failures the class of the first one is the exit
+code. A negative internal result never leaves upkg: it becomes 20 or its class.
+
+PROGRESS LINES
+
+    [PROGRESS <n>/<m>] <phase> <name>
+
+One line, on stdout, ASCII, ending in a newline, at the start of each step.
+<n> counts from 1, <m> is the number of steps of that phase kind in this run,
+<phase> is one word, <name> is the feed name or the package name.
+
+    update      one per feed, <name> is the feed:      [PROGRESS 1/2] update main
+    install     one per package to install:            [PROGRESS 2/3] install b
+    download    inside install, n/m as the install:    [PROGRESS 2/3] download b
+    unpack      inside install, n/m as the install:    [PROGRESS 2/3] unpack b
+    configure   one per unpacked package:              [PROGRESS 1/3] configure a
+    remove      one per package to remove:             [PROGRESS 1/1] remove a
+    script      uhc: install, one per uhc: name:       [PROGRESS 1/1] script uhc:lzx
+    remove      uhc: remove, one per uhc: name:        [PROGRESS 1/1] remove uhc:lzx
+
+The lines are printed when stdout is not a terminal, or when UPKG_PROGRESS=1 is
+set. On a terminal the output is unchanged. They do not depend on the terminal
+width, TIOCGWINSZ or COLUMNS.
+
+EXAMPLES
+
+    $ upkg install pok | grep '^\[PROGRESS'
+    [PROGRESS 1/1] install pok
+    [PROGRESS 1/1] download pok
+    [PROGRESS 1/1] unpack pok
+    [PROGRESS 1/1] configure pok
+
+    $ upkg list 'zz*' ; echo $?
+    upkg: no package matches "zz*"
+    5
+
+    $ upkg install pask < /dev/null ; echo $?
+    pask asks questions and needs a terminal; run upkg install pask in a console.
+    15
+
+QUESTIONS AND ANSWERS (a front-end with no terminal)
+----------------------------------------------------
+
+A package with UP-Term-Interactive: yes asks questions during its install or
+upgrade. Without a terminal that is exit code 15. A front-end such as Amarchy
+reads the questions first, asks the user, and passes the answers back.
+
+    upkg questions <pkg>
+
+Prints one line per question on stdout, six fields separated by a tab:
+
+    id  kind  default  choices  prompt  state
+
+    id       the question id the package script passes to upkg-ask
+    kind     string, yesno or choice
+    default  the default answer (may be empty)
+    choices  for kind choice, the comma-separated list; otherwise empty
+    prompt   the question text (a tab or CR in it becomes a space)
+    state    answered if the package already recorded an answer (an upgrade
+             keeps it and needs no new one), new if the next install or
+             upgrade will ask it
+
+Exit codes: 0 questions printed, 5 the package asks none (nothing printed),
+12 unknown package, 13 the package file cannot be fetched. Only the question
+rows go to stdout.
+
+    upkg install <pkg> --answers FILE
+    upkg upgrade <pkg> --answers FILE
+
+Runs the command with no terminal and no prompt. FILE has one id=value per
+line. Lines starting with # and ids the package does not ask are ignored, so
+one file may hold the answers of several packages. The value is everything
+after the first =.
+
+A question in state new with no line in FILE stops the command before any
+change, with exit code 15 and the id on stderr ("needs an answer for q2").
+This holds even when the question has a default: the front-end must show it
+to the user. A question in state answered needs no line. A bad value stops
+the command with exit code 11: a value with a | or a newline, a value that
+starts with <, a yesno value other than yes or no, a choice not in choices.
+
+Limits: only the named package is covered. Dependencies that an install pulls
+in and that ask their own questions still stop with exit code 15.
+Answers given through --answers are used like defaults of Install All; they
+are not written to the package's answered record, so a later question listing
+shows them as new again until a terminal install records them.
+
+Checked by check/exit_progress.sh, check/exit_code.sh, check/questions.sh and check/uhc_run_test.c.
