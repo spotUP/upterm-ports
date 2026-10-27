@@ -106,4 +106,17 @@ int ch_at_tail(int top, int maxtop);
  * returned value is the cells the text takes (0 for NULL or empty: footer unchanged, hints_w = w). */
 int ch_status_fit(const char *text, int w, int *hints_w, int *col);
 
+/* The whole footer line on a row w cells wide: where the status text goes (status_col, status_len, from
+ * ch_status_fit) and which hints/rail are left of it (ch_footer_fit into the cells the status leaves).
+ * The status always wins: hints that still do not fit are dropped from the end, keep ones too, so
+ * foot.len <= the cells left of the status (0 hints when fewer than 12 are left). Pure; the painter
+ * draws exactly this. */
+typedef struct {
+	int status_len;
+	int status_col;
+	ch_foot foot;
+} ch_footline;
+
+ch_footline ch_footer_layout(const ch_hint *hints, int n, const char *rail, const char *status, int w);
+
 #endif

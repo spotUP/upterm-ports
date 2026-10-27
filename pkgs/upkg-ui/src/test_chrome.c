@@ -247,6 +247,25 @@ int main(void)
 		n = ch_status_fit("0123456789012345678901234", 20, &hw, &col);
 		eqi("status cut to width", n, 20);
 		eqi("status cut col", col, 0);
+
+		/* footer layout: the status wins over keep hints (UPKGUI-FOOTER-FIT, w=35) */
+		{
+			static const ch_hint H[] = { { "Enter", "Accept", 1 }, { "Escape", "Cancel", 1 } };
+			ch_footline l;
+
+			l = ch_footer_layout(H, 2, "", "Network error", 35);
+			eqi("layout net status len", l.status_len, 13);
+			eqi("layout net status col", l.status_col, 22);
+			eqi("layout net hints fit left of status", l.foot.len <= 20, 1);
+			eqi("layout net keep dropped from end", l.foot.shown, 1);
+			l = ch_footer_layout(H, 2, "", "Cancelled", 35);
+			eqi("layout cancelled hints fit", l.foot.len <= 24, 1);
+			eqi("layout cancelled status col", l.status_col, 26);
+			l = ch_footer_layout(H, 2, "", "Done", 35);
+			eqi("layout done keeps all hints", l.foot.shown, 3);
+			eqi("layout done len", l.foot.len, 29);
+			eqi("layout done no overlap", l.foot.len <= l.status_col - 2, 1);
+		}
 	}
 
 	printf("test_chrome: %d checks, %d failed\n", checks, fails);

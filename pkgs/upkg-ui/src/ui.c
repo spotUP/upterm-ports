@@ -175,18 +175,11 @@ static int status_st;
 static void draw_footer(const ch_hint *h, int n)
 {
 	int x = 1, i, first = 1, w = COLS - 2;
-	int y = LINES - 2, hw, scol, sn;
-	ch_foot f;
+	int y = LINES - 2;
+	ch_footline l = ch_footer_layout(h, n, RAIL, status_text, w);
+	ch_foot f = l.foot;
 
-	sn = ch_status_fit(status_text, w, &hw, &scol);
-	spaces(y, 1, w, a_dim);
-	if (sn) {
-		attr_t a = status_st == UI_ST_OK ? a_col[2] : status_st == UI_ST_FAIL ? a_col[1] : a_dim;
-		text(y, 1 + scol, a, status_text, sn);
-		if (!hw) /* too short for both: the status stays */
-			return;
-	}
-	f = ch_footer_fit(h, n, RAIL, hw);
+	spaces(y, 1, w, a_dim); /* every cell the footer owns is written, hints and status after it */
 	for (i = 0; i < n; i++) {
 		if (!(f.shown & (1u << i)))
 			continue;
@@ -202,6 +195,10 @@ static void draw_footer(const ch_hint *h, int n)
 	}
 	if (f.rail)
 		text(y, x + 2, a_dim, RAIL, w);
+	if (l.status_len) {
+		attr_t a = status_st == UI_ST_OK ? a_col[2] : status_st == UI_ST_FAIL ? a_col[1] : a_dim;
+		text(y, 1 + l.status_col, a, status_text, l.status_len);
+	}
 }
 
 /* the prompt, wrapped; "\n" written as backslash-n counts as a line break (dialog's habit).

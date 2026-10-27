@@ -337,3 +337,21 @@ int ch_status_fit(const char *text, int w, int *hints_w, int *col)
 	*hints_w = w - n - 2 >= 12 ? w - n - 2 : 0;
 	return n;
 }
+
+ch_footline ch_footer_layout(const ch_hint *hints, int n, const char *rail, const char *status, int w)
+{
+	ch_footline l;
+	int hw, i;
+
+	l.status_len = ch_status_fit(status, w, &hw, &l.status_col);
+	l.foot = ch_footer_fit(hints, n, rail, hw);
+	/* ch_footer_fit never drops keep hints; the status wins, so they go too, from the end */
+	while (l.foot.len > hw && l.foot.shown) {
+		for (i = (n > 32 ? 32 : n) - 1; !(l.foot.shown & (1u << i)); i--)
+			;
+		l.foot.shown &= ~(1u << i);
+		l.foot.rail = 0;
+		l.foot.len = plain_len(hints, n, l.foot.shown, 0);
+	}
+	return l;
+}
