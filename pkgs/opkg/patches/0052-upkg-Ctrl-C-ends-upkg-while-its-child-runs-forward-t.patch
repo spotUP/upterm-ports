@@ -1,0 +1,128 @@
+From e3ffc397bf51b94b19b1ff3cdb70db003ba0ff85 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 17:41:22 +0100
+Subject: [PATCH 52/52] upkg: Ctrl-C ends upkg while its child runs; forward
+ the break, wait 3 s, then stop waiting and exit 130
+
+xsystem blocked in waitpid. ixemul's wait4 never returns EINTR and its sleep clears the
+CTRL_C break, so a Ctrl-C to upkg was lost and upkg waited for curl (23 to 25 s against a
+stalled server). Poll with WNOHANG, nap with Delay, watch SetSignal for the break and
+SIGINT for the flag, forward SIGINT to the child (a native task gets SIGBREAKF_CTRL_C),
+give it 3 s, then exit 130 (or run the caller's SIGINT handler). A child that ignores the
+break is left running.
+---
+ libopkg/xsystem.c | 84 +++++++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 81 insertions(+), 3 deletions(-)
+
+diff --git a/libopkg/xsystem.c b/libopkg/xsystem.c
+index b9adba7..6ec6905 100644
+--- a/libopkg/xsystem.c
++++ b/libopkg/xsystem.c
+@@ -25,6 +25,16 @@
+ #include <unistd.h>
+ #include <fcntl.h>
+ #include <errno.h>
++#include <signal.h>
++#include <stdlib.h>
++#ifdef __amigaos__
++/* The NDK devices/timer.h declares its own struct timeval, which clashes with ixemul's (see upkg_wrap.c). */
++#define timeval ndk_timeval
++#include <dos/dos.h>
++#include <proto/exec.h>
++#include <proto/dos.h>
++#undef timeval
++#endif
+ 
+ #include "opkg_message.h"
+ #include "xsystem.h"
+@@ -50,6 +60,76 @@ int upkg_xsystem_is_unattended(void)
+     return unattended;
+ }
+ 
++/* Waiting for the child. ixemul's wait4 sleeps in a loop that never returns EINTR, and its sleep eats
++   the Ctrl-C break (clears SIGBREAKF_CTRL_C) whether or not a SIGINT reaches this task, so a Ctrl-C
++   sent to upkg was lost and upkg sat in waitpid until the child (curl, a native clib2 program that
++   may ignore the break itself) finished: 23 to 25 s against a stalled server. So never block in wait4:
++   poll with WNOHANG and nap with the dos.library Delay (which leaves the break set), and look for a
++   break or a SIGINT between polls. On a break: forward it to the child (ixemul kill() sends
++   SIGBREAKF_CTRL_C to a non-ixemul task), give the child UPKG_BREAK_GRACE seconds to leave, then
++   stop waiting. A child that ignores the break is left running (it exits when its transfer ends or
++   when curl honours Ctrl-C); upkg itself ends at once with the exit code of an interrupted program. */
++#define UPKG_BREAK_GRACE 3
++#define UPKG_NAP_MS 50
++
++static volatile sig_atomic_t got_int;
++
++static void note_int(int sig)
++{
++    (void)sig;
++    got_int = 1;
++}
++
++static void nap(void)
++{
++#ifdef __amigaos__
++    Delay(UPKG_NAP_MS / 20 ? UPKG_NAP_MS / 20 : 1);
++#else
++    usleep(UPKG_NAP_MS * 1000);
++#endif
++}
++
++static int break_pending(void)
++{
++#ifdef __amigaos__
++    if (SetSignal(0, 0) & SIGBREAKF_CTRL_C) {
++        SetSignal(0, SIGBREAKF_CTRL_C);
++        return 1;
++    }
++#endif
++    return got_int != 0;
++}
++
++/* waitpid(pid, status, 0) that a Ctrl-C can end. Returns pid or -1 (errno set); on a break that the
++   child did not answer it does not return: it runs the caller's SIGINT handler or exits 130. */
++static pid_t wait_child(pid_t pid, int *status)
++{
++    void (*old)(int);
++    pid_t r;
++    int waited = 0, sent = 0;
++
++    got_int = 0;
++    old = signal(SIGINT, note_int);
++    for (;;) {
++        r = waitpid(pid, status, WNOHANG);
++        if (r == pid || (r == -1 && errno != EINTR))
++            break;
++        if (!sent && break_pending()) {
++            kill(pid, SIGINT);
++            sent = 1;
++        } else if (sent && ++waited * UPKG_NAP_MS >= UPKG_BREAK_GRACE * 1000) {
++            opkg_msg(ERROR, "%s: interrupted; it did not stop and is left running.\n", "upkg");
++            signal(SIGINT, old);
++            if (old != SIG_DFL && old != SIG_IGN)
++                old(SIGINT);
++            exit(128 + SIGINT);
++        }
++        nap();
++    }
++    signal(SIGINT, old);
++    return r;
++}
++
+ int xsystem(const char *argv[])
+ {
+     int status;
+@@ -118,9 +198,7 @@ int xsystem(const char *argv[])
+         close(pfd[0]);
+     }
+ 
+-    do
+-        r = waitpid(pid, &status, 0);
+-    while (r == -1 && errno == EINTR);
++    r = wait_child(pid, &status);
+     if (r == -1) {
+         opkg_perror(ERROR, "%s: waitpid", argv[0]);
+         return -1;
+-- 
+2.50.1 (Apple Git-155)
+

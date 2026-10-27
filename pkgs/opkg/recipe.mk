@@ -89,6 +89,10 @@
 #   `[PROGRESS n/m] <phase> <name>` line per step when stdout is not a terminal (or UPKG_PROGRESS=1); doc/upkg-api.txt; check/exit_progress.sh.
 # patches/0050: `upkg questions <pkg>` prints the questions an install or upgrade will ask (tab-separated, rc 5 none, rc 12 unknown), and
 #   `upkg install|upgrade <pkg> --answers FILE` runs unattended with id=value answers (rc 15 naming the id when one is missing); check/questions.sh.
+# patches/0052: Ctrl-C ends upkg while a child runs. xsystem waited in ixemul wait4, which never returns EINTR and whose sleep clears
+# the CTRL_C break, so upkg waited out curl (23 to 25 s on a stalled server). It now polls waitpid(WNOHANG), naps with Delay, sees the
+# break (SetSignal) or SIGINT, forwards SIGINT to the child (a native task gets SIGBREAKF_CTRL_C), gives it 3 s, then exits 130
+# (or runs the caller's SIGINT handler). A child that ignores the break is left running. check/ctrlc.sh (fake curl that ignores SIGINT).
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
