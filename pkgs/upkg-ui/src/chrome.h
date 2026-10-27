@@ -119,4 +119,17 @@ typedef struct {
 
 ch_footline ch_footer_layout(const ch_hint *hints, int n, const char *rail, const char *status, int w);
 
+/* The footer status belongs to the view that set it: ch_status_enter_view clears it, so a new view
+ * (a prompt opened after a job finished) never shows the previous view's "Done". Text is copied and
+ * cut to CH_STATUS_MAX - 1. ch_status_text is NULL when there is none. */
+#define CH_STATUS_MAX 128
+typedef struct {
+	char text[CH_STATUS_MAX];
+	int st;
+} ch_status;
+
+void ch_status_set(ch_status *s, const char *text, int st);
+void ch_status_enter_view(ch_status *s);
+const char *ch_status_text(const ch_status *s);
+
 #endif

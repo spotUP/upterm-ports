@@ -257,7 +257,7 @@ int main(void)
 			eqi("layout net status len", l.status_len, 13);
 			eqi("layout net status col", l.status_col, 22);
 			eqi("layout net hints fit left of status", l.foot.len <= 20, 1);
-			eqi("layout net keep dropped from end", l.foot.shown, 1);
+			eqi("layout net: Enter dropped first, Escape kept (UPKGUI-FOOTER-ESC-DROPPED)", l.foot.shown, 2);
 			l = ch_footer_layout(H, 2, "", "Cancelled", 35);
 			eqi("layout cancelled hints fit", l.foot.len <= 24, 1);
 			eqi("layout cancelled status col", l.status_col, 26);
@@ -265,6 +265,22 @@ int main(void)
 			eqi("layout done keeps all hints", l.foot.shown, 3);
 			eqi("layout done len", l.foot.len, 29);
 			eqi("layout done no overlap", l.foot.len <= l.status_col - 2, 1);
+		}
+
+		/* the status is owned by its view (UPKGUI-FOOTER-STALE-STATUS) */
+		{
+			static const ch_hint H[] = { { "Enter", "Accept", 1 }, { "Escape", "Cancel", 1 } };
+			ch_status s;
+			ch_footline l;
+
+			memset(&s, 0, sizeof s);
+			ch_status_set(&s, "Done", 2);
+			l = ch_footer_layout(H, 2, "", ch_status_text(&s), 76);
+			eqi("status shown in its own view", l.status_len, 4);
+			ch_status_enter_view(&s);
+			eqi("status gone in the next view", ch_status_text(&s) == NULL, 1);
+			l = ch_footer_layout(H, 2, "", ch_status_text(&s), 76);
+			eqi("next view footer has no status", l.status_len, 0);
 		}
 	}
 

@@ -169,14 +169,13 @@ static void paint_rail(void)
 	text(1, 1, a_chrome, f, (int)strlen(f));
 }
 
-static char *status_text; /* ui_status: drawn right-aligned in the footer, NULL for none */
-static int status_st;
+static ch_status fstatus; /* ui_status: drawn right-aligned in the footer; owned by the current view (ui_view clears it) */
 
 static void draw_footer(const ch_hint *h, int n)
 {
 	int x = 1, i, first = 1, w = COLS - 2;
 	int y = LINES - 2;
-	ch_footline l = ch_footer_layout(h, n, RAIL, status_text, w);
+	ch_footline l = ch_footer_layout(h, n, RAIL, ch_status_text(&fstatus), w);
 	ch_foot f = l.foot;
 
 	spaces(y, 1, w, a_dim); /* every cell the footer owns is written, hints and status after it */
@@ -196,8 +195,8 @@ static void draw_footer(const ch_hint *h, int n)
 	if (f.rail)
 		text(y, x + 2, a_dim, RAIL, w);
 	if (l.status_len) {
-		attr_t a = status_st == UI_ST_OK ? a_col[2] : status_st == UI_ST_FAIL ? a_col[1] : a_dim;
-		text(y, 1 + l.status_col, a, status_text, l.status_len);
+		attr_t a = fstatus.st == UI_ST_OK ? a_col[2] : fstatus.st == UI_ST_FAIL ? a_col[1] : a_dim;
+		text(y, 1 + l.status_col, a, fstatus.text, l.status_len);
 	}
 }
 
@@ -914,6 +913,7 @@ int ui_view(int kind, const char *prompt, const char *buttons)
 	ui_opt.kind = kind;
 	ui_opt.prompt = prompt;
 	ui_opt.buttons = buttons;
+	ch_status_enter_view(&fstatus); /* the status belongs to the view that set it */
 	nbtn = bsel = bchosen = 0;
 	hotkey = 0;
 	if (kind != K_MENU && ui_init_buttons())
@@ -939,9 +939,7 @@ void ui_follow(int on)
 
 void ui_status(const char *text, int st)
 {
-	free(status_text);
-	status_text = text && *text ? strdup(text) : NULL;
-	status_st = st;
+	ch_status_set(&fstatus, text, st);
 }
 int ui_hotkey(void) { return hotkey; }
 int ui_selected(void) { return msel; }
@@ -1028,9 +1026,7 @@ void ui_stop(void)
 	msel = mtop = 0;
 	widget_row = 0;
 	tbtop = follow = follow_keys = pdone = 0;
-	free(status_text);
-	status_text = NULL;
-	status_st = UI_ST_NONE;
+	ch_status_enter_view(&fstatus);
 	invalid = 0;
 	hotkey = 0;
 	tick = pair_n = 0;

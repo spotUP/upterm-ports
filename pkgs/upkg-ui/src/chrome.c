@@ -345,13 +345,48 @@ ch_footline ch_footer_layout(const ch_hint *hints, int n, const char *rail, cons
 
 	l.status_len = ch_status_fit(status, w, &hw, &l.status_col);
 	l.foot = ch_footer_fit(hints, n, rail, hw);
-	/* ch_footer_fit never drops keep hints; the status wins, so they go too, from the end */
+	/* ch_footer_fit never drops keep hints; the status wins, so they go too. The exit hint (Escape)
+	 * outranks the action hints and is the last to go: drop from the end, but skip it while any other
+	 * hint is still shown (UPKGUI-FOOTER-ESC-DROPPED). */
 	while (l.foot.len > hw && l.foot.shown) {
-		for (i = (n > 32 ? 32 : n) - 1; !(l.foot.shown & (1u << i)); i--)
-			;
+		int top = (n > 32 ? 32 : n) - 1, pick = -1;
+
+		for (i = top; i >= 0; i--) {
+			if (!(l.foot.shown & (1u << i)))
+				continue;
+			if (pick < 0)
+				pick = i;
+			if (strcmp(hints[i].key, "Escape") != 0) {
+				pick = i;
+				break;
+			}
+		}
+		i = pick;
 		l.foot.shown &= ~(1u << i);
 		l.foot.rail = 0;
 		l.foot.len = plain_len(hints, n, l.foot.shown, 0);
 	}
 	return l;
+}
+
+void ch_status_set(ch_status *s, const char *text, int st)
+{
+	size_t n = text ? strlen(text) : 0;
+
+	if (n >= CH_STATUS_MAX)
+		n = CH_STATUS_MAX - 1;
+	if (n)
+		memcpy(s->text, text, n);
+	s->text[n] = 0;
+	s->st = st;
+}
+
+void ch_status_enter_view(ch_status *s)
+{
+	ch_status_set(s, NULL, 0);
+}
+
+const char *ch_status_text(const ch_status *s)
+{
+	return s->text[0] ? s->text : NULL;
 }
