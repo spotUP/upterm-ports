@@ -1,0 +1,81 @@
+From 46ff70a36bc2c3a1930df913af148458a49ea5e0 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 18:55:28 +0100
+Subject: [PATCH 53/53] upkg: the download child does not inherit the lock
+ descriptor
+
+opkg_lock() lockf()s a descriptor that the vfork'd curl inherited. After Ctrl-C of upkg the orphan
+curl kept the lock and the next update failed with rc 20 (Could not lock). Set FD_CLOEXEC on the
+lock descriptor; ixemul keeps the bit but no exec path reads it, so xsystem's child also closes it
+(opkg_lock_close_in_child) before execvp.
+---
+ libopkg/opkg_conf.c | 12 ++++++++++++
+ libopkg/opkg_conf.h |  1 +
+ libopkg/xsystem.c   |  2 ++
+ 3 files changed, 15 insertions(+)
+
+diff --git a/libopkg/opkg_conf.c b/libopkg/opkg_conf.c
+index 95eb7ff..6558577 100644
+--- a/libopkg/opkg_conf.c
++++ b/libopkg/opkg_conf.c
+@@ -675,6 +675,10 @@ int opkg_lock()
+         return -1;
+     }
+ 
++    /* upkg runs curl and maintainer scripts by vfork + exec. A child that keeps this descriptor keeps the
++     * lockf lock after upkg is gone (Ctrl-C leaves curl running), and the next run fails with rc 20. */
++    fcntl(lock_fd, F_SETFD, FD_CLOEXEC);
++
+     r = lockf(lock_fd, F_TLOCK, (off_t) 0);
+     if (r == -1) {
+         opkg_perror(ERROR, "Could not lock %s", opkg_config->lock_file);
+@@ -689,6 +693,14 @@ int opkg_lock()
+     return 0;
+ }
+ 
++/* For a vfork child about to exec: ixemul has no close-on-exec action (library/kern_descrip.c keeps the
++ * bit but nothing in exec reads it), so the child closes the lock descriptor itself. */
++void opkg_lock_close_in_child(void)
++{
++    if (lock_fd != -1)
++        close(lock_fd);
++}
++
+ int opkg_unlock()
+ {
+     int r;
+diff --git a/libopkg/opkg_conf.h b/libopkg/opkg_conf.h
+index d1eb900..93e5871 100644
+--- a/libopkg/opkg_conf.h
++++ b/libopkg/opkg_conf.h
+@@ -208,6 +208,7 @@ int opkg_conf_set_option(const char *name, const char *value,
+ 
+ int opkg_lock(void);
+ int opkg_unlock(void);
++void opkg_lock_close_in_child(void);
+ 
+ char *opkg_solver_version_alloc(void);
+ 
+diff --git a/libopkg/xsystem.c b/libopkg/xsystem.c
+index 6ec6905..7949e89 100644
+--- a/libopkg/xsystem.c
++++ b/libopkg/xsystem.c
+@@ -36,6 +36,7 @@
+ #undef timeval
+ #endif
+ 
++#include "opkg_conf.h"
+ #include "opkg_message.h"
+ #include "xsystem.h"
+ #include "upkg_wrap.h"
+@@ -169,6 +170,7 @@ int xsystem(const char *argv[])
+             close(pfd[0]);
+             close(pfd[1]);
+         }
++        opkg_lock_close_in_child();
+         execvp(argv[0], (char *const *)argv);
+         _exit(-1);
+     default:
+-- 
+2.50.1 (Apple Git-155)
+

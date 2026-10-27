@@ -93,6 +93,9 @@
 # the CTRL_C break, so upkg waited out curl (23 to 25 s on a stalled server). It now polls waitpid(WNOHANG), naps with Delay, sees the
 # break (SetSignal) or SIGINT, forwards SIGINT to the child (a native task gets SIGBREAKF_CTRL_C), gives it 3 s, then exits 130
 # (or runs the caller's SIGINT handler). A child that ignores the break is left running. check/ctrlc.sh (fake curl that ignores SIGINT).
+# patches/0053: the download child no longer holds the lock descriptor. opkg_lock sets FD_CLOEXEC on it and xsystem's vfork child closes it
+# before execvp (ixemul keeps the bit but no exec path reads it), so an orphan curl after Ctrl-C cannot keep upkg locked (rc 20 on the next
+# update). check/lock_child.sh (fake curl lists its open files; host record locks die with the process, so it checks the cause).
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
