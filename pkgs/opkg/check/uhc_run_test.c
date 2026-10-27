@@ -187,7 +187,8 @@ int main(int argc, char **argv)
     args[0] = (char *)"unzip"; args[1] = (char *)"uhc:curl"; args[2] = (char *)"lzx"; ac = 3;
     rc = upkg_uhc_run_args("install", &ac, args, &ran);
     CHECK(rc == 0 && ran == 1 && x_calls == 1 && ac == 2 && !strcmp(args[0], "unzip") && !strcmp(args[1], "lzx"));
-    CHECK(x_n == 2 && !strcmp(x_argv[0], "Execute") && !strcmp(x_argv[1], "UP-Term:uhc/Packages/curl"));
+    /* the spawned command line is a shell running the Execute line: C:Execute alone only queues the script as the calling CLI's input */
+    CHECK(x_n == 3 && !strcmp(x_argv[0], "/bin/sh") && !strcmp(x_argv[1], "-c") && !strcmp(x_argv[2], "Execute UP-Term:uhc/Packages/curl"));
     /* a bare name alone: nothing runs */
     x_calls = 0;
     args[0] = (char *)"unzip"; ac = 1;

@@ -1,7 +1,7 @@
-From cba7916159a73727e9b5700158de9827fca39e1e Mon Sep 17 00:00:00 2001
+From dbf653faf910c2b818e2463adfa9f58092c15b7d Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Tue, 27 Oct 2026 02:41:30 +0100
-Subject: [PATCH 44/44] upkg: install UHC packages by running their script,
+Subject: [PATCH 44/46] upkg: install UHC packages by running their script,
  remove them from the script's Copy lines
 
 A UHC row installs through xsystem 'Execute <UP-Term:uhc>/Packages/<n>' with the pkg wrapper (and its Ask) skipped, rc taken from UHCRC.
@@ -12,10 +12,10 @@ uhc:<n> names the UHC package on a clash; Install All and Update All, launch and
  libopkg/upkg_browse.c |  11 +-
  libopkg/upkg_rows.c   |  11 ++
  libopkg/upkg_rows.h   |   3 +
- libopkg/upkg_uhc.c    | 317 ++++++++++++++++++++++++++++++++++++++++++
- libopkg/upkg_uhc.h    |  31 +++++
+ libopkg/upkg_uhc.c    | 325 ++++++++++++++++++++++++++++++++++++++++++
+ libopkg/upkg_uhc.h    |  31 ++++
  libopkg/upkg_wb.c     |   5 +-
- 7 files changed, 393 insertions(+), 8 deletions(-)
+ 7 files changed, 401 insertions(+), 8 deletions(-)
 
 diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
 index 1354ac2..01967e3 100644
@@ -195,7 +195,7 @@ index ee72a74..37e3bfb 100644
   * Returns the action letter: 'l' launch (Enter on an installed row with a Launch line), 'r' remove (Delete on an
   * installed row), 'i', 'u', 'I', 'U' as typed (the last two on any row, none selected included), 0 for Enter on any other row (the info box) and for every key that does
 diff --git a/libopkg/upkg_uhc.c b/libopkg/upkg_uhc.c
-index 364b730..82a9684 100644
+index 364b730..6bd1229 100644
 --- a/libopkg/upkg_uhc.c
 +++ b/libopkg/upkg_uhc.c
 @@ -11,9 +11,11 @@
@@ -210,7 +210,7 @@ index 364b730..82a9684 100644
  #include "upkg_uhc.h"
  
  const char *upkg_uhc_dir(void)
-@@ -146,3 +148,318 @@ size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir)
+@@ -146,3 +148,326 @@ size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir)
          qsort(u->pkg, u->n, sizeof *u->pkg, by_name);
      return u->n;
  }
@@ -253,19 +253,27 @@ index 364b730..82a9684 100644
 +    return rc < 0 ? 20 : rc;
 +}
 +
++/* the argv upkg spawns for a UHC install: a real shell runs `Execute <script>`. C:Execute does not run the script
++ * itself, it points the calling CLI's input at it and returns 0, so execvp'd directly (no CLI loop after it) nothing ran.
++ * Same spawn as pkg_run_script (/bin/sh -c). LINE is upkg_uhc_install_line. */
++void upkg_uhc_install_argv(const char *line, const char *argv[4])
++{
++    argv[0] = "/bin/sh";
++    argv[1] = "-c";
++    argv[2] = line;
++    argv[3] = NULL;
++}
++
 +static int uhc_install(const char *name)
 +{
-+    const char *argv[3];
-+    char *path = upkg_uhc_script_path(upkg_uhc_dir(), name), *line = upkg_uhc_install_line(upkg_uhc_dir(), name);
++    const char *argv[4];
++    char *line = upkg_uhc_install_line(upkg_uhc_dir(), name);
 +    int rc;
 +
 +    printf("%s\n", line);
 +    fflush(stdout);
-+    argv[0] = "Execute";
-+    argv[1] = path;
-+    argv[2] = NULL;
++    upkg_uhc_install_argv(line, argv);
 +    rc = upkg_uhc_rc(xsystem(argv));
-+    free(path);
 +    free(line);
 +    return rc;
 +}
