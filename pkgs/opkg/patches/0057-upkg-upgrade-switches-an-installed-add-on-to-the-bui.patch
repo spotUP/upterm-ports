@@ -1,0 +1,95 @@
+From 849abce0a20456257ee4eb28180e712e3d0652fa Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 21:31:57 +0100
+Subject: [PATCH] upkg: upgrade switches an installed add-on to the build that
+ matches the machine
+
+An installed package whose architecture is not registered, or is registered at a lower priority than the best
+candidate of the same or a newer version, is replaced by that candidate (pkg_arch_switch); never a lower version.
+The status file keeps entries of unregistered architectures: pkg_hash_add_from_file dropped them on load for lack of
+a priority, so upgrade never saw them (an FPU build stayed after the accelerator was removed, even when the feed had
+a newer 68020 build) and the next status write lost their entries.
+---
+ libopkg/pkg.c                                    | 13 +++++++++++++
+ libopkg/pkg.h                                    |  1 +
+ libopkg/pkg_hash.c                               |  5 ++++-
+ libopkg/solvers/internal/opkg_upgrade_internal.c |  4 +++-
+ 4 files changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/libopkg/pkg.c b/libopkg/pkg.c
+index 3f75d5b..16760d8 100644
+--- a/libopkg/pkg.c
++++ b/libopkg/pkg.c
+@@ -1040,6 +1040,19 @@ int pkg_compare_versions(const pkg_t * pkg, const pkg_t * ref_pkg)
+     return r;
+ }
+ 
++/* upkg: 1 when upgrade should replace the installed package old by the candidate new of the same or a newer version
++ * because new is built for an architecture of higher priority than old's (an m68k-amigaos install on a machine that
++ * now registers m68k-amigaos-fpu), or old's architecture is not registered (priority 0: the accelerator was removed
++ * and an FPU build would crash). Never a lower version. */
++int pkg_arch_switch(const pkg_t * old, const pkg_t * new)
++{
++    if (!new->arch_priority)
++        return 0;
++    if (pkg_compare_versions_no_reinstall(new, old) < 0)
++        return 0;
++    return old->arch_priority < new->arch_priority;
++}
++
+ int pkg_version_satisfied(pkg_t * it, pkg_t * ref, const char *op)
+ {
+     int r;
+diff --git a/libopkg/pkg.h b/libopkg/pkg.h
+index 016215c..1a7dfd2 100644
+--- a/libopkg/pkg.h
++++ b/libopkg/pkg.h
+@@ -200,6 +200,7 @@ int pkg_merge(pkg_t * oldpkg, pkg_t * newpkg);
+ char *pkg_version_str_alloc(pkg_t * pkg);
+ 
+ int pkg_compare_versions(const pkg_t * pkg, const pkg_t * ref_pkg);
++int pkg_arch_switch(const pkg_t * old, const pkg_t * new);
+ int pkg_compare_versions_no_reinstall(const pkg_t * pkg, const pkg_t * ref_pkg);
+ int pkg_name_version_and_architecture_compare(const void *a, const void *b);
+ int abstract_pkg_name_compare(const void *a, const void *b);
+diff --git a/libopkg/pkg_hash.c b/libopkg/pkg_hash.c
+index 3ca1804..972e305 100644
+--- a/libopkg/pkg_hash.c
++++ b/libopkg/pkg_hash.c
+@@ -142,7 +142,10 @@ static int pkg_hash_add_from_file(const char *file_name, pkg_src_t * src,
+             free(pkg);
+             continue;
+         }
+-        if (!pkg->arch_priority) {
++        /* upkg: an installed package of an architecture that is no longer registered stays in the table
++         * (the status file keeps its entry, and upgrade can replace it, pkg_arch_switch); only a feed
++         * entry of such an architecture is ignored, as before. */
++        if (!pkg->arch_priority && !is_status_file) {
+             char *version_str = pkg_version_str_alloc(pkg);
+             opkg_msg(DEBUG,
+                      "Package %s version %s is built for architecture %s "
+diff --git a/libopkg/solvers/internal/opkg_upgrade_internal.c b/libopkg/solvers/internal/opkg_upgrade_internal.c
+index 5a4be06..ed9a6cd 100644
+--- a/libopkg/solvers/internal/opkg_upgrade_internal.c
++++ b/libopkg/solvers/internal/opkg_upgrade_internal.c
+@@ -62,6 +62,8 @@ static int opkg_prepare_upgrade_pkg(pkg_t * old, pkg_t ** pkg)
+     new_version = pkg_version_str_alloc(new);
+ 
+     cmp = pkg_compare_versions(old, new);
++    if (cmp == 0 && pkg_arch_switch(old, new))
++        cmp = -1;               /* upkg: same version, better architecture for this machine */
+     opkg_msg(DEBUG,
+              "Comparing visible versions of pkg %s:" "\n\t%s is installed "
+              "\n\t%s is available " "\n\t%d was comparison result\n", old->name,
+@@ -221,7 +223,7 @@ void prepare_upgrade_list(struct list_head *head)
+         if (new == NULL)
+             continue;
+ 
+-        if (pkg_compare_versions(old, new) < 0)
++        if (pkg_compare_versions(old, new) < 0 || pkg_arch_switch(old, new))
+             list_move(&old->list, head);
+     }
+ }
+-- 
+2.50.1 (Apple Git-155)
+

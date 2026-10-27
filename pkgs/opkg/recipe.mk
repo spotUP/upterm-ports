@@ -101,6 +101,12 @@
 # list-upgradable are unchanged; the text `upkg list` still prints one line per version (stock opkg). check/tsv_one_row.sh.
 # patches/0055: the download error names the cause of the curl exit (22 HTTP error, 6 resolve, 7 reach, 28 timed out; the PATH hint only for
 # curl not found: 127, 255, -1) instead of "is curl installed and in PATH?" for every failure. upkg_curl_fail_text; check/curl_msg.sh.
+# patches/0056: upkg registers the arch m68k-amigaos-fpu at priority 20 at startup on a 68040/68060 with an FPU (SysBase->AttnFlags, host:
+# $UPKG_ATTN_FLAGS); m68k-amigaos stays 10. A 68030 with a 68882 gets none (the FPU builds are compiled -m68060). upkg_cpu.c; check/fpu_probe.sh.
+# patches/0057: upkg upgrade switches an installed add-on to the build that matches the machine: an installed package whose architecture is
+# not registered, or registered at a lower priority than the best candidate of the same or a newer version, is replaced by that candidate
+# (never a lower version). The status file keeps entries of unregistered architectures (they were dropped on load, so upgrade never saw
+# them and the next status write lost them). pkg_arch_switch; check/fpu_upgrade_switch.sh.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
