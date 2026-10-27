@@ -55,5 +55,26 @@ if [ -x "$AMIGA/bin/m68k-amigaos-gcc" ]; then
 else
 	echo "test_m68k_cc: no toolchain, real compile skipped"
 fi
+# -m68881 links the 68881 multilib set (libm020/libm881: libc, libm, libgcc, libixcompat), not the
+# soft-float one: -m68881 callers read results from fp0, the soft libs return them in d0/d1, wrong
+# numbers with no link error (R1, 2026-10-27). Checked in the link map of a real build.
+if [ -x "$AMIGA/bin/m68k-amigaos-gcc" ]; then
+	printf '#include <math.h>\ndouble f(double x) { return sin(x) * 2; }\n' > "$t/f.c"
+	printf 'double f(double);\nint main(void) { return f(1.0) > 1.6 ? 0 : 1; }\n' > "$t/m.c"
+	AMIGA=$AMIGA "$ROOT/tools/m68k-cc" -O2 -m68060 -m68881 -D__NO_MATH_INLINES -c "$t/f.c" -o "$t/f.o"
+	AMIGA=$AMIGA "$ROOT/tools/m68k-cc" -m68060 -m68881 -o "$t/fpu" "$t/f.o" "$t/m.c" -lm -Wl,-Map,"$t/fpu.map"
+	AMIGA=$AMIGA "$ROOT/tools/m68k-cc" -O2 -m68060 -m68881 -D__NO_MATH_INLINES -o "$t/fpu1" "$t/f.c" "$t/m.c" -lm -Wl,-Map,"$t/fpu1.map" ||
+		fail "one-step -m68060 -m68881 compile+link failed"
+	AMIGA=$AMIGA "$ROOT/tools/m68k-cc" -O2 -m68060 -o "$t/soft" "$t/f.c" "$t/m.c" -lm -Wl,-Map,"$t/soft.map"
+	for m in fpu fpu1; do
+		[ -f "$t/$m.map" ] || continue
+		for l in libc.a libm.a libgcc.a libixcompat.a; do
+			grep -q "libm881/$l" "$t/$m.map" || grep -q "libm020/libm881/$l" "$t/$m.map" || fail "$m: map has no libm881 $l"
+		done
+		grep -E '/(libc|libm|libgcc)\.a\(' "$t/$m.map" | grep -v libm881 | grep -q . && fail "$m: map names a soft-float lib"
+	done
+	grep -E '/(libc|libm|libgcc)\.a\(' "$t/soft.map" | grep -q libm881 && fail "plain build names libm881 libs"
+	grep -E '/(libc|libm)\.a\(' "$t/soft.map" | grep -q . || fail "plain build map names no soft libc/libm"
+fi
 [ $bad = 0 ] && echo "test_m68k_cc: ok"
 exit $bad

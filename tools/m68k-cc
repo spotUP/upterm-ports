@@ -70,5 +70,27 @@ done
 # the objects, so the archive is searched only for what is still undefined;
 # a recipe that already lists it earlier keeps working.
 ixc=$(cd "$(dirname "$0")/.." && pwd)/build/sysroot/UP-Term/lib/libixcompat.a
+# -m68881: the link drops the CPU flags and so lands on the soft-float "."
+# multilib, whose libc, libm and libgcc return doubles in d0/d1 while
+# -m68881 code reads fp0 (wrong numbers, no link error: R1, 2026-10-27).
+# The toolchain ships the 68881 set as libm020/libm881 (ixemul libc, libm,
+# libixcompat; gcc libgcc). The driver puts its own -L drawers ahead of
+# ours, so the archives are named by path, after the objects and in place
+# of -lm/-lc/-lgcc, in a group (libm needs libc and libgcc, libc needs
+# libgcc); the driver's soft -lc still follows but finds nothing undefined.
+fpu=0
+for a in "${args[@]}"; do
+	[ "$a" = -m68881 ] && fpu=1
+done
+if [ $fpu = 1 ]; then
+	fl=$AMIGA/m68k-amigaos/ixemul/lib/libm020/libm881
+	fg=$(dirname "$("$GCC" -print-libgcc-file-name)")/libm020/libm881
+	keep=()
+	for a in "${ld[@]}"; do
+		case $a in -lm|-lc|-lgcc) ;; *) keep+=("$a") ;; esac
+	done
+	ld=("${keep[@]}" -Wl,--start-group "$fl/libm.a" "$fl/libc.a" "$fg/libgcc.a" -Wl,--end-group)
+	ixc=$fl/libixcompat.a
+fi
 [ -f "$ixc" ] && ld+=("$ixc")
 "$GCC" -mcrt=ixemul "${ld[@]}"
