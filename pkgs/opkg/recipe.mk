@@ -71,6 +71,8 @@
 # (rows from upkg_rows_load), Install, Remove, Upgrade, Update, a read-only log listview and Quit; the sentinel is written once the
 # list is filled. The filter, the buttons a row enables and the listview line are pure functions in upkg_rows.c (check/rows_test.c).
 # Install, Remove, Upgrade and Update do nothing yet (UPKG-WB-UI G3).
+# patches/0042: libopkg/upkg_uhc.c reads the UHC catalogue drawer (UPKG_UHC_DIR_DEFAULT UP-Term:uhc/Packages, UPKG_UHC_DIR overrides):
+# script <n> with `Set PKGVERSION`, <n>.desc, Installed/<n>; check/uhc.sh + check/uhc_test.c over the fixture drawer check/uhc/Packages.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
