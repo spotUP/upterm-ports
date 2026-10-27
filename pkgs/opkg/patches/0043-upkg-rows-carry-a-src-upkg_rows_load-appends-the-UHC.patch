@@ -1,0 +1,103 @@
+From 6f3e4ac670129aee6bf2ead3595cff8a6deea08f Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 02:17:26 +0100
+Subject: [PATCH 43/43] upkg: rows carry a src; upkg_rows_load appends the UHC
+ catalogue rows after the feed rows, a name in both keeps both
+
+---
+ libopkg/upkg_rows.c | 25 +++++++++++++++++++++++++
+ libopkg/upkg_rows.h | 15 ++++++++++++++-
+ 2 files changed, 39 insertions(+), 1 deletion(-)
+
+diff --git a/libopkg/upkg_rows.c b/libopkg/upkg_rows.c
+index 828f178..c5b6a6c 100644
+--- a/libopkg/upkg_rows.c
++++ b/libopkg/upkg_rows.c
+@@ -137,10 +137,32 @@ void upkg_rows_parse(upkg_rows_t *rows, const char *all, const char *inst, const
+     }
+ }
+ 
++void upkg_rows_add_uhc(upkg_rows_t *rows, const upkg_uhc_t *u)
++{
++    size_t i;
++
++    if (!u->n)
++        return;
++    rows->row = xrealloc(rows->row, (rows->n + u->n) * sizeof *rows->row);
++    for (i = 0; i < u->n; i++) {
++        const upkg_uhc_pkg_t *p = &u->pkg[i];
++        upkg_row_t *r = &rows->row[rows->n++];
++
++        r->name = xstrdup(p->name);
++        r->src = UPKG_SRC_UHC;
++        r->available = xstrdup(p->version);
++        r->desc = xstrdup(p->desc);
++        r->installed = xstrdup(p->installed);
++        r->launch = xstrdup("");
++        r->kind = !*p->installed ? UPKG_ROW_AVAILABLE : strcmp(p->installed, p->version) ? UPKG_ROW_UPGRADE : UPKG_ROW_INSTALLED;
++    }
++}
++
+ size_t upkg_rows_load(upkg_rows_t *rows)
+ {
+     char *all = upkg_browse_list(0), *inst = upkg_browse_list(1), *upg = upkg_browse_list(2),
+         *fresh = upkg_browse_list(3);
++    upkg_uhc_t uhc = { 0 };
+     size_t i;
+ 
+     upkg_rows_parse(rows, all, inst, upg, fresh);
+@@ -152,6 +174,9 @@ size_t upkg_rows_load(upkg_rows_t *rows)
+             r->launch = upkg_rows_launch(r->name);
+         }
+     }
++    upkg_uhc_read(&uhc, upkg_uhc_dir());
++    upkg_rows_add_uhc(rows, &uhc);
++    upkg_uhc_free(&uhc);
+     free(all);
+     free(inst);
+     free(upg);
+diff --git a/libopkg/upkg_rows.h b/libopkg/upkg_rows.h
+index 3dd39f5..ee72a74 100644
+--- a/libopkg/upkg_rows.h
++++ b/libopkg/upkg_rows.h
+@@ -11,6 +11,7 @@
+ 
+ #include <stddef.h>
+ #include "upkg_wrap.h"
++#include "upkg_uhc.h"
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -23,8 +24,14 @@ typedef enum {
+     UPKG_ROW_UPGRADE            /* installed, a newer version is in a feed */
+ } upkg_row_kind_t;
+ 
++typedef enum {
++    UPKG_SRC_OPKG,              /* a feed package (the zero value, so a calloc'ed row is an opkg row) */
++    UPKG_SRC_UHC                /* a script of the UHC catalogue drawer (upkg_uhc.h) */
++} upkg_row_src_t;
++
+ typedef struct {
+     char *name;
++    upkg_row_src_t src;         /* where the row comes from; the same name may appear once per source (nothing is merged) */
+     upkg_row_kind_t kind;
+     char *installed;            /* installed version, "" when not installed */
+     char *available;            /* the feed's version (the newer one for UPKG_ROW_UPGRADE) */
+@@ -41,7 +48,13 @@ typedef struct {
+  * One row per line of ALL that has a " - ". Replaces what ROWS held. */
+ void upkg_rows_parse(upkg_rows_t *rows, const char *all, const char *inst, const char *upg, const char *fresh);
+ 
+-/* upkg_rows_parse over upkg_browse_list(0..3), from the package hash in memory; returns the row count */
++/* Append one UPKG_SRC_UHC row per entry of U to ROWS, after the rows already there: no installed record -> AVAILABLE,
++ * a record equal to the script's PKGVERSION -> INSTALLED, a different one -> UPGRADE. A name an opkg row already has
++ * stays: both rows are kept (decision D3), told apart by src. */
++void upkg_rows_add_uhc(upkg_rows_t *rows, const upkg_uhc_t *u);
++
++/* upkg_rows_parse over upkg_browse_list(0..3), from the package hash in memory, then upkg_rows_add_uhc over the
++ * drawer upkg_uhc_dir() names; returns the row count */
+ size_t upkg_rows_load(upkg_rows_t *rows);
+ 
+ void upkg_rows_free(upkg_rows_t *rows);
+-- 
+2.50.1 (Apple Git-155)
+

@@ -116,7 +116,7 @@ static void expect(const upkg_rows_t *r, const char *name, upkg_row_kind_t kind,
     free(s);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     upkg_rows_t rows = {0};
     size_t n, i;
@@ -342,6 +342,52 @@ int main(void)
         remove(path);
         rmdir(dir);
         unsetenv("UPKG_INFO_DIR");
+    }
+
+    /* UHC rows (patch 0043): the fixture drawer (curl current, lzx not installed, unzip 5.40 installed and 5.42 in the script)
+     * is appended after the feed rows with src=uhc; a feed package of the same name keeps its own row (D3) */
+    {
+        const char *saved = lists[0];
+        char *clash;
+        size_t k, uhc_rows = 0, idx_all[16];
+        const upkg_row_t *r;
+
+        CHECK(argc == 2);
+        setenv("UPKG_UHC_DIR", argv[1], 1);
+        n = upkg_rows_load(&rows);
+        CHECK(n == 9 && rows.n == 9);
+        for (k = 0; k < rows.n; k++)
+            CHECK((k < 6) == (rows.row[k].src == UPKG_SRC_OPKG));           /* feed rows first, all src=opkg */
+        CHECK(!strcmp(rows.row[6].name, "curl") && !strcmp(rows.row[7].name, "lzx") && !strcmp(rows.row[8].name, "unzip"));
+        r = &rows.row[6];
+        CHECK(r->kind == UPKG_ROW_INSTALLED && !strcmp(r->installed, "7.10.5") && !strcmp(r->available, "7.10.5") && r->desc[0]);
+        r = &rows.row[7];
+        CHECK(r->kind == UPKG_ROW_AVAILABLE && !strcmp(r->installed, "") && !strcmp(r->available, "1.21r") && !strcmp(r->launch, ""));
+        r = &rows.row[8];
+        CHECK(r->kind == UPKG_ROW_UPGRADE && !strcmp(r->installed, "5.40") && !strcmp(r->available, "5.42")
+              && !strcmp(r->desc, "Extractor for zip-archives"));
+        CHECK(upkg_rows_actions(r) == (UPKG_ACT_REMOVE | UPKG_ACT_UPGRADE));
+        CHECK(upkg_rows_filter(&rows, UPKG_FILTER_UPGRADABLE, idx_all) == 2);   /* delta (feed) and unzip (uhc) */
+        for (k = 0; k < rows.n; k++)
+            uhc_rows += rows.row[k].src == UPKG_SRC_UHC;
+        CHECK(uhc_rows == 3);
+
+        /* a feed package called unzip: both rows stay */
+        clash = xmalloc(strlen(saved) + 64);
+        strcpy(clash, saved);
+        strcat(clash, "unzip - 6.0 - Feed copy\n");
+        lists[0] = clash;
+        n = upkg_rows_load(&rows);
+        lists[0] = saved;
+        free(clash);
+        CHECK(n == 10);
+        CHECK(!strcmp(rows.row[6].name, "unzip") && rows.row[6].src == UPKG_SRC_OPKG && !strcmp(rows.row[6].available, "6.0"));
+        CHECK(!strcmp(rows.row[9].name, "unzip") && rows.row[9].src == UPKG_SRC_UHC && !strcmp(rows.row[9].available, "5.42"));
+
+        /* no drawer: only the feed rows */
+        setenv("UPKG_UHC_DIR", "/nonexistent/uhc/drawer", 1);
+        CHECK(upkg_rows_load(&rows) == 6);
+        unsetenv("UPKG_UHC_DIR");
     }
 
     for (i = 0; i < 3; i++)
