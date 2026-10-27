@@ -1,5 +1,5 @@
 #!/bin/sh
-# browse_uhc.sh UPKG: host check of patches/0046: `upkg browse` tells a UHC row from an ipk row of the same name.
+# browse_uhc.sh UPKG: host check of patches/0048: `upkg browse` tells a UHC row from an ipk row of the same name.
 # The UHC fixture drawer (check/uhc/Packages) has curl, lzx and unzip; the feed has alpha and unzip, so "unzip" is in
 # both sources. The list shows the UHC rows in the tag column as uhc:<name> (the same tag `upkg list` prints and
 # `upkg install` takes), the ipk unzip stays plain. Install from the list routes by row: i on uhc:lzx runs the UHC

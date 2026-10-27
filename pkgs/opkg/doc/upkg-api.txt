@@ -70,4 +70,51 @@ EXAMPLES
     pask asks questions and needs a terminal; run upkg install pask in a console.
     15
 
-Checked by check/exit_progress.sh, check/exit_code.sh and check/uhc_run_test.c.
+QUESTIONS AND ANSWERS (a front-end with no terminal)
+----------------------------------------------------
+
+A package with UP-Term-Interactive: yes asks questions during its install or
+upgrade. Without a terminal that is exit code 15. A front-end such as Amarchy
+reads the questions first, asks the user, and passes the answers back.
+
+    upkg questions <pkg>
+
+Prints one line per question on stdout, six fields separated by a tab:
+
+    id  kind  default  choices  prompt  state
+
+    id       the question id the package script passes to upkg-ask
+    kind     string, yesno or choice
+    default  the default answer (may be empty)
+    choices  for kind choice, the comma-separated list; otherwise empty
+    prompt   the question text (a tab or CR in it becomes a space)
+    state    answered if the package already recorded an answer (an upgrade
+             keeps it and needs no new one), new if the next install or
+             upgrade will ask it
+
+Exit codes: 0 questions printed, 5 the package asks none (nothing printed),
+12 unknown package, 13 the package file cannot be fetched. Only the question
+rows go to stdout.
+
+    upkg install <pkg> --answers FILE
+    upkg upgrade <pkg> --answers FILE
+
+Runs the command with no terminal and no prompt. FILE has one id=value per
+line. Lines starting with # and ids the package does not ask are ignored, so
+one file may hold the answers of several packages. The value is everything
+after the first =.
+
+A question in state new with no line in FILE stops the command before any
+change, with exit code 15 and the id on stderr ("needs an answer for q2").
+This holds even when the question has a default: the front-end must show it
+to the user. A question in state answered needs no line. A bad value stops
+the command with exit code 11: a value with a | or a newline, a value that
+starts with <, a yesno value other than yes or no, a choice not in choices.
+
+Limits: only the named package is covered. Dependencies that an install pulls
+in and that ask their own questions still stop with exit code 15.
+Answers given through --answers are used like defaults of Install All; they
+are not written to the package's answered record, so a later question listing
+shows them as new again until a terminal install records them.
+
+Checked by check/exit_progress.sh, check/exit_code.sh, check/questions.sh and check/uhc_run_test.c.

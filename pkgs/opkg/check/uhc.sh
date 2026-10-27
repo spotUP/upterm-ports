@@ -1,5 +1,5 @@
 #!/bin/sh
-# uhc.sh UPKG: host check of patches/0042: libopkg/upkg_uhc.c, the reader of the UHC catalogue drawer (script <n> with
+# uhc.sh UPKG: host check of patches/0044: libopkg/upkg_uhc.c, the reader of the UHC catalogue drawer (script <n> with
 # PKGVERSION, <n>.desc, Installed/<n>). uhc_test.c includes upkg_uhc.c and reads the fixture drawer check/uhc/Packages
 # (real scripts from the up-uhc archive). Needs the patched source (build/src/opkg) next to the host build.
 #   sh pkgs/opkg/check/uhc.sh build/host/opkg/inst/bin/upkg

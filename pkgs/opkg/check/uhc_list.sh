@@ -1,5 +1,5 @@
 #!/bin/sh
-# uhc_list.sh UPKG: host check of patches/0045: the UHC rows in upkg list, list-installed, list-upgradable, info
+# uhc_list.sh UPKG: host check of patches/0047: the UHC rows in upkg list, list-installed, list-upgradable, info
 # uhc:<n>, and the --tsv form of the three lists (nine tab-separated columns: name, version, installed, upgradable,
 # size, section, launch, src, description). Feed: alpha (installed, Section net, Launch alpha-go), beta (not installed, Launch beta-go), unzip (a
 # name the UHC fixture drawer check/uhc/Packages also has: curl installed, unzip 5.40 installed with 5.42 in the

@@ -8,6 +8,10 @@ Package Manipulation:
   dist-upgrade                Upgrade operation that allows package removal
                               (libsolv backend)
   install <pkgs>              Install package(s)
+  questions <pkg>             List what an install or upgrade asks,
+                              one tab-separated line per question
+  install|upgrade ... --answers FILE
+                              Run unattended, FILE has id=value lines
   install --all               Install every package not installed yet,
                               after asking all their questions first
   configure <pkgs>            Configure unpacked package(s)

@@ -352,7 +352,7 @@ int main(int argc, char **argv)
         unsetenv("UPKG_INFO_DIR");
     }
 
-    /* UHC rows (patch 0043): the fixture drawer (curl current, lzx not installed, unzip 5.40 installed and 5.42 in the script)
+    /* UHC rows (patch 0045): the fixture drawer (curl current, lzx not installed, unzip 5.40 installed and 5.42 in the script)
      * is appended after the feed rows with src=uhc; a feed package of the same name keeps its own row (D3) */
     {
         const char *saved = lists[0];

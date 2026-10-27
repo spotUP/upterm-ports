@@ -1,5 +1,5 @@
 #!/bin/sh
-# exit_progress.sh UPKG: host check of patches/0047 and doc/upkg-api.txt, the interface the Amarchy front-end drives:
+# exit_progress.sh UPKG: host check of patches/0049 and doc/upkg-api.txt, the interface the Amarchy front-end drives:
 # the exit codes of upkg (0 ok, 5 nothing to do, 11 usage, 12 not found, 13 network, 14 package script, 15 needs
 # answers; 20, a failed start, is exit_code.sh) and one "[PROGRESS n/m] <phase> <name>" line per phase with stdout piped. A file: feed of tiny
 # .ipk into a temp root; "pok" installs, "pfail" has a preinst that refuses, "pask" is UP-Term-Interactive.

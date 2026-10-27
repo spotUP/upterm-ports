@@ -1,7 +1,7 @@
-From 3561b9d9383f90d95ae85202c33a215b450ca437 Mon Sep 17 00:00:00 2001
+From ce3d0cfae9f0e33c532370b7490192d1bf719662 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Tue, 27 Oct 2026 10:22:54 +0100
-Subject: [PATCH 47/47] upkg: stable exit codes and one machine-readable
+Subject: [PATCH 49/50] upkg: stable exit codes and one machine-readable
  progress line per step
 
 Front-ends (Amarchy, scripts) need to tell a missing package from a dead
@@ -260,7 +260,7 @@ index 6526c7b..5a0253a 100644
      }
  
 diff --git a/libopkg/opkg_install.c b/libopkg/opkg_install.c
-index e795099..33cf3ec 100644
+index 2860e5b..af32211 100644
 --- a/libopkg/opkg_install.c
 +++ b/libopkg/opkg_install.c
 @@ -974,6 +974,7 @@ int opkg_install_pkg(pkg_t * pkg, pkg_t * old_pkg)
@@ -280,7 +280,7 @@ index e795099..33cf3ec 100644
          if (err == -1) {
              opkg_msg(ERROR, "Failed to unpack control files from %s.\n",
 diff --git a/libopkg/pkg.c b/libopkg/pkg.c
-index 6dac802..4d485a5 100644
+index 670b5e7..3f75d5b 100644
 --- a/libopkg/pkg.c
 +++ b/libopkg/pkg.c
 @@ -43,6 +43,7 @@
@@ -291,7 +291,7 @@ index 6dac802..4d485a5 100644
  
  /* pkg_formatted_info writes to stdout for `upkg info`; on a console it wraps to the width, to a
   * file (the status database) upkg_fprintf is a plain fprintf. */
-@@ -1389,6 +1390,7 @@ int pkg_run_script(pkg_t * pkg, const char *script, const char *args)
+@@ -1413,6 +1414,7 @@ int pkg_run_script(pkg_t * pkg, const char *script, const char *args)
          if (!opkg_config->offline_root)
              opkg_msg(ERROR, "package \"%s\" %s script returned status %d.\n",
                       pkg->name, script, err);
@@ -377,7 +377,7 @@ index a33fa51..9ecb536 100644
  
          /* Set all pkgs to auto_installed except the top level */
 diff --git a/libopkg/upkg_all.c b/libopkg/upkg_all.c
-index 6561079..438c56a 100644
+index 14d0dd6..277197b 100644
 --- a/libopkg/upkg_all.c
 +++ b/libopkg/upkg_all.c
 @@ -30,6 +30,7 @@ typedef struct {
@@ -388,7 +388,7 @@ index 6561079..438c56a 100644
  static char *tmpdir;
  
  static char *slurp(const char *path)
-@@ -257,9 +258,15 @@ int upkg_all_ask(char **names, size_t n)
+@@ -265,9 +266,15 @@ int upkg_all_ask(char **names, size_t n)
              return -1;
      }
      upkg_xsystem_unattended(1);
@@ -404,7 +404,7 @@ index 6561079..438c56a 100644
  void upkg_all_seed(pkg_t *pkg)
  {
      size_t i;
-@@ -289,6 +296,7 @@ void upkg_all_end(void)
+@@ -297,6 +304,7 @@ void upkg_all_end(void)
      size_t i;
  
      upkg_xsystem_unattended(0);
@@ -548,7 +548,7 @@ index 7bb3348..492b9d6 100644
              r = uhc_remove(name);
          else
 diff --git a/src/opkg.c b/src/opkg.c
-index ef7b5c3..36d3732 100644
+index 26c728b..36242ea 100644
 --- a/src/opkg.c
 +++ b/src/opkg.c
 @@ -587,6 +587,9 @@ static void usage(int status)

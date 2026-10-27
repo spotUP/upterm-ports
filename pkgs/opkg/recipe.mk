@@ -78,15 +78,17 @@
 # patches/0042: xsystem retries read and waitpid on EINTR. ncurses catches SIGWINCH, so a resize while browse ran an install
 # ended the output pump (the pipe closed under the postinst) and left the child unreaped: the install failed with exit 20.
 # ixemul never restarts a call (SA_RESTART is recorded, not used), so the retry lives here. check/browse_resize.sh.
-# patches/0042: libopkg/upkg_uhc.c reads the UHC catalogue drawer (UPKG_UHC_DIR_DEFAULT UP-Term:uhc/Packages, UPKG_UHC_DIR overrides):
+# patches/0044: libopkg/upkg_uhc.c reads the UHC catalogue drawer (UPKG_UHC_DIR_DEFAULT UP-Term:uhc/Packages, UPKG_UHC_DIR overrides):
 # script <n> with `Set PKGVERSION`, <n>.desc, Installed/<n>; check/uhc.sh + check/uhc_test.c over the fixture drawer check/uhc/Packages.
-# patches/0043: upkg_row_t has src (UPKG_SRC_OPKG, UPKG_SRC_UHC); upkg_rows_load appends the UHC rows after the feed rows (no record: available,
+# patches/0045: upkg_row_t has src (UPKG_SRC_OPKG, UPKG_SRC_UHC); upkg_rows_load appends the UHC rows after the feed rows (no record: available,
 # same version: installed, other version: upgrade); a name in both sources keeps both rows. check/rows.sh + rows_test.c.
-# patches/0045: upkg list, list-installed, list-upgradable add the UHC rows (text rows tagged uhc:<name>); --tsv prints nine tab-separated
+# patches/0047: upkg list, list-installed, list-upgradable add the UHC rows (text rows tagged uhc:<name>); --tsv prints nine tab-separated
 # fields per row (doc/upkg-tsv.txt); info uhc:<name>. check/uhc_list.sh.
-# patches/0046: upkg browse shows a UHC row as uhc:<name> in the tag column (selection, info and the commands use that tag); check/browse_uhc.sh.
-# patches/0047: stable exit codes (0 ok, 5 nothing to do, 11 usage, 12 not found, 13 network, 14 package script, 15 needs answers, 20 fail) and one
+# patches/0048: upkg browse shows a UHC row as uhc:<name> in the tag column (selection, info and the commands use that tag); check/browse_uhc.sh.
+# patches/0049: stable exit codes (0 ok, 5 nothing to do, 11 usage, 12 not found, 13 network, 14 package script, 15 needs answers, 20 fail) and one
 #   `[PROGRESS n/m] <phase> <name>` line per step when stdout is not a terminal (or UPKG_PROGRESS=1); doc/upkg-api.txt; check/exit_progress.sh.
+# patches/0050: `upkg questions <pkg>` prints the questions an install or upgrade will ask (tab-separated, rc 5 none, rc 12 unknown), and
+#   `upkg install|upgrade <pkg> --answers FILE` runs unattended with id=value answers (rc 15 naming the id when one is missing); check/questions.sh.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

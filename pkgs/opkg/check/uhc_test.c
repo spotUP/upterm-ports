@@ -1,4 +1,4 @@
-/* uhc_test.c: unit test of libopkg/upkg_uhc.c (patch 0042), built by check/uhc.sh. Reads the fixture drawer
+/* uhc_test.c: unit test of libopkg/upkg_uhc.c (patch 0044), built by check/uhc.sh. Reads the fixture drawer
  * check/uhc/Packages (unzip, curl, lzx copied from the up-uhc archive; Installed/ holds unzip 5.40 and curl 7.10.5)
  * plus a scratch drawer for the odd cases. Exit 0 and one [OK] line on success. */
 #include <stdarg.h>
