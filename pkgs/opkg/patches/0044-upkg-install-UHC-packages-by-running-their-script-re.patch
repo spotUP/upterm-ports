@@ -1,4 +1,4 @@
-From 6b52ba0b2fd174131c42afad9496a7eaeadb1545 Mon Sep 17 00:00:00 2001
+From 9e5a02f4d09aebfffac48dba693a5157c263b741 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Tue, 27 Oct 2026 02:41:30 +0100
 Subject: [PATCH 44/46] upkg: install UHC packages by running their script,
@@ -12,10 +12,10 @@ uhc:<n> names the UHC package on a clash; Install All and Update All, launch and
  libopkg/upkg_browse.c |  11 +-
  libopkg/upkg_rows.c   |  11 ++
  libopkg/upkg_rows.h   |   3 +
- libopkg/upkg_uhc.c    | 325 ++++++++++++++++++++++++++++++++++++++++++
- libopkg/upkg_uhc.h    |  33 +++++
+ libopkg/upkg_uhc.c    | 355 ++++++++++++++++++++++++++++++++++++++++++
+ libopkg/upkg_uhc.h    |  40 +++++
  libopkg/upkg_wb.c     |   5 +-
- 7 files changed, 403 insertions(+), 8 deletions(-)
+ 7 files changed, 440 insertions(+), 8 deletions(-)
 
 diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
 index 1354ac2..01967e3 100644
@@ -195,7 +195,7 @@ index ee72a74..37e3bfb 100644
   * Returns the action letter: 'l' launch (Enter on an installed row with a Launch line), 'r' remove (Delete on an
   * installed row), 'i', 'u', 'I', 'U' as typed (the last two on any row, none selected included), 0 for Enter on any other row (the info box) and for every key that does
 diff --git a/libopkg/upkg_uhc.c b/libopkg/upkg_uhc.c
-index 364b730..5ec6d0d 100644
+index 364b730..d00f5cd 100644
 --- a/libopkg/upkg_uhc.c
 +++ b/libopkg/upkg_uhc.c
 @@ -11,9 +11,11 @@
@@ -210,7 +210,7 @@ index 364b730..5ec6d0d 100644
  #include "upkg_uhc.h"
  
  const char *upkg_uhc_dir(void)
-@@ -146,3 +148,326 @@ size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir)
+@@ -146,3 +148,356 @@ size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir)
          qsort(u->pkg, u->n, sizeof *u->pkg, by_name);
      return u->n;
  }
@@ -239,11 +239,32 @@ index 364b730..5ec6d0d 100644
 +    return s;
 +}
 +
++char *upkg_uhc_wrapper_path(const char *name)
++{
++    const char *t = getenv("UPKG_UHC_TMP");
++    char *base, *p;
++
++    sprintf_alloc(&base, "upkg-uhc-%s", name);
++    p = upkg_uhc_script_path(t && *t ? t : "T:", base);
++    free(base);
++    return p;
++}
++
 +char *upkg_uhc_install_line(const char *dir, const char *name)
++{
++    char *w = upkg_uhc_wrapper_path(name), *s;
++
++    (void)dir;
++    sprintf_alloc(&s, "Execute %s", w);
++    free(w);
++    return s;
++}
++
++char *upkg_uhc_wrapper_text(const char *dir, const char *name)
 +{
 +    char *path = upkg_uhc_script_path(dir, name), *s;
 +
-+    sprintf_alloc(&s, "Path UHC:C UHC:S ADD ; Execute %s", path);
++    sprintf_alloc(&s, "Path UHC:C UHC:S ADD\nExecute %s\n", path);
 +    free(path);
 +    return s;
 +}
@@ -268,12 +289,21 @@ index 364b730..5ec6d0d 100644
 +{
 +    const char *argv[4];
 +    char *line = upkg_uhc_install_line(upkg_uhc_dir(), name);
-+    int rc;
++    char *w = upkg_uhc_wrapper_path(name), *text = upkg_uhc_wrapper_text(upkg_uhc_dir(), name);
++    FILE *f = fopen(w, "w");
++    int rc = 20;
 +
-+    printf("%s\n", line);
-+    fflush(stdout);
-+    upkg_uhc_install_argv(line, argv);
-+    rc = upkg_uhc_rc(xsystem(argv));
++    if (!f || fputs(text, f) < 0 || fclose(f) != 0) {
++        fprintf(stderr, "upkg: cannot write %s\n", w);
++    } else {
++        printf("%s\n", line);
++        fflush(stdout);
++        upkg_uhc_install_argv(line, argv);
++        rc = upkg_uhc_rc(xsystem(argv));
++        remove(w);
++    }
++    free(text);
++    free(w);
 +    free(line);
 +    return rc;
 +}
@@ -538,10 +568,10 @@ index 364b730..5ec6d0d 100644
 +    return rc;
 +}
 diff --git a/libopkg/upkg_uhc.h b/libopkg/upkg_uhc.h
-index c956da4..d6e1227 100644
+index c956da4..9f6fb97 100644
 --- a/libopkg/upkg_uhc.h
 +++ b/libopkg/upkg_uhc.h
-@@ -43,6 +43,39 @@ size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir);
+@@ -43,6 +43,46 @@ size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir);
  
  void upkg_uhc_free(upkg_uhc_t *u);
  
@@ -557,11 +587,18 @@ index c956da4..d6e1227 100644
 +/* DIR/NAME: the package script (malloc). DIR ends in a volume colon or a slash for no extra slash. */
 +char *upkg_uhc_script_path(const char *dir, const char *name);
 +
-+/* The command line that installs NAME: "Path UHC:C UHC:S ADD ; Execute <script>" (malloc). The Path puts the UHC command
-+ * and script drawers on the spawned shell's path: a shell started before the up-uhc User-Startup block ran lacks them
-+ * and the script's first command (pkg-envcheck) is "Unknown command". The script is run itself, not through the
-+ * `pkg` script, so the "already installed, proceed anyway (y/n)?" Ask of `pkg install` is never reached
-+ * (a reinstall or upgrade is wanted here). */
++/* A vsh runs `Path` as a child, so a Path in the spawned sh never reaches the Execute that follows (measured on a rig).
++ * A real Shell runs the Execute'd wrapper, so its own Path ADD sticks for the script nested after it. The wrapper
++ * lives in $UPKG_UHC_TMP (default T:) as upkg-uhc-NAME. */
++char *upkg_uhc_wrapper_path(const char *name);
++
++/* The wrapper's text (malloc): "Path UHC:C UHC:S ADD" then "Execute <script>". The Path puts the UHC command and script
++ * drawers on the path: a shell started before the up-uhc User-Startup block lacks them and the script's first command
++ * (pkg-envcheck) is "Unknown command". The script is run itself, not through the `pkg` script, so the "already
++ * installed, proceed anyway (y/n)?" Ask of `pkg install` is never reached. */
++char *upkg_uhc_wrapper_text(const char *dir, const char *name);
++
++/* The command line that installs NAME: "Execute <wrapper path>" (malloc). */
 +char *upkg_uhc_install_line(const char *dir, const char *name);
 +
 +/* UHCRC (the script ends in SetResult $UHCRC, so it is the exit code of Execute) as the upkg exit code:

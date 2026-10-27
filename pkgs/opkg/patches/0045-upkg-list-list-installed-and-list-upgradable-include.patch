@@ -1,4 +1,4 @@
-From 10c638424cd8fdf62f1db91e0b46bdb49261e9b6 Mon Sep 17 00:00:00 2001
+From 9d6d324aa7b3561413ed8ade36960b895a4d588d Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Tue, 27 Oct 2026 02:49:20 +0100
 Subject: [PATCH 45/46] upkg: list, list-installed and list-upgradable include
@@ -468,10 +468,10 @@ index 37e3bfb..b94c416 100644
  char *upkg_rows_target(const upkg_row_t *r);
  
 diff --git a/libopkg/upkg_uhc.c b/libopkg/upkg_uhc.c
-index 5ec6d0d..de43610 100644
+index d00f5cd..7bb3348 100644
 --- a/libopkg/upkg_uhc.c
 +++ b/libopkg/upkg_uhc.c
-@@ -407,6 +407,41 @@ void upkg_uhc_files_free(char **files, size_t n)
+@@ -437,6 +437,41 @@ void upkg_uhc_files_free(char **files, size_t n)
      free(files);
  }
  
@@ -514,10 +514,10 @@ index 5ec6d0d..de43610 100644
  {
      char *script = upkg_uhc_script_path(upkg_uhc_dir(), name), *rec, **files;
 diff --git a/libopkg/upkg_uhc.h b/libopkg/upkg_uhc.h
-index d6e1227..34eb5e2 100644
+index 9f6fb97..952e9d7 100644
 --- a/libopkg/upkg_uhc.h
 +++ b/libopkg/upkg_uhc.h
-@@ -72,6 +72,11 @@ int upkg_uhc_rc(int rc);
+@@ -79,6 +79,11 @@ int upkg_uhc_rc(int rc);
  size_t upkg_uhc_files(const char *script, char ***files, size_t *skipped);
  void upkg_uhc_files_free(char **files, size_t n);
  
