@@ -9,7 +9,7 @@
 # sys/socket.h meet the NDK's structs ("MSIZE undeclared"). An overlay drawer of
 # symlinks to the NDK's sys/mbuf.h, sys/socket.h, sys/sockio.h, net/, netinet/, arpa/
 # and netdb.h is no system drawer, so -I puts it first. mk/amiga-net.h (forced in) adds
-# the __uint32_t the NDK's in.h wants.
+# the __uint32_t the NDK in.h wants and the struct timeval guard.
 #
 # Use in a recipe's configure command:
 #   $(call AMISSL_OVERLAY,<pkg>) && $(call M68K_ENV,<pkg>) CFLAGS="$(CPU) -O2 $(call AMISSL_CFLAGS,<pkg>)" CPPFLAGS="-I$(SYSINC) $(call AMISSL_CPPFLAGS,<pkg>)" \
