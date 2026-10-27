@@ -1,0 +1,27 @@
+From 675b15b334762d0bc2fd628e5b492f1f96e8fcf8 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 20:23:47 +0100
+Subject: [PATCH] tool_main: drop the upstream 32 KB $STACK cookie on AmigaOS
+
+The UP-Term port links its own $STACK cookie (262144) and __stack; a second cookie
+makes the stack size depend on which one the loader finds first.
+---
+ src/tool_main.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/tool_main.c b/src/tool_main.c
+index d3eff9c..3131102 100644
+--- a/src/tool_main.c
++++ b/src/tool_main.c
+@@ -57,7 +57,7 @@ int vms_show = 0;
+ #else
+ #define CURL_USED
+ #endif
+-static const char CURL_USED min_stack[] = "$STACK:32768";
++/* the UP-Term port sets the stack itself (recipe curl_STACK, one $STACK cookie): upstream's 32 KB cookie would be a second one */
+ #endif
+ 
+ #ifdef __MINGW32__
+-- 
+2.50.1 (Apple Git-155)
+

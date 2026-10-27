@@ -6,6 +6,7 @@
 #   fork     no fork(): ixemul has none (vfork only), so a _fork symbol
 #            means a fork() call that fails at run time
 #   stack    the $STACK: cookie, when the recipe asks for one (STACK = bytes)
+#   cookies  at most one $STACK cookie in the file (two leave the size to scan order)
 #   ncurses  a binary linking ncurses needs __stack and STACK >= 262144
 #   cpu      no 68030+ instructions (MMU, move16, cache ops) and no FPU
 #            ones in the code (tools/m68k_scan.py follows the flow, so
@@ -55,6 +56,12 @@ for bin; do
 		# bytes before the cookie can be printable (find 4.11: "<Nu$STACK:")
 		if strings -a "$bin" | grep -q "\\\$STACK: *$stack\$"; then ok "\$STACK: $stack"
 		else bad "no \$STACK: $stack cookie (found: $(strings -a "$bin" | grep -o '\$STACK: *[0-9]*' | head -1))"; fi
+	fi
+	# more than one $STACK cookie: which one the loader honours depends on scan order
+	# (curl's upstream min_stack "$STACK:32768" next to the port's 262144)
+	cookies=$(strings -a "$bin" | grep -c '\$STACK:')
+	if [ "$cookies" -gt 1 ]; then
+		bad "$cookies \$STACK cookies (want one): $(strings -a "$bin" | grep -o '\$STACK: *[0-9]*' | tr '\n' ' ')"
 	fi
 	# __stack: a program started by vfork + exec (upkg's curl and scripts, ptyrun) ignores the cookie
 	sv=$(stack_var "$bin")
