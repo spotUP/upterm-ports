@@ -80,3 +80,12 @@ u list --tsv '*zip*' >"$w/t"
 [ "$(wc -l <"$w/t" | tr -d ' ')" = 2 ] && has "$w/t" "unzip${tab}5.42${tab}1${tab}1${tab}${tab}${tab}UP-Term:uhc/ExtBin/UnZip${tab}uhc${tab}Extractor for zip-archives" "tsv glob" || fail "tsv glob: $(cat "$w/t")"
 u --help 2>&1 | grep -q -- '--tsv' || fail "--tsv is not in the help text"
 echo "[OK] upkg list, list-installed, list-upgradable include UHC rows (uhc:<n>); info uhc:<n>; --tsv has 9 columns with exact ipk and uhc rows; glob reaches UHC"
+
+# no UPKG_UHC_DIR: the drawer is <ENV:UHCBIN>Packages, where uhcinstall put UHC (UHCBIN ends in a slash)
+mkdir "$w/uhcroot"; cp -R "$here/uhc/Packages" "$w/uhcroot/Packages"
+printf '%s/uhcroot/' "$w" > "$w/env/UHCBIN"
+rm -rf "$w/uhc"
+unset UPKG_UHC_DIR
+u list >"$w/o" 2>&1
+has "$w/o" "uhc:lzx - 1.21r - Compressor and decompressor for lzx archives" "UHCBIN drawer"
+has "$w/o" "uhc:unzip - 5.42 - Extractor for zip-archives" "UHCBIN drawer"

@@ -207,7 +207,7 @@ int main(int argc, char **argv)
     CHECK(upkg_uhc_name("uhc:") == NULL);
     s = upkg_uhc_target("unzip"); CHECK(!strcmp(s, "uhc:unzip")); free(s);
     s = upkg_uhc_install_line(upkg_uhc_dir(), "unzip"); CHECK(!strcmp(s, "Execute /tmp/upkg-uhc-unzip")); free(s);
-    s = upkg_uhc_wrapper_text(upkg_uhc_dir(), "unzip"); CHECK(!strcmp(s, "Path UHC:C UHC:S ADD\nExecute UP-Term:uhc/Packages/unzip\n")); free(s);
+    s = upkg_uhc_wrapper_text(upkg_uhc_dir(), "unzip"); CHECK(!strcmp(s, "Path UHC:C UHC:S ADD\nExecute SYS:UHC/Packages/unzip\n")); free(s);
     s = upkg_uhc_script_path("UP-Term:", "x"); CHECK(!strcmp(s, "UP-Term:x")); free(s);
     CHECK(upkg_uhc_rc(0) == 0 && upkg_uhc_rc(20) == 14 && upkg_uhc_rc(5) == 14 && upkg_uhc_rc(-1) == 20);
 
@@ -220,7 +220,7 @@ int main(int argc, char **argv)
      * The same line first adds UHC:C and UHC:S to the path: a shell started before the up-uhc User-Startup block lacks them
      * and the script's pkg-envcheck is "Unknown command" (UHC-PATH-BEFORE-REBOOT) */
     CHECK(x_n == 3 && !strcmp(x_argv[0], "/bin/sh") && !strcmp(x_argv[1], "-c") && !strcmp(x_argv[2], "Execute /tmp/upkg-uhc-curl"));
-    CHECK(!strcmp(x_wrap, "Path UHC:C UHC:S ADD\nExecute UP-Term:uhc/Packages/curl\n"));   /* the wrapper existed while it ran */
+    CHECK(!strcmp(x_wrap, "Path UHC:C UHC:S ADD\nExecute SYS:UHC/Packages/curl\n"));   /* the wrapper existed while it ran */
     CHECK(access("/tmp/upkg-uhc-curl", F_OK) != 0);                                   /* and is gone after */
     /* a bare name alone: nothing runs */
     x_calls = 0;
