@@ -16,5 +16,5 @@ if PATH="$w/fake:$PATH" "$upkg" -f "$w/upkg.conf" update 2>"$w/err"; then echo "
 read -r a1 a2 a3 a4 a5 < "$w/argv"
 [ "$a1 $a2 $a4" = "-fsSL -o http://127.0.0.1:1/feed/Packages.gz" ] || { echo "[FAIL] argv: $(cat "$w/argv")"; exit 1; }
 case $a3 in "$w"/cache_dir/*) b=${a3##*/}; [ ${#b} -eq 30 ] || { echo "[FAIL] dest: $a3"; exit 1; } ;; *) echo "[FAIL] dest: $a3"; exit 1 ;; esac
-grep -q 'curl returned 22' "$w/err" || { echo "[FAIL] no curl error text"; exit 1; }
+grep -q 'server answered with an HTTP error' "$w/err" || { echo "[FAIL] no curl error text"; exit 1; }
 echo "[OK] opkg download backend: curl -fsSL -o <dest> <src>, exit 22 -> failed update"

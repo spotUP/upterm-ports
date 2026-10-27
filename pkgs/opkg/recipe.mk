@@ -99,6 +99,8 @@
 # patches/0054: upkg list --tsv prints one row per package name, the highest version, with the name's installed and upgradable flags
 # (it printed one row per feed version with the same flags: up-pi 1.0 installed + 1.1 in the feed gave two "1 1" rows). list-installed and
 # list-upgradable are unchanged; the text `upkg list` still prints one line per version (stock opkg). check/tsv_one_row.sh.
+# patches/0055: the download error names the cause of the curl exit (22 HTTP error, 6 resolve, 7 reach, 28 timed out; the PATH hint only for
+# curl not found: 127, 255, -1) instead of "is curl installed and in PATH?" for every failure. upkg_curl_fail_text; check/curl_msg.sh.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

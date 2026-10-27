@@ -1,0 +1,72 @@
+From 8d4e8c59a996879fdfd7be60857929761197df3c Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 20:59:54 +0100
+Subject: [PATCH 55/55] upkg: the download error names the cause of the curl
+ exit code
+
+Every non-zero curl exit printed "curl returned N (is curl installed and in PATH?)", so a plain
+HTTP 404 (curl 22) told the user to look at PATH. upkg_curl_fail_text maps the status: 22 the
+server answered with an HTTP error, 6 cannot resolve host, 7 cannot reach host, 28 timed out,
+127, 255 or -1 (shell not-found, xsystem child after a failed execvp, failed fork) curl not found
+with the PATH hint, any other "curl returned N". Pure function; upkg's exit status is unchanged.
+Host check: check/curl_msg.sh.
+---
+ libopkg/opkg_download_wget.c | 23 ++++++++++++++++++++++-
+ 1 file changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/libopkg/opkg_download_wget.c b/libopkg/opkg_download_wget.c
+index 5a0253a..addc290 100644
+--- a/libopkg/opkg_download_wget.c
++++ b/libopkg/opkg_download_wget.c
+@@ -24,6 +24,7 @@
+ #include "opkg_cmd.h"
+ 
+ #include <errno.h>
++#include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <unistd.h>
+@@ -87,11 +88,31 @@ static int dest_name_too_long(const char *path)
+ }
+ #endif
+ 
++/* upkg: what a curl exit status means, for the download error text. Pure:
++ * no I/O, so the host check can drive it with a fake curl. 127 is the shell's
++ * "command not found", 255 is xsystem's child after a failed execvp
++ * (_exit(-1)), -1 a failed fork; only these keep the PATH hint. The text is a clause that follows "Failed to download X, ". */
++const char *upkg_curl_fail_text(int res, char *buf, size_t len)
++{
++    switch (res) {
++    case 22: return "the server answered with an HTTP error";
++    case 6:  return "cannot resolve host";
++    case 7:  return "cannot reach host (connection failed)";
++    case 28: return "timed out";
++    case 127:
++    case 255:
++    case -1: return "curl not found (is curl installed and in PATH?)";
++    }
++    snprintf(buf, len, "curl returned %d", res);
++    return buf;
++}
++
+ int opkg_download_backend(const char *src, const char *dest,
+                           curl_progress_func cb, void *data, int use_cache)
+ {
+     int res;
+     char *adest = NULL;
++    char why[32];
+     const char *argv[8];
+     int i = 0;
+ 
+@@ -121,7 +142,7 @@ int opkg_download_backend(const char *src, const char *dest,
+     free(adest);
+ 
+     if (res) {
+-        opkg_msg(ERROR, "Failed to download %s, curl returned %d (is curl installed and in PATH?).\n", src, res);
++        opkg_msg(ERROR, "Failed to download %s, %s.\n", src, upkg_curl_fail_text(res, why, sizeof why));
+         upkg_note_fail(UPKG_RC_NETWORK);
+         return -1;
+     }
+-- 
+2.50.1 (Apple Git-155)
+
