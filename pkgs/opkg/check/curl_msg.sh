@@ -23,6 +23,11 @@ for c in 22:'server answered with an HTTP error' 6:'cannot resolve host' 7:'cann
   case $line in *"$want"*) ;; *) fail "curl exit $code: want '$want', got: $line" ;; esac
   case $line in *"in PATH"*) fail "curl exit $code names the PATH: $line" ;; esac
 done
+# a curl killed by a signal (Ctrl-C during update): xsystem returns -1, which is not "curl not found" (patches/0058)
+printf '#!/bin/sh\nkill -TERM $$\n' > "$w/fake/curl"; chmod +x "$w/fake/curl"
+line=$(run "$w/fake:/usr/bin:/bin")
+case $line in *"curl did not finish"*) ;; *) fail "curl killed by a signal: want 'curl did not finish', got: $line" ;; esac
+case $line in *"in PATH"*) fail "curl killed by a signal names the PATH: $line" ;; esac
 line=$(run "$w/empty")
 case $line in *"curl not found"*"in PATH"*) ;; *) fail "no curl on PATH: want 'curl not found ... PATH', got: $line" ;; esac
-echo "[OK] curl_msg: 22 HTTP error, 6 resolve, 7 reach, 28 timed out, 3 generic, missing curl names PATH"
+echo "[OK] curl_msg: 22 HTTP error, 6 resolve, 7 reach, 28 timed out, 3 generic, signal did not finish, missing curl names PATH"

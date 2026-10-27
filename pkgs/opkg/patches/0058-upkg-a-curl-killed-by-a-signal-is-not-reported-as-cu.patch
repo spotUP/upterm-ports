@@ -1,0 +1,44 @@
+From add858ce1b4de68c155f58c8851dfb931599cbb6 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 22:10:48 +0100
+Subject: [PATCH] upkg: a curl killed by a signal is not reported as curl not
+ found
+
+xsystem returns -1 for its own failures: a child killed by a signal (Ctrl-C during
+upkg update), a failed fork or a failed wait. upkg_curl_fail_text mapped -1 to
+"curl not found (is curl installed and in PATH?)", so every Ctrl-C ended on a PATH
+hint. -1 now reads "curl did not finish (killed by a signal, or it could not be
+started)"; xsystem prints the cause on its own ERROR line. Only 127 and 255 (shell
+not-found, failed execvp) keep the PATH hint. Host check: check/curl_msg.sh.
+---
+ libopkg/opkg_download_wget.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/libopkg/opkg_download_wget.c b/libopkg/opkg_download_wget.c
+index addc290..8b29c80 100644
+--- a/libopkg/opkg_download_wget.c
++++ b/libopkg/opkg_download_wget.c
+@@ -91,7 +91,8 @@ static int dest_name_too_long(const char *path)
+ /* upkg: what a curl exit status means, for the download error text. Pure:
+  * no I/O, so the host check can drive it with a fake curl. 127 is the shell's
+  * "command not found", 255 is xsystem's child after a failed execvp
+- * (_exit(-1)), -1 a failed fork; only these keep the PATH hint. The text is a clause that follows "Failed to download X, ". */
++ * (_exit(-1)); only these keep the PATH hint. -1 is xsystem's own failure: a
++ * child killed by a signal (Ctrl-C), a failed fork or wait; xsystem names it on its own line. The text is a clause that follows "Failed to download X, ". */
+ const char *upkg_curl_fail_text(int res, char *buf, size_t len)
+ {
+     switch (res) {
+@@ -100,8 +101,8 @@ const char *upkg_curl_fail_text(int res, char *buf, size_t len)
+     case 7:  return "cannot reach host (connection failed)";
+     case 28: return "timed out";
+     case 127:
+-    case 255:
+-    case -1: return "curl not found (is curl installed and in PATH?)";
++    case 255: return "curl not found (is curl installed and in PATH?)";
++    case -1: return "curl did not finish (killed by a signal, or it could not be started)";
+     }
+     snprintf(buf, len, "curl returned %d", res);
+     return buf;
+-- 
+2.50.1 (Apple Git-155)
+
