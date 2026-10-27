@@ -481,8 +481,6 @@ static const ch_hint H_OK[] = { { "Enter", "Accept", 1 }, { "Escape", "Back", 1 
 static const ch_hint H_TEXT[] = { { "Up/Down", "Scroll", 0 }, { "Left/Right", "Choose", 0 },
 	                               { "Enter", "Accept", 1 }, { "Escape", "Back", 1 } };
 static const ch_hint H_WAIT[] = { { "Wait", "Command running", 1 } };
-static const ch_hint H_MENU[] = { { "Up/Down", "Move", 0 }, { "Enter", "Accept", 1 },
-	                               { "Escape", "Cancel", 1 } };
 
 static void draw_all(void)
 {
@@ -526,7 +524,13 @@ static void draw_all(void)
 		break;
 	default:
 		draw_menu(widget_row);
-		draw_footer(H_MENU, 3);
+		{
+			ch_hint mh[4];
+			int mn = ch_menu_hints(mh, ui_opt.entry_flags && msel >= 0 && msel < ui_opt.nentries ?
+			                               ui_opt.entry_flags[msel] : 0);
+
+			draw_footer(mh, mn);
+		}
 		break;
 	}
 }
