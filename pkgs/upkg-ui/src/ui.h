@@ -90,7 +90,8 @@ void ui_invalidate(void);
 void ui_follow(int on);
 /* a status text in the footer, right-aligned next to the key hints (which give way when the line is
  * short); ST picks the colour. NULL or UI_ST_NONE with no text: the footer is the key hints alone.
- * The text is copied; ui_prepare clears it. */
+ * The text is copied and belongs to the current view: opening the next view (ui_view)
+ * clears it. */
 enum { UI_ST_NONE, UI_ST_DIM, UI_ST_OK, UI_ST_FAIL };
 void ui_status(const char *text, int st);
 
