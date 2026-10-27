@@ -14,6 +14,7 @@ git_SHA256    := 26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d
 git_LICENSE   := GPL-2.0-only
 # The feed (vtcon tools/pkg_rows.py): the package id and the Packages Description.
 git_FEED_ID   := up-git
+git_SUMMARY   := git 2.56 version control, local commands only, in UP-Term:bin and UP-Term:share/git-core
 git_SUMMARY   := git 2.56.0 in UP-Term:bin and UP-Term:share/git-core
 git_FEED_MIN_BASE := 1.0
 git_LICENSE_FILES := COPYING LGPL-2.1
