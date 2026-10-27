@@ -88,6 +88,7 @@ Programs for the Amiga are built by the owner with `make <name>`; you cannot do 
 3. No `fork()`. A program that links `fork` fails the binary check. Patch it to `posix_spawn` or `vfork` plus `exec`.
 4. Every program carries a stack cookie (`_STACK`). Programs started by a `vfork` parent also need `_STACK_VAR := 1`.
 5. Build with at most 4 jobs (`JOBS`, default 4).
+6. Never name a CPU or FPU flag (`-m68020`, `-m68060`, `-m68881`) in a recipe. Pass `$(CPU)` for compiles and `$(SYSINC)` / `$(SYSLIB)` for headers and libraries, as the `tree` example does; CMake recipes get the same value as `UPTERM_CPU` from `mk/amiga-ixemul.cmake`. Every package is about to be built twice (section 5a), and these variables are what change between the two builds.
 
 ## 4. Pull request steps
 
@@ -151,6 +152,22 @@ pkg_rows: tree has no _FEED_ID: a base-kit program, no feed rows
 ```
 
 Text the recipe cannot say (the Installer wording, the README) comes from `tools/pkg_rows_prose/<name>.json` in the vtcon repository, or from the summary when there is none.
+
+## 5a. Two builds: 68020 and FPU (being added)
+
+The feed is getting two builds of every package (plan `thoughts/shared/plans/2026-10-27-ports-fpu-variants.md` in the UP-Term repository, ledger row PORTS-FPU-VARIANTS). Until that plan lands, only the 68020 build exists.
+
+| build | compiler flags | opkg `Architecture` | runs on |
+|---|---|---|---|
+| 68020, soft float | `-m68020` | `m68k-amigaos` (priority 10) | every supported Amiga |
+| FPU | `-m68060 -m68881 -D__NO_MATH_INLINES` | `m68k-amigaos-fpu` (priority 20) | a 68040 or 68060 with an FPU |
+
+- Users do not choose. At startup upkg reads `SysBase->AttnFlags`; on a 68040 or 68060 with an FPU it registers `m68k-amigaos-fpu`, and opkg installs the higher-priority build. Every other machine gets the 68020 build. A 68030 with a 68882 gets the 68020 build: there is no third build.
+- Both ipks carry the same `Package` name and version; only `Architecture` and the file name (`<id>_<version>_<arch>.ipk`) differ.
+- `-D__NO_MATH_INLINES` is required: the compat `math.h` clashes with GCC's inline `atan2` under `-m68881`.
+- The FPU build links against its own sysroot, so 68020 and FPU objects never mix.
+- What this means for a recipe: follow rule 6 of section 3. A recipe that uses `$(CPU)`, `$(SYSINC)` and `$(SYSLIB)` needs no change; a recipe that names a CPU flag builds a 68020 binary into the FPU package.
+- Check both builds when the owner asks for it: the rig check in section 7 runs on a 68060 rig (FPU build) and on a 68020 rig (68020 build).
 
 ## 6. Licence checklist
 
