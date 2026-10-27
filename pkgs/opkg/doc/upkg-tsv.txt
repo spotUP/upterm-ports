@@ -1,0 +1,36 @@
+upkg --tsv: machine-readable package lists
+==========================================
+
+    upkg list --tsv [glob]
+    upkg list-installed --tsv [glob]
+    upkg list-upgradable --tsv
+
+Output is one line per package row, nine fields separated by one tab, always
+nine, in this order:
+
+    1  name         package name, without any uhc: prefix
+    2  version      available version; for list-installed the installed
+                    version; for list-upgradable the newest candidate
+    3  installed    1 if installed, else 0
+    4  upgradable   1 if a newer version exists, else 0
+    5  size         bytes: installed size for an installed package, package
+                    size otherwise; empty for a UHC row
+    6  section      the Section: field of the feed entry; empty if none
+    7  launch       the Launch: field of the installed control file; empty
+                    for a package that is not installed and for a UHC row
+    8  src          upkg (an ipk from a feed) or uhc (a UHC catalogue entry)
+    9  description  first line of the description
+
+An empty field is an empty string. A tab, CR or LF inside a value becomes a
+space, so a row never breaks. There is no header line.
+
+A name in both sources gives two rows, one with src upkg and one with src uhc.
+Install the first as `upkg install <name>` and the second as `upkg install
+uhc:<name>`.
+
+A glob filters by name exactly as in the text list:
+
+    upkg list --tsv '*zip*'
+
+list-installed --tsv loads the feeds once to fill field 4; it makes no network
+request. The text lists show UHC rows as `uhc:<name> - <version> - <description>`.

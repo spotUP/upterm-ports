@@ -91,6 +91,8 @@ Options:
                               description.
   --size                      Print package size when listing available
                               packages
+  --tsv                       list, list-installed and list-upgradable print
+                              one tab-separated row per package (see below)
 
 Force Options:
   --force-depends             Install/remove despite failed dependencies
@@ -117,3 +119,8 @@ Force Options:
  glob could be something like 'pkgname*' '*file*' or similar
  e.g. upkg info 'libstd*' or upkg search '*libop*' or
  upkg remove 'libncur*'
+ --tsv rows: one line per package, nine tab-separated fields:
+ name version installed(0/1) upgradable(0/1) size section launch
+ src(upkg|uhc) description. An empty field is empty; tabs and
+ newlines in a value become spaces. A UHC package is a row with
+ src uhc (install it as uhc:<name>). upkg list --tsv '*x*' filters.
