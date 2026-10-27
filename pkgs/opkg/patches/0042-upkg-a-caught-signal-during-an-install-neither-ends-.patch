@@ -1,0 +1,56 @@
+From 85c2558f0fdf2e0ddd9cb5d11d178efa00d620d6 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 01:11:20 +0100
+Subject: [PATCH] upkg: a caught signal during an install neither ends the
+ output pump nor abandons the child
+
+xsystem read the child's output until read() returned <= 0 and then waited once. A caught
+signal is not the end of the output: ncurses catches SIGWINCH, so a terminal resize while
+`upkg browse` ran an install made read() fail with EINTR, the pump closed the pipe under the
+running postinst (SIGPIPE on its next line), and waitpid failed with EINTR too, leaving the
+child unreaped and the install reported as failed (exit 20) though it had not ended. ixemul
+records SA_RESTART but never restarts a call (kern_sig.c u_sigintr is set, never read), so on
+the Amiga every caught signal interrupts; the retry has to be here.
+
+read and waitpid now retry on EINTR. check/browse_resize.sh.
+---
+ libopkg/xsystem.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/libopkg/xsystem.c b/libopkg/xsystem.c
+index 2626042..095decc 100644
+--- a/libopkg/xsystem.c
++++ b/libopkg/xsystem.c
+@@ -24,6 +24,7 @@
+ #include <sys/wait.h>
+ #include <unistd.h>
+ #include <fcntl.h>
++#include <errno.h>
+ 
+ #include "opkg_message.h"
+ #include "xsystem.h"
+@@ -92,6 +93,10 @@ int xsystem(const char *argv[])
+             if (upkg_pump_active() && !upkg_pump_wait(pfd[0]))
+                 continue;
+             got = read(pfd[0], chunk, sizeof chunk);
++            /* A caught signal (ncurses' SIGWINCH on a resize) is not the end of the output:
++             * stopping here closed the pipe under a running child. ixemul never restarts. */
++            if (got < 0 && errno == EINTR)
++                continue;
+             if (got <= 0)
+                 break;
+             upkg_sink_write(chunk, (size_t)got);
+@@ -99,7 +104,9 @@ int xsystem(const char *argv[])
+         close(pfd[0]);
+     }
+ 
+-    r = waitpid(pid, &status, 0);
++    do
++        r = waitpid(pid, &status, 0);
++    while (r == -1 && errno == EINTR);
+     if (r == -1) {
+         opkg_perror(ERROR, "%s: waitpid", argv[0]);
+         return -1;
+-- 
+2.50.1 (Apple Git-155)
+

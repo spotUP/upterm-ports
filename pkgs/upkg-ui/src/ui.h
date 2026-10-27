@@ -84,6 +84,9 @@ void ui_read_lines(FILE *in);
 /* menu hotkeys: put this byte (Ctrl-B) in ui_opt.hotkeys and the Left arrow ends the menu with
  * ui_hotkey() == UI_HOTKEY_LEFT, as Backspace does with 8 or 127. Without it Left does nothing. */
 #define UI_HOTKEY_LEFT 2
+/* the same for the Right arrow: put this byte (Ctrl-F) in ui_opt.hotkeys and Right ends the menu with
+ * ui_hotkey() == UI_HOTKEY_RIGHT. Without it Right does nothing, so upkg browse is unchanged. */
+#define UI_HOTKEY_RIGHT 6
 
 /* what the last widget answered */
 int ui_hotkey(void);              /* the --hotkeys key that ended a menu, 0 for Enter */
