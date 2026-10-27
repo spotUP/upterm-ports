@@ -6,7 +6,7 @@
 # The question pass here runs a counting stub ($UPKG_ASK_CMD) that answers "ANSWERED" to every question.
 # Asserts: the stub ran once per interactive package and before any postinst; the postinst of the interactive
 # package recorded ANSWERED (not the packaged default); a plain package installed; --all with names is refused;
-# a second `install --all` has nothing to do; `upgrade --all` upgrades like `upgrade` and asks nothing (the postinst's stdin is empty).
+# a second `install --all` has nothing to do; `upgrade --all` upgrades like `upgrade` and keeps the earlier answers.
 #   sh pkgs/opkg/check/install_all.sh build/host/opkg/inst/bin/upkg
 set -eu
 upkg=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
@@ -53,6 +53,8 @@ cat > "$w/bin/ask" <<STUB
 echo "\$3" >> "$w/asked"
 [ ! -e "$w/root/answers-asky" ] || echo "asked after an install" >> "$w/late"
 printf "flavour='ANSWERED'\nsure='yes'\n" > "\$2"
+# like the real upkg-ask, record the questions answered, so a later upgrade does not ask them again
+[ -z "\$UPKG_ASK_STATE" ] || cp "\$2" "\$UPKG_ASK_STATE"
 STUB
 chmod +x "$w/bin/ask"
 conf() {
@@ -85,9 +87,9 @@ conf feed2
 echo TYPED | "$upkg" -f "$w/conf" upgrade --all >"$w/out" 2>&1 || { echo "[FAIL] upgrade --all: rc=$? $(tail -n 8 "$w/out")"; exit 1; }
 inst=$("$upkg" -f "$w/conf" list-installed 2>&1 | sort | tr '\n' ' ')
 [ "$inst" = "asky - 2.0 asky2 - 2.0 plain - 2.0 " ] || { echo "[FAIL] installed after upgrade --all: $inst"; exit 1; }
-# Update All asks no questions: the postinst of an upgraded package reads nothing from the terminal (its stdin is
-# /dev/null, so upkg-ask takes the defaults, a "<PATH" default being the answer the earlier install kept)
+# Update All keeps the answers: the postinst of an upgraded package still records the answers of the install
+# (a question the old version asked is not asked again; upgrade_new_questions.sh covers a question that is new)
 for n in asky asky2; do
-  [ "$(tail -n 1 "$w/root/stdin-$n")" = "EOF" ] || { echo "[FAIL] $n postinst on upgrade --all could read the terminal: '$(tail -n 1 "$w/root/stdin-$n")'"; exit 1; }
+  [ "$(tail -n 1 "$w/root/answers-$n")" = "ANSWERED/yes" ] || { echo "[FAIL] $n postinst on upgrade --all recorded '$(tail -n 1 "$w/root/answers-$n")', not the earlier answers"; exit 1; }
 done
 echo "[OK] install --all asks each interactive package once up front, installs unattended with those answers; upgrade --all upgrades all"
