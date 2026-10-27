@@ -1,5 +1,5 @@
 #!/bin/sh
-# upgrade_new_questions.sh UPKG: host check of patch 0042. A package whose v1 asks Q1 and whose v2 asks Q1 and Q2:
+# upgrade_new_questions.sh UPKG: host check of patch 0043. A package whose v1 asks Q1 and whose v2 asks Q1 and Q2:
 # `upkg upgrade` keeps the Q1 answer given at the install (not asked again, upkg-ask records the question ids in
 # info_dir/NAME.answered) and asks Q2. Run on a pseudo terminal (upkg-ask asks only when stdin and stdout are one).
 # Then an unattended run (stdin from /dev/null, UPKG_ASK_UNATTENDED set by upkg for Install All) of a v3 with a

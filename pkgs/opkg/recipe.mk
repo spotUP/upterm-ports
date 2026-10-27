@@ -58,7 +58,7 @@
 # takes the keys; the browse box then shows '[ERROR] upkg install <pkg> (exit N)'. check/no_requesters.sh; rig case in vtcon.
 # patches/0027: file_mkdir_hier returns -1 when the parent is the path itself (an absent volume root NOSUCHVOL: recursed until the
 # stack overflowed). check/mkdir_absent_root.sh (shim dirname_self.c).
-# patches/0042: upkg-ask records the question ids it asked in info_dir/NAME.answered (upkg passes the path as UPKG_ASK_STATE to the
+# patches/0043: upkg-ask records the question ids it asked in info_dir/NAME.answered (upkg passes the path as UPKG_ASK_STATE to the
 # postinst and to the Install All question pass); an upgrade keeps that file and runs its scripts with the terminal, so it asks only the
 # questions the old version never asked. UPKG_ASK_UNATTENDED=1 (Install All, a progress box) says the missing terminal is on purpose.
 # check/upgrade_new_questions.sh (v1 asks Q1, v2 asks Q1 and Q2, v3 adds Q3 unattended); check/upkg-ask.fixture is the script's copy.
