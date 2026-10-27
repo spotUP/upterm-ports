@@ -178,7 +178,7 @@ int main(int argc, char **argv)
     CHECK(upkg_uhc_name("unzip") == NULL);                 /* a bare name is the ipk */
     CHECK(upkg_uhc_name("uhc:") == NULL);
     s = upkg_uhc_target("unzip"); CHECK(!strcmp(s, "uhc:unzip")); free(s);
-    s = upkg_uhc_install_line(upkg_uhc_dir(), "unzip"); CHECK(!strcmp(s, "Execute UP-Term:uhc/Packages/unzip")); free(s);
+    s = upkg_uhc_install_line(upkg_uhc_dir(), "unzip"); CHECK(!strcmp(s, "Path UHC:C UHC:S ADD ; Execute UP-Term:uhc/Packages/unzip")); free(s);
     s = upkg_uhc_script_path("UP-Term:", "x"); CHECK(!strcmp(s, "UP-Term:x")); free(s);
     CHECK(upkg_uhc_rc(0) == 0 && upkg_uhc_rc(20) == 20 && upkg_uhc_rc(5) == 5 && upkg_uhc_rc(-1) == 20);
 
@@ -187,8 +187,10 @@ int main(int argc, char **argv)
     args[0] = (char *)"unzip"; args[1] = (char *)"uhc:curl"; args[2] = (char *)"lzx"; ac = 3;
     rc = upkg_uhc_run_args("install", &ac, args, &ran);
     CHECK(rc == 0 && ran == 1 && x_calls == 1 && ac == 2 && !strcmp(args[0], "unzip") && !strcmp(args[1], "lzx"));
-    /* the spawned command line is a shell running the Execute line: C:Execute alone only queues the script as the calling CLI's input */
-    CHECK(x_n == 3 && !strcmp(x_argv[0], "/bin/sh") && !strcmp(x_argv[1], "-c") && !strcmp(x_argv[2], "Execute UP-Term:uhc/Packages/curl"));
+    /* the spawned command line is a shell running the Execute line: C:Execute alone only queues the script as the calling CLI's input.
+     * The same line first adds UHC:C and UHC:S to the path: a shell started before the up-uhc User-Startup block lacks them
+     * and the script's pkg-envcheck is "Unknown command" (UHC-PATH-BEFORE-REBOOT) */
+    CHECK(x_n == 3 && !strcmp(x_argv[0], "/bin/sh") && !strcmp(x_argv[1], "-c") && !strcmp(x_argv[2], "Path UHC:C UHC:S ADD ; Execute UP-Term:uhc/Packages/curl"));
     /* a bare name alone: nothing runs */
     x_calls = 0;
     args[0] = (char *)"unzip"; ac = 1;
@@ -203,6 +205,26 @@ int main(int argc, char **argv)
     args[0] = (char *)"uhc:unzip"; ac = 1;
     rc = upkg_uhc_run_args("install", &ac, args, &ran);
     CHECK(rc == 20);
+
+    /* --tsv field 7 for a UHC row: the program the script copies into ExtBin, from the same Copy-line parser as remove */
+    {
+        char sp[1024], all_unzip[1100], all_lzx[1100], ep[1100];
+        const char *nomatch = "Copy \"first.bin\" \"${UHC/EXTBIN}Alpha\"\nCopy \"second.bin\" \"${UHC/EXTBIN}Beta\"\nCopy \"a.txt\" \"${UHC/EXTDOC}\"\n";
+        const char *none = "Copy \"a.txt\" \"${UHC/EXTDOC}\"\nCopy \"k\" \"L:\"\n";
+
+        snprintf(all_unzip, sizeof all_unzip, "%s/unzip", all); snprintf(all_lzx, sizeof all_lzx, "%s/lzx", all);
+        snprintf(ep, sizeof ep, "%s/env/UHC/EXTBIN", argv[2]); put(ep, "UHC:C/\n");
+        snprintf(sp, sizeof sp, "%s/nomatch", argv[2]); put(sp, nomatch);
+        s = upkg_uhc_launch(sp, "tool"); CHECK(!strcmp(s, "UHC:C/Alpha")); free(s);            /* no name match: the first */
+        s = upkg_uhc_launch(sp, "BETA"); CHECK(!strcmp(s, "UHC:C/Beta")); free(s);             /* the name match, any case, wins */
+        snprintf(sp, sizeof sp, "%s/none", argv[2]); put(sp, none);
+        s = upkg_uhc_launch(sp, "none"); CHECK(!strcmp(s, "")); free(s);                       /* nothing goes to ExtBin */
+        s = upkg_uhc_launch(all_unzip, "unzip"); CHECK(!strcmp(s, "UHC:C/UnZip")); free(s);    /* shipped script, case-insensitive match */
+        s = upkg_uhc_launch(all_lzx, "lzx"); CHECK(!strcmp(s, "UHC:C/lzx")); free(s);          /* two ExtBin copies: the named one */
+        setenv("UPKG_UHC_ENV", "/nonexistent/env/", 1);
+        s = upkg_uhc_launch(all_unzip, "unzip"); CHECK(!strcmp(s, "")); free(s);               /* ExtBin unnamed: nothing to launch */
+        setenv("UPKG_UHC_ENV", env, 1);
+    }
 
     if (fails) return 1;
     printf("[OK] uhc_run: %lu of %lu shipped scripts parse to files, Execute line and UHCRC mapping, uhc: name choice, remove end to end\n",

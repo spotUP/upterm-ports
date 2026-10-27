@@ -1,19 +1,21 @@
-From dbdc9cfc2ff1423a8dd8409681f95cbdd092c883 Mon Sep 17 00:00:00 2001
+From 10c638424cd8fdf62f1db91e0b46bdb49261e9b6 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Tue, 27 Oct 2026 02:49:20 +0100
-Subject: [PATCH 45/45] upkg: list, list-installed and list-upgradable include
+Subject: [PATCH 45/46] upkg: list, list-installed and list-upgradable include
  the UHC rows; --tsv prints one tab-separated row per package; info uhc:<name>
 
 ---
- libopkg/opkg_cmd.c  | 203 +++++++++++++++++++++++++++++++++++++++++---
+ libopkg/opkg_cmd.c  | 207 +++++++++++++++++++++++++++++++++++++++++---
  libopkg/opkg_conf.h |   1 +
- libopkg/upkg_rows.c |   8 +-
- libopkg/upkg_rows.h |   4 +
- src/opkg.c          |  15 ++++
- 5 files changed, 217 insertions(+), 14 deletions(-)
+ libopkg/upkg_rows.c |  56 ++++++++----
+ libopkg/upkg_rows.h |   8 ++
+ libopkg/upkg_uhc.c  |  35 ++++++++
+ libopkg/upkg_uhc.h  |   5 ++
+ src/opkg.c          |  17 ++++
+ 7 files changed, 304 insertions(+), 25 deletions(-)
 
 diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
-index 01967e3..030706c 100644
+index 01967e3..4536da6 100644
 --- a/libopkg/opkg_cmd.c
 +++ b/libopkg/opkg_cmd.c
 @@ -50,6 +50,7 @@
@@ -24,7 +26,7 @@ index 01967e3..030706c 100644
  #include "opkg_archive.h"
  #include "pkg_src.h"
  
-@@ -653,13 +654,152 @@ static int upkg_is_new(const pkg_t *pkg)
+@@ -653,13 +654,156 @@ static int upkg_is_new(const pkg_t *pkg)
                                                    sizeof *prev_names, upkg_cmp_names));
  }
  
@@ -93,7 +95,11 @@ index 01967e3..030706c 100644
 +        if (!upkg_uhc_glob_match(glob, p->name))
 +            continue;
 +        if (opkg_config->tsv) {
-+            upkg_tsv_row(out, p->name, ver, inst, upg, "", "", "", "uhc", p->desc);
++            char *script = upkg_uhc_script_path(upkg_uhc_dir(), p->name), *launch = upkg_uhc_launch(script, p->name);
++
++            upkg_tsv_row(out, p->name, ver, inst, upg, "", "", launch, "uhc", p->desc);
++            free(launch);
++            free(script);
 +        } else if (which == UPKG_LIST_UPGRADABLE) {
 +            fprintf(out, UPKG_UHC_PREFIX "%s - %s - %s\n", p->name, p->installed, p->version);
 +        } else if (*p->desc) {
@@ -150,7 +156,7 @@ index 01967e3..030706c 100644
 +        }
 +        sprintf_alloc(&size, "%lu", pkg->state_status == SS_INSTALLED || pkg->state_status == SS_UNPACKED
 +                                      ? pkg->installed_size : pkg->size);
-+        launch = installed ? upkg_rows_launch(pkg->name) : xstrdup("");
++        launch = installed ? upkg_rows_launch(pkg->name) : upkg_rows_feed_launch(pkg->name);
 +        upkg_tsv_row(out, pkg->name, ver, installed, upgradable, size, pkg->section, launch, "upkg",
 +                     pkg->description);
 +        shown++;
@@ -178,7 +184,7 @@ index 01967e3..030706c 100644
      if (argc > 0) {
          pkg_name = argv[0];
      }
-@@ -680,6 +820,8 @@ static int upkg_list_find(FILE *out, int argc, char **argv, int use_desc, int on
+@@ -680,6 +824,8 @@ static int upkg_list_find(FILE *out, int argc, char **argv, int use_desc, int on
          shown++;
      }
      pkg_vec_free(available);
@@ -187,7 +193,7 @@ index 01967e3..030706c 100644
  
      /* upkg: a glob that matches nothing is an error, not silence (list only; find takes a regexp) */
      if (pkg_name && !use_desc && !shown) {
-@@ -692,18 +834,18 @@ static int upkg_list_find(FILE *out, int argc, char **argv, int use_desc, int on
+@@ -692,18 +838,18 @@ static int upkg_list_find(FILE *out, int argc, char **argv, int use_desc, int on
  
  static int opkg_list_cmd(int argc, char **argv)
  {
@@ -209,7 +215,7 @@ index 01967e3..030706c 100644
  }
  
  static int opkg_verify_cmd(int argc, char **argv)
-@@ -775,13 +917,15 @@ static int opkg_verify_cmd(int argc, char **argv)
+@@ -775,13 +921,15 @@ static int opkg_verify_cmd(int argc, char **argv)
  
  }
  
@@ -226,7 +232,7 @@ index 01967e3..030706c 100644
      if (argc > 0) {
          pkg_name = argv[0];
      }
-@@ -798,6 +942,8 @@ static int upkg_list_installed(FILE *out, int argc, char **argv)
+@@ -798,6 +946,8 @@ static int upkg_list_installed(FILE *out, int argc, char **argv)
      }
  
      pkg_vec_free(available);
@@ -235,7 +241,7 @@ index 01967e3..030706c 100644
  
      /* upkg: a glob that matches nothing is an error, not silence */
      if (pkg_name && !shown) {
-@@ -814,7 +960,7 @@ static int upkg_list_installed(FILE *out, int argc, char **argv)
+@@ -814,7 +964,7 @@ static int upkg_list_installed(FILE *out, int argc, char **argv)
  
  static int opkg_list_installed_cmd(int argc, char **argv)
  {
@@ -244,7 +250,7 @@ index 01967e3..030706c 100644
  }
  
  static int opkg_list_changed_conffiles_cmd(int argc, char **argv)
-@@ -855,7 +1001,42 @@ static int opkg_list_upgradable_cmd(int argc, char **argv)
+@@ -855,7 +1005,42 @@ static int opkg_list_upgradable_cmd(int argc, char **argv)
      /* upkg: no pkg_info_preinstall_check() here. It reads the .list of every installed package and
       * stats every path in it to build the file-owner and directory indexes; listing upgrades needs
       * versions and dependencies only. It made list-upgradable 35x slower than list-installed. */
@@ -288,7 +294,7 @@ index 01967e3..030706c 100644
  }
  
  static int opkg_info_status_cmd(int argc, char **argv, int installed_only)
-@@ -869,6 +1050,8 @@ static int opkg_info_status_cmd(int argc, char **argv, int installed_only)
+@@ -869,6 +1054,8 @@ static int opkg_info_status_cmd(int argc, char **argv, int installed_only)
      if (argc > 0) {
          pkg_name = argv[0];
      }
@@ -297,7 +303,7 @@ index 01967e3..030706c 100644
  
      available = pkg_vec_alloc();
      if (installed_only)
-@@ -923,13 +1106,13 @@ char *upkg_browse_list(int which)
+@@ -923,13 +1110,13 @@ char *upkg_browse_list(int which)
      if (!fp)
          return xstrdup("");
      if (which == 0)
@@ -327,7 +333,7 @@ index d0ef2d3..d1eb900 100644
      int download_first;
      int overwrite_no_owner;
 diff --git a/libopkg/upkg_rows.c b/libopkg/upkg_rows.c
-index af645af..eed2a3f 100644
+index af645af..4ffca04 100644
 --- a/libopkg/upkg_rows.c
 +++ b/libopkg/upkg_rows.c
 @@ -43,7 +43,7 @@ static const char *sep_in(const char *s, size_t n)
@@ -360,14 +366,100 @@ index af645af..eed2a3f 100644
                  const char *ue = sep_in(u, ul);
  
                  free(r->installed);
+@@ -378,23 +378,22 @@ void upkg_lines_end(upkg_lines_t *l, upkg_line_fn emit, void *ctx)
+     }
+ }
+ 
+-/* true when a feed's control for NAME has "UP-Term-Interactive: yes" (the package asks questions
+- * of its own). The feed texts are in the lists dir, one file per feed; *.prev and *.sig are not
+- * feeds. A "Package: " line sets the current name. */
+-int upkg_rows_interactive(const char *name)
++/* The value of the control field FIELD of the package NAME in the feeds' Package lists (malloc), NULL when no feed
++ * has it. The feed texts are in the lists dir, one file per feed; *.prev and *.sig are not feeds. A "Package: " line
++ * sets the current name; the first FIELD line of NAME's stanza wins, trimmed like upkg_rows_control_field. */
++static char *feed_field(const char *name, const char *field)
+ {
+     const char *dir = getenv("UPKG_LISTS_DIR");
++    size_t fl = strlen(field);
+     DIR *d;
+     struct dirent *de;
+-    int found = 0;
++    char *found = NULL;
+ 
+-    if (upkg_uhc_name(name))
+-        return 0;       /* a UHC script asks nothing here: the feeds say nothing about it */
+     if (!dir || !*dir)
+         dir = opkg_config && opkg_config->lists_dir ? opkg_config->lists_dir : LISTS_DEFAULT;
+     d = opendir(dir);
+     if (!d)
+-        return 0;
++        return NULL;
+     while (!found && (de = readdir(d)) != NULL) {
+         size_t n = strlen(de->d_name);
+         char *path, cur[512], line[1024];
+@@ -411,13 +410,17 @@ int upkg_rows_interactive(const char *name)
+         cur[0] = '\0';
+         while (fgets(line, sizeof line, fp)) {
+             size_t k = strlen(line);
++            const char *v;
+ 
+-            while (k && (line[k - 1] == '\n' || line[k - 1] == '\r'))
++            while (k && (line[k - 1] == '\n' || line[k - 1] == '\r' || line[k - 1] == ' ' || line[k - 1] == '\t'))
+                 line[--k] = '\0';
+             if (!strncmp(line, "Package: ", 9)) {
+                 snprintf(cur, sizeof cur, "%s", line + 9);
+-            } else if (!strcmp(line, "UP-Term-Interactive: yes") && !strcmp(cur, name)) {
+-                found = 1;
++            } else if (!strncmp(line, field, fl) && line[fl] == ':' && !strcmp(cur, name)) {
++                v = line + fl + 1;
++                while (*v == ' ' || *v == '\t')
++                    v++;
++                found = xstrdup(v);
+                 break;
+             }
+         }
+@@ -427,6 +430,29 @@ int upkg_rows_interactive(const char *name)
+     return found;
+ }
+ 
++/* true when a feed's control for NAME has "UP-Term-Interactive: yes" (the package asks questions of its own) */
++int upkg_rows_interactive(const char *name)
++{
++    char *v;
++    int yes;
++
++    if (upkg_uhc_name(name))
++        return 0;       /* a UHC script asks nothing here: the feeds say nothing about it */
++    v = feed_field(name, "UP-Term-Interactive");
++    yes = v && !strcmp(v, "yes");
++    free(v);
++    return yes;
++}
++
++/* The "Launch:" line the feeds give the package NAME (malloc, "" when none): what --tsv shows for a package that is
++ * not installed, where there is no control file yet. */
++char *upkg_rows_feed_launch(const char *name)
++{
++    char *v = upkg_uhc_name(name) ? NULL : feed_field(name, "Launch");
++
++    return v ? v : xstrdup("");
++}
++
+ /* The value of FIELD in the control file at PATH: the text after "FIELD:" and its blanks up to the end of the
+  * line, trailing blanks and CR dropped. The first match wins; continuation lines (they start with a blank) are
+  * not part of a one-line field. */
 diff --git a/libopkg/upkg_rows.h b/libopkg/upkg_rows.h
-index 37e3bfb..94393c1 100644
+index 37e3bfb..b94c416 100644
 --- a/libopkg/upkg_rows.h
 +++ b/libopkg/upkg_rows.h
-@@ -67,6 +67,10 @@ char *upkg_rows_control_field(const char *path, const char *field);
+@@ -67,6 +67,14 @@ char *upkg_rows_control_field(const char *path, const char *field);
   * UPKG_INFO_DIR overrides the directory); malloc, "" when the package has none or is not installed. */
  char *upkg_rows_launch(const char *name);
  
++/* The "Launch:" line the feeds' Package lists give NAME (the lists dir; UPKG_LISTS_DIR overrides it); malloc, "" when
++ * none. For a package that is not installed; an installed one reads its control file (upkg_rows_launch). */
++char *upkg_rows_feed_launch(const char *name);
++
 +/* The text after "NAME - " in the first line of TEXT that starts so (its length in *LEN), else NULL: how a row finds
 + * itself in the list-installed and list-upgradable texts. NL is strlen(NAME). */
 +const char *upkg_rows_find_name(const char *text, const char *name, size_t nl, size_t *len);
@@ -375,8 +467,70 @@ index 37e3bfb..94393c1 100644
  /* The name the install/remove/upgrade commands take for ROW (malloc): its name, or "uhc:<name>" for a UHC row (D3). */
  char *upkg_rows_target(const upkg_row_t *r);
  
+diff --git a/libopkg/upkg_uhc.c b/libopkg/upkg_uhc.c
+index 5ec6d0d..de43610 100644
+--- a/libopkg/upkg_uhc.c
++++ b/libopkg/upkg_uhc.c
+@@ -407,6 +407,41 @@ void upkg_uhc_files_free(char **files, size_t n)
+     free(files);
+ }
+ 
++/* The launch command of the package NAME whose script is SCRIPT (malloc, "" for none): the program the script copies
++ * into ${UHC/EXTBIN}. Of the programs copied there the one named like the package (case-insensitive) wins, else the
++ * first. Read from the same file list upkg_uhc_files makes for remove (one Copy-line parser), so an ExtBin that
++ * ENV:UHC/EXTBIN does not name (the variable is unset), or a script with no Copy into it, gives "". */
++char *upkg_uhc_launch(const char *script, const char *name)
++{
++    char **files = NULL, *dir, *found = NULL;
++    size_t n, i, dl;
++    int dummy;
++
++    dir = expand("${UHC/EXTBIN}", &dummy);
++    if (!dir)
++        return xstrdup("");
++    dl = strlen(dir);
++    if (dl && dir[dl - 1] != '/' && dir[dl - 1] != ':')
++        dir[dl++] = '/', dir[dl] = '\0';
++    n = upkg_uhc_files(script, &files, NULL);
++    for (i = 0; i < n; i++) {
++        const char *base = base_of(files[i]);
++
++        if (strncasecmp(files[i], dir, dl) || !*base || base != files[i] + dl)
++            continue;               /* not a program copied straight into ExtBin */
++        if (!strcasecmp(base, name)) {
++            free(found);
++            found = xstrdup(files[i]);
++            break;
++        }
++        if (!found)
++            found = xstrdup(files[i]);
++    }
++    upkg_uhc_files_free(files, n);
++    free(dir);
++    return found ? found : xstrdup("");
++}
++
+ static int uhc_remove(const char *name)
+ {
+     char *script = upkg_uhc_script_path(upkg_uhc_dir(), name), *rec, **files;
+diff --git a/libopkg/upkg_uhc.h b/libopkg/upkg_uhc.h
+index d6e1227..34eb5e2 100644
+--- a/libopkg/upkg_uhc.h
++++ b/libopkg/upkg_uhc.h
+@@ -72,6 +72,11 @@ int upkg_uhc_rc(int rc);
+ size_t upkg_uhc_files(const char *script, char ***files, size_t *skipped);
+ void upkg_uhc_files_free(char **files, size_t n);
+ 
++/* The launch command for the package NAME whose script is SCRIPT (malloc; "" when there is none): the full path of the
++ * program the script copies into ${UHC/EXTBIN}, the one named like the package (case-insensitive) else the first.
++ * Uses the Copy-line parser of upkg_uhc_files. The value of --tsv field 7. */
++char *upkg_uhc_launch(const char *script, const char *name);
++
+ /* Run (install, upgrade) or take away (remove) the "uhc:<n>" entries of ARGV for the opkg command CMD, and delete
+  * them from ARGV (*ARGC drops). *RAN is how many ran. Returns 0, or the first failing exit code. */
+ int upkg_uhc_run_args(const char *cmd, int *argc, char **argv, int *ran);
 diff --git a/src/opkg.c b/src/opkg.c
-index 2290ec4..195f072 100644
+index 2290ec4..ef7b5c3 100644
 --- a/src/opkg.c
 +++ b/src/opkg.c
 @@ -64,6 +64,7 @@ enum {
@@ -413,19 +567,21 @@ index 2290ec4..195f072 100644
      upkg_help_text("\nForce Options:\n");
      upkg_help_row("--force-depends", "Install/remove despite failed dependencies");
      upkg_help_row("--force-maintainer", "Overwrite preexisting config files");
-@@ -574,6 +580,11 @@ static void usage(int status)
+@@ -574,6 +580,13 @@ static void usage(int status)
      upkg_help_para(" glob could be something like 'pkgname*' '*file*' or similar\n"
                     " e.g. upkg info 'libstd*' or upkg search '*libop*' or\n"
                     " upkg remove 'libncur*'\n");
 +    upkg_help_para(" --tsv rows: one line per package, nine tab-separated fields:\n"
 +                   " name version installed(0/1) upgradable(0/1) size section launch\n"
-+                   " src(upkg|uhc) description. An empty field is empty; tabs and\n"
++                   " src(upkg|uhc) description. launch: the Launch: of an ipk, for a UHC\n"
++                   " package the program its script copies to ExtBin. An empty field is\n"
++                   " empty; tabs and\n"
 +                   " newlines in a value become spaces. A UHC package is a row with\n"
 +                   " src uhc (install it as uhc:<name>). upkg list --tsv '*x*' filters.\n");
  
      /* --force-removal-of-essential-packages        Let opkg remove essential packages.
       * Using this option is almost guaranteed to break your system, hence this option
-@@ -719,6 +730,10 @@ int main(int argc, char *argv[])
+@@ -719,6 +732,10 @@ int main(int argc, char *argv[])
          }
      }
  

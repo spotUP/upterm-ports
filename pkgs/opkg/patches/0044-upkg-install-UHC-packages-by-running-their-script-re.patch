@@ -1,4 +1,4 @@
-From dbf653faf910c2b818e2463adfa9f58092c15b7d Mon Sep 17 00:00:00 2001
+From 6b52ba0b2fd174131c42afad9496a7eaeadb1545 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Tue, 27 Oct 2026 02:41:30 +0100
 Subject: [PATCH 44/46] upkg: install UHC packages by running their script,
@@ -13,9 +13,9 @@ uhc:<n> names the UHC package on a clash; Install All and Update All, launch and
  libopkg/upkg_rows.c   |  11 ++
  libopkg/upkg_rows.h   |   3 +
  libopkg/upkg_uhc.c    | 325 ++++++++++++++++++++++++++++++++++++++++++
- libopkg/upkg_uhc.h    |  31 ++++
+ libopkg/upkg_uhc.h    |  33 +++++
  libopkg/upkg_wb.c     |   5 +-
- 7 files changed, 401 insertions(+), 8 deletions(-)
+ 7 files changed, 403 insertions(+), 8 deletions(-)
 
 diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
 index 1354ac2..01967e3 100644
@@ -195,7 +195,7 @@ index ee72a74..37e3bfb 100644
   * Returns the action letter: 'l' launch (Enter on an installed row with a Launch line), 'r' remove (Delete on an
   * installed row), 'i', 'u', 'I', 'U' as typed (the last two on any row, none selected included), 0 for Enter on any other row (the info box) and for every key that does
 diff --git a/libopkg/upkg_uhc.c b/libopkg/upkg_uhc.c
-index 364b730..6bd1229 100644
+index 364b730..5ec6d0d 100644
 --- a/libopkg/upkg_uhc.c
 +++ b/libopkg/upkg_uhc.c
 @@ -11,9 +11,11 @@
@@ -243,7 +243,7 @@ index 364b730..6bd1229 100644
 +{
 +    char *path = upkg_uhc_script_path(dir, name), *s;
 +
-+    sprintf_alloc(&s, "Execute %s", path);
++    sprintf_alloc(&s, "Path UHC:C UHC:S ADD ; Execute %s", path);
 +    free(path);
 +    return s;
 +}
@@ -538,10 +538,10 @@ index 364b730..6bd1229 100644
 +    return rc;
 +}
 diff --git a/libopkg/upkg_uhc.h b/libopkg/upkg_uhc.h
-index c956da4..a94b765 100644
+index c956da4..d6e1227 100644
 --- a/libopkg/upkg_uhc.h
 +++ b/libopkg/upkg_uhc.h
-@@ -43,6 +43,37 @@ size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir);
+@@ -43,6 +43,39 @@ size_t upkg_uhc_read(upkg_uhc_t *u, const char *dir);
  
  void upkg_uhc_free(upkg_uhc_t *u);
  
@@ -557,7 +557,9 @@ index c956da4..a94b765 100644
 +/* DIR/NAME: the package script (malloc). DIR ends in a volume colon or a slash for no extra slash. */
 +char *upkg_uhc_script_path(const char *dir, const char *name);
 +
-+/* The command line that installs NAME: "Execute <script>" (malloc). The script is run itself, not through the
++/* The command line that installs NAME: "Path UHC:C UHC:S ADD ; Execute <script>" (malloc). The Path puts the UHC command
++ * and script drawers on the spawned shell's path: a shell started before the up-uhc User-Startup block ran lacks them
++ * and the script's first command (pkg-envcheck) is "Unknown command". The script is run itself, not through the
 + * `pkg` script, so the "already installed, proceed anyway (y/n)?" Ask of `pkg install` is never reached
 + * (a reinstall or upgrade is wanted here). */
 +char *upkg_uhc_install_line(const char *dir, const char *name);

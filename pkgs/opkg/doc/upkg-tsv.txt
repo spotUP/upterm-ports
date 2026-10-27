@@ -16,8 +16,13 @@ nine, in this order:
     5  size         bytes: installed size for an installed package, package
                     size otherwise; empty for a UHC row
     6  section      the Section: field of the feed entry; empty if none
-    7  launch       the Launch: field of the installed control file; empty
-                    for a package that is not installed and for a UHC row
+    7  launch       the command that starts the package; empty if none.
+                    Installed ipk: Launch: of the installed control file.
+                    Ipk not installed: Launch: of the feed index entry.
+                    UHC row (installed or not): the full path of the program
+                    the catalogue script copies into ${UHC/EXTBIN}, the one
+                    named like the package (any case) else the first, e.g.
+                    UP-Term:uhc/ExtBin/UnZip; empty if nothing goes there
     8  src          upkg (an ipk from a feed) or uhc (a UHC catalogue entry)
     9  description  first line of the description
 
