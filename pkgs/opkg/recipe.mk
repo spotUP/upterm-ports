@@ -71,7 +71,7 @@
 # (rows from upkg_rows_load), Install, Remove, Upgrade, Update, a read-only log listview and Quit; the sentinel is written once the
 # list is filled. The filter, the buttons a row enables and the listview line are pure functions in upkg_rows.c (check/rows_test.c).
 # Install, Remove, Upgrade and Update do nothing yet (UPKG-WB-UI G3).
-# patches/0041: xsystem retries read and waitpid on EINTR. ncurses catches SIGWINCH, so a resize while browse ran an install
+# patches/0042: xsystem retries read and waitpid on EINTR. ncurses catches SIGWINCH, so a resize while browse ran an install
 # ended the output pump (the pipe closed under the postinst) and left the child unreaped: the install failed with exit 20.
 # ixemul never restarts a call (SA_RESTART is recorded, not used), so the retry lives here. check/browse_resize.sh.
 opkg_VERSION   := 0.9.0
