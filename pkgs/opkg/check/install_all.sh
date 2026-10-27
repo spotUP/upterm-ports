@@ -6,7 +6,7 @@
 # The question pass here runs a counting stub ($UPKG_ASK_CMD) that answers "ANSWERED" to every question.
 # Asserts: the stub ran once per interactive package and before any postinst; the postinst of the interactive
 # package recorded ANSWERED (not the packaged default); a plain package installed; --all with names is refused;
-# a second `install --all` has nothing to do; `upgrade --all` upgrades like `upgrade`.
+# a second `install --all` has nothing to do; `upgrade --all` upgrades like `upgrade` and asks nothing (the postinst's stdin is empty).
 #   sh pkgs/opkg/check/install_all.sh build/host/opkg/inst/bin/upkg
 set -eu
 upkg=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
@@ -32,8 +32,9 @@ def build(feed, name, ver, interactive, upg=False):
         files.append((stage + 'questions', QUESTIONS, 0o644))
         # real shape of the generated postinst: ask over the staged questions, source the answers
         post = ('#!/bin/sh\nq=%s/T/upkg-stage/%s-%s/Files/questions\n'
-                '"$ASKBIN/upkg-ask" "$q" "$q.answers" %s-%s </dev/null && . "$q.answers"\n'
-                'echo "$flavour/$sure" >> "$ROOT/answers-%s"\n') % ('$ROOT', name, ver, name, ver, name)
+                '"$ASKBIN/upkg-ask" "$q" "$q.answers" %s-%s && . "$q.answers"\n'
+                'echo "$flavour/$sure" >> "$ROOT/answers-%s"\n'
+                'IFS= read -r line || line=EOF; echo "$line" >> "$ROOT/stdin-%s"\n') % ('$ROOT', name, ver, name, ver, name, name)
         ctl_files.append(('./postinst', post.encode(), 0o755))
     pkg = ipk(ctl_files, files)
     fn = '%s_%s_m68k-amigaos.ipk' % (name, ver)
@@ -81,7 +82,12 @@ grep -q "Every add-on in the feeds is installed" "$w/out" || { echo "[FAIL] seco
 
 conf feed2
 "$upkg" -f "$w/conf" update >/dev/null 2>&1
-"$upkg" -f "$w/conf" upgrade --all >"$w/out" 2>&1 || { echo "[FAIL] upgrade --all: rc=$? $(tail -n 8 "$w/out")"; exit 1; }
+echo TYPED | "$upkg" -f "$w/conf" upgrade --all >"$w/out" 2>&1 || { echo "[FAIL] upgrade --all: rc=$? $(tail -n 8 "$w/out")"; exit 1; }
 inst=$("$upkg" -f "$w/conf" list-installed 2>&1 | sort | tr '\n' ' ')
 [ "$inst" = "asky - 2.0 asky2 - 2.0 plain - 2.0 " ] || { echo "[FAIL] installed after upgrade --all: $inst"; exit 1; }
+# Update All asks no questions: the postinst of an upgraded package reads nothing from the terminal (its stdin is
+# /dev/null, so upkg-ask takes the defaults, a "<PATH" default being the answer the earlier install kept)
+for n in asky asky2; do
+  [ "$(tail -n 1 "$w/root/stdin-$n")" = "EOF" ] || { echo "[FAIL] $n postinst on upgrade --all could read the terminal: '$(tail -n 1 "$w/root/stdin-$n")'"; exit 1; }
+done
 echo "[OK] install --all asks each interactive package once up front, installs unattended with those answers; upgrade --all upgrades all"

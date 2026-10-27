@@ -1,4 +1,4 @@
-From e176b7c53b1452d099f736f4b93ae98de3b26787 Mon Sep 17 00:00:00 2001
+From 942aa13140d9e71373f156090fcf3ce2fb0ba3b7 Mon Sep 17 00:00:00 2001
 From: spotUP <retroranksmail@gmail.com>
 Date: Tue, 27 Oct 2026 00:19:55 +0100
 Subject: [PATCH 41/41] upkg: install --all, upgrade --all and Shift+I /
@@ -16,8 +16,8 @@ Subject: [PATCH 41/41] upkg: install --all, upgrade --all and Shift+I /
  libopkg/upkg_rows.h    |  15 +-
  libopkg/xsystem.c      |  15 +-
  libopkg/xsystem.h      |   3 +
- src/opkg.c             |  19 ++-
- 12 files changed, 577 insertions(+), 16 deletions(-)
+ src/opkg.c             |  31 +++-
+ 12 files changed, 588 insertions(+), 17 deletions(-)
  create mode 100644 libopkg/upkg_all.c
  create mode 100644 libopkg/upkg_all.h
 
@@ -821,18 +821,19 @@ index 9605594..382d442 100644
  }
  #endif
 diff --git a/src/opkg.c b/src/opkg.c
-index 29b578f..2b4289e 100644
+index 29b578f..2290ec4 100644
 --- a/src/opkg.c
 +++ b/src/opkg.c
-@@ -40,6 +40,7 @@
+@@ -40,6 +40,8 @@
  #include "xfuncs.h"
  #include "upkg_wrap.h"
  #include "upkg_wb.h"
 +#include "upkg_all.h"
++#include "xsystem.h"
  
  /* every message follows the console width; piped it is a plain printf / fprintf */
  #define printf upkg_printf
-@@ -76,10 +77,14 @@ enum {
+@@ -76,10 +78,14 @@ enum {
      ARGS_OPT_HOST_CACHE_DIR,
      ARGS_OPT_SHORT_DESCRIPTION,
      ARGS_OPT_FIELDS_FILTER,
@@ -847,7 +848,7 @@ index 29b578f..2b4289e 100644
      {"autoremove", 0, 0, ARGS_OPT_AUTOREMOVE},
      {"conf-file", 1, 0, 'f'},
      {"conf", 1, 0, 'f'},
-@@ -344,6 +349,9 @@ static int args_parse_stage2(int argc, char *argv[])
+@@ -344,6 +350,9 @@ static int args_parse_stage2(int argc, char *argv[])
          case ARGS_OPT_SHORT_DESCRIPTION:
             opkg_config->short_description = 1;
             break;
@@ -857,7 +858,7 @@ index 29b578f..2b4289e 100644
          case ARGS_OPT_FIELDS_FILTER:
              store_str_arg(&opkg_config->fields_filter, optarg);
              break;
-@@ -482,8 +490,10 @@ static void usage(int status)
+@@ -482,8 +491,10 @@ static void usage(int status)
      upkg_help_text("\nPackage Manipulation:\n");
      upkg_help_row("update", "Update list of available packages");
      upkg_help_row("upgrade", "Upgrade installed packages");
@@ -868,7 +869,7 @@ index 29b578f..2b4289e 100644
      upkg_help_row("configure <pkgs>", "Configure unpacked package(s)");
      upkg_help_row("remove <pkgs|glob>", "Remove package(s)");
      upkg_help_row("clean", "Clean internal cache");
-@@ -718,7 +728,12 @@ int main(int argc, char *argv[])
+@@ -718,7 +729,12 @@ int main(int argc, char *argv[])
              goto err1;
      }
  
@@ -882,15 +883,27 @@ index 29b578f..2b4289e 100644
          fprintf(stderr, "%s: the ``%s'' command requires at least one argument\n",
                  argv[0], cmd_name);
          usage(1);
-@@ -727,6 +742,8 @@ int main(int argc, char *argv[])
+@@ -727,8 +743,19 @@ int main(int argc, char *argv[])
      argc = full_argc;
      if (wb)
          err = upkg_wb((struct WBStartup *)argv);
+-    else
 +    else if (all_flag && !strcmp(cmd_name, "install"))
 +        err = upkg_all_install_cli();
-     else
++    else {
++        /* Update All asks no questions: a script of an upgraded package reads nothing from the terminal, so
++         * upkg-ask takes the defaults, and a "<PATH" default is the answer the earlier install kept. */
++        int upgrading = !strcmp(cmd_name, "upgrade");
++
++        if (upgrading)
++            upkg_xsystem_unattended(1);
          err = opkg_cmd_exec(cmd, argc - opts, (const char **)(argv + opts));
++        if (upgrading)
++            upkg_xsystem_unattended(0);
++    }
  
+     opkg_download_cleanup();
+  err1:
 -- 
 2.50.1 (Apple Git-155)
 
