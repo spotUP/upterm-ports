@@ -1,0 +1,127 @@
+From 1b9862f5a22db50d4a21b09599668b81d1292aa9 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 21:07:05 +0100
+Subject: [PATCH] upkg: register m68k-amigaos-fpu at priority 20 on a
+ 68040/68060 with an FPU
+
+At startup opkg_conf_load reads SysBase->AttnFlags (upkg_attn_flags; on the host $UPKG_ATTN_FLAGS). When an FPU flag
+(AFF_68881, AFF_68882, AFF_FPU40) and AFF_68040 or AFF_68060 are set, upkg_fpu_arch_wanted says yes and the arch
+m68k-amigaos-fpu is appended to arch_list at priority 20, as --add-arch would. m68k-amigaos keeps priority 10. The FPU
+builds are compiled -m68060, so a 68030 with a 68882 gets no fpu arch. The conf file stays static.
+---
+ libopkg/CMakeLists.txt |  2 ++
+ libopkg/opkg_conf.c    |  6 ++++++
+ libopkg/upkg_cpu.c     | 28 ++++++++++++++++++++++++++++
+ libopkg/upkg_cpu.h     | 21 +++++++++++++++++++++
+ 4 files changed, 57 insertions(+)
+ create mode 100644 libopkg/upkg_cpu.c
+ create mode 100644 libopkg/upkg_cpu.h
+
+diff --git a/libopkg/CMakeLists.txt b/libopkg/CMakeLists.txt
+index f004fbc..1361de0 100644
+--- a/libopkg/CMakeLists.txt
++++ b/libopkg/CMakeLists.txt
+@@ -23,6 +23,7 @@ set(HEADER_FILES
+     opkg_install.h
+     opkg_message.h
+     upkg_wrap.h
++    upkg_cpu.h
+     upkg_rows.h
+     upkg_uhc.h
+     upkg_all.h
+@@ -107,6 +108,7 @@ set(SOURCE_FILES
+     opkg_message.c
+     upkg_wrap.c
+     upkg_browse.c
++    upkg_cpu.c
+     upkg_rows.c
+     upkg_uhc.c
+     upkg_all.c
+diff --git a/libopkg/opkg_conf.c b/libopkg/opkg_conf.c
+index 6558577..7c8f35c 100644
+--- a/libopkg/opkg_conf.c
++++ b/libopkg/opkg_conf.c
+@@ -33,6 +33,7 @@
+ #include <string.h>
+ #include <errno.h>
+ 
++#include "upkg_cpu.h"
+ #include "opkg_conf.h"
+ #include "pkg_vec.h"
+ #include "pkg.h"
+@@ -951,6 +952,11 @@ int opkg_conf_finalize(void)
+         nv_pair_list_append(&opkg_config->arch_list, HOST_CPU_STR, "10");
+     }
+ 
++    /* upkg: a 68040/68060 with an FPU also takes the m68k-amigaos-fpu builds, at a higher priority than m68k-amigaos.
++     * The conf file stays static; the next upgrade follows a changed accelerator card. */
++    if (upkg_fpu_arch_wanted(upkg_attn_flags()))
++        nv_pair_list_append(&opkg_config->arch_list, UPKG_FPU_ARCH, UPKG_FPU_ARCH_PRIO);
++
+     /* Even if there is no conf file, we'll need at least one dest. */
+     if (nv_pair_list_empty(&opkg_config->tmp_dest_list)) {
+         nv_pair_list_append(&opkg_config->tmp_dest_list,
+diff --git a/libopkg/upkg_cpu.c b/libopkg/upkg_cpu.c
+new file mode 100644
+index 0000000..8687cfd
+--- /dev/null
++++ b/libopkg/upkg_cpu.c
+@@ -0,0 +1,28 @@
++/* upkg: CPU and FPU probe (see upkg_cpu.h) */
++#include "upkg_cpu.h"
++
++#ifdef __amigaos__
++#include <exec/execbase.h>
++#include <proto/exec.h>
++#else
++#include <stdlib.h>
++#endif
++
++int upkg_fpu_arch_wanted(unsigned attn)
++{
++    int fpu = (attn & (UPKG_AFF_68881 | UPKG_AFF_68882 | UPKG_AFF_FPU40)) != 0;
++    int cpu = (attn & (UPKG_AFF_68040 | UPKG_AFF_68060)) != 0;
++
++    return fpu && cpu;
++}
++
++unsigned upkg_attn_flags(void)
++{
++#ifdef __amigaos__
++    return (unsigned) SysBase->AttnFlags;
++#else
++    const char *e = getenv("UPKG_ATTN_FLAGS");
++
++    return e ? (unsigned) strtoul(e, NULL, 0) : 0;
++#endif
++}
+diff --git a/libopkg/upkg_cpu.h b/libopkg/upkg_cpu.h
+new file mode 100644
+index 0000000..722239d
+--- /dev/null
++++ b/libopkg/upkg_cpu.h
+@@ -0,0 +1,21 @@
++/* upkg: CPU and FPU probe. An FPU build of an add-on (architecture m68k-amigaos-fpu) is compiled -m68060, so it needs a
++ * 68040 or 68060 AND an FPU. A 68030 with a 68882 gets the 68020 build. */
++#ifndef UPKG_CPU_H
++#define UPKG_CPU_H
++
++#define UPKG_AFF_68040 (1u << 3)
++#define UPKG_AFF_68881 (1u << 4)
++#define UPKG_AFF_68882 (1u << 5)
++#define UPKG_AFF_FPU40 (1u << 6)
++#define UPKG_AFF_68060 (1u << 7)
++
++#define UPKG_FPU_ARCH "m68k-amigaos-fpu"
++#define UPKG_FPU_ARCH_PRIO "20"
++
++/* 1 when ATTN (an exec AttnFlags value) has an FPU flag and the CPU is a 68040 or 68060 */
++int upkg_fpu_arch_wanted(unsigned attn);
++
++/* the AttnFlags of this machine: SysBase->AttnFlags on the Amiga; on the host the number in $UPKG_ATTN_FLAGS (0 when unset) */
++unsigned upkg_attn_flags(void);
++
++#endif
+-- 
+2.50.1 (Apple Git-155)
+
