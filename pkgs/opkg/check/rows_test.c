@@ -8,6 +8,14 @@
 #include <string.h>
 #include <unistd.h>
 
+/* upkg_progress (at the end of upkg_rows.c) prints through opkg_msg: stub it */
+#include "opkg_message.h"
+void opkg_message(message_level_t level, const char *fmt, ...)
+{
+    (void)level;
+    (void)fmt;
+}
+
 #include "upkg_rows.c"
 
 void *xmalloc(size_t n) { void *p = malloc(n ? n : 1); if (!p) abort(); return p; }

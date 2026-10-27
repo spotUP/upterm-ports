@@ -54,7 +54,7 @@ grep -aq '|  unzip  *available' "$w/plain" || grep -aq '  unzip  *available 1.0'
 printf '300 \\eOB\n100 \\eOB\n100 \\eOB\n100 i\n2500 \\r\n800 q\n' > "$w/k2"
 run "$w/k2"
 [ -f "$w/exec.log" ] || fail "i on uhc:lzx never reached the UHC runner (no Execute call)"
-grep -q "uhc/lzx\$\|/lzx\$" "$w/exec.log" || fail "the UHC runner was not given the lzx script: $(cat "$w/exec.log")"
+grep -q "uhc/lzx\$\|/lzx\$\|upkg-uhc-lzx\$" "$w/exec.log" || fail "the UHC runner was not given the lzx script: $(cat "$w/exec.log")"
 grep -q "upkg install uhc:lzx" "$w/plain" || fail "the progress box does not name uhc:lzx"
 # i on the 2nd row (the ipk unzip) installs the feed package and does not reach the runner
 rm -f "$w/exec.log"

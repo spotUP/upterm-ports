@@ -8,6 +8,12 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+/* the progress lines and the failure class live in upkg_rows.c; not under test here */
+int upkg_fail_class;
+void upkg_progress_plan(int m) { (void)m; }
+void upkg_progress_next(void) {}
+void upkg_progress(const char *phase, const char *name) { (void)phase; (void)name; }
+
 #include "upkg_uhc.c"
 
 /* upkg_uhc.c runs scripts through xsystem; uhc_run_test.c covers that path, here it is never reached */

@@ -55,11 +55,11 @@ has "$w/o" "uhc:unzip - 5.40 - 5.42" "list-upgradable"
 # name search: the glob reaches the UHC rows; no match is still an error
 u list '*lz*' >"$w/o" 2>&1; has "$w/o" "uhc:lzx - 1.21r - Compressor and decompressor for lzx archives" "glob"
 u list 'uhc:lzx' >"$w/o" 2>&1 && [ "$(wc -l <"$w/o" | tr -d ' ')" = 1 ] || fail "uhc:lzx glob: $(cat "$w/o")"
-rc=0; u list '*nothing*' >/dev/null 2>&1 || rc=$?; [ "$rc" = 1 ] || fail "no-match glob rc=$rc"
+rc=0; u list '*nothing*' >/dev/null 2>&1 || rc=$?; [ "$rc" = 5 ] || fail "no-match glob rc=$rc"
 # info
 u info uhc:lzx >"$w/o" 2>&1
 has "$w/o" "Package: uhc:lzx" "info"; has "$w/o" "Version: 1.21r" "info"; has "$w/o" "Status: not installed" "info"
-rc=0; u info uhc:nosuch >/dev/null 2>&1 || rc=$?; [ "$rc" = 1 ] || fail "info of a missing uhc package rc=$rc"
+rc=0; u info uhc:nosuch >/dev/null 2>&1 || rc=$?; [ "$rc" = 12 ] || fail "info of a missing uhc package rc=$rc"
 
 # --tsv: exact rows, nine columns everywhere
 u list --tsv >"$w/t"

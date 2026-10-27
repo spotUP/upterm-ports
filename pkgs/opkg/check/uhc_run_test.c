@@ -9,6 +9,25 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+/* the progress lines and the failure class live in upkg_rows.c; here they are recorded, not printed */
+int upkg_fail_class;
+static int prog_plan, prog_n;
+void upkg_progress_plan(int m)
+{
+    prog_plan = m;
+    prog_n = 0;
+}
+void upkg_progress_next(void)
+{
+    prog_n++;
+}
+void upkg_progress(const char *phase, const char *name)
+{
+    (void)phase;
+    (void)name;
+    prog_n++;
+}
+
 #include "upkg_uhc.c"
 
 void *xmalloc(size_t n) { void *p = malloc(n ? n : 1); if (!p) abort(); return p; }
@@ -190,7 +209,7 @@ int main(int argc, char **argv)
     s = upkg_uhc_install_line(upkg_uhc_dir(), "unzip"); CHECK(!strcmp(s, "Execute /tmp/upkg-uhc-unzip")); free(s);
     s = upkg_uhc_wrapper_text(upkg_uhc_dir(), "unzip"); CHECK(!strcmp(s, "Path UHC:C UHC:S ADD\nExecute UP-Term:uhc/Packages/unzip\n")); free(s);
     s = upkg_uhc_script_path("UP-Term:", "x"); CHECK(!strcmp(s, "UP-Term:x")); free(s);
-    CHECK(upkg_uhc_rc(0) == 0 && upkg_uhc_rc(20) == 20 && upkg_uhc_rc(5) == 5 && upkg_uhc_rc(-1) == 20);
+    CHECK(upkg_uhc_rc(0) == 0 && upkg_uhc_rc(20) == 14 && upkg_uhc_rc(5) == 14 && upkg_uhc_rc(-1) == 20);
 
     /* install: only the uhc: names run, in order, the others stay in argv for opkg */
     x_calls = 0; x_rc = 0;
@@ -208,11 +227,11 @@ int main(int argc, char **argv)
     args[0] = (char *)"unzip"; ac = 1;
     rc = upkg_uhc_run_args("install", &ac, args, &ran);
     CHECK(rc == 0 && ran == 0 && x_calls == 0 && ac == 1);
-    /* UHCRC 20 is the exit code; the first failure wins */
+    /* a script that returns 20 is UPKG_RC_SCRIPT (14); the first failure wins */
     x_rc = 20; x_calls = 0;
     args[0] = (char *)"uhc:unzip"; args[1] = (char *)"uhc:curl"; ac = 2;
     rc = upkg_uhc_run_args("upgrade", &ac, args, &ran);
-    CHECK(rc == 20 && ran == 2 && ac == 0 && x_calls == 2);
+    CHECK(rc == 14 && ran == 2 && ac == 0 && x_calls == 2);
     x_rc = -1;
     args[0] = (char *)"uhc:unzip"; ac = 1;
     rc = upkg_uhc_run_args("install", &ac, args, &ran);

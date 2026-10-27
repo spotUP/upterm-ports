@@ -126,3 +126,6 @@ Force Options:
  empty; tabs and
  newlines in a value become spaces. A UHC package is a row with
  src uhc (install it as uhc:<name>). upkg list --tsv '*x*' filters.
+ Exit codes, and the [PROGRESS n/m] lines a pipe gets: doc/upkg-api.txt
+ (0 ok, 5 nothing matched, 10 error, 11 usage, 12 not found, 13 network,
+ 14 script failed, 15 needs a terminal for questions, 20 fail).
