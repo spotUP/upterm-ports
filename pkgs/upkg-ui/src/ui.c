@@ -651,6 +651,12 @@ static int key_menu(int fn, wint_t c)
 				return 0;
 			}
 			break;
+		case KEY_RIGHT: /* same rule as Left: only a caller that lists UI_HOTKEY_RIGHT hears it */
+			if (ui_opt.hotkeys && strchr(ui_opt.hotkeys, UI_HOTKEY_RIGHT)) {
+				hotkey = UI_HOTKEY_RIGHT;
+				return 0;
+			}
+			break;
 		case KEY_BACKSPACE: /* keypad mode turns 8 and 127 into these: back to the bytes a hotkey list names */
 		case KEY_DC:
 			if (ui_opt.hotkeys && strchr(ui_opt.hotkeys, c == KEY_DC ? 127 : 8)) {
