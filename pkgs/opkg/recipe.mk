@@ -96,6 +96,9 @@
 # patches/0053: the download child no longer holds the lock descriptor. opkg_lock sets FD_CLOEXEC on it and xsystem's vfork child closes it
 # before execvp (ixemul keeps the bit but no exec path reads it), so an orphan curl after Ctrl-C cannot keep upkg locked (rc 20 on the next
 # update). check/lock_child.sh (fake curl lists its open files; host record locks die with the process, so it checks the cause).
+# patches/0054: upkg list --tsv prints one row per package name, the highest version, with the name's installed and upgradable flags
+# (it printed one row per feed version with the same flags: up-pi 1.0 installed + 1.1 in the feed gave two "1 1" rows). list-installed and
+# list-upgradable are unchanged; the text `upkg list` still prints one line per version (stock opkg). check/tsv_one_row.sh.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

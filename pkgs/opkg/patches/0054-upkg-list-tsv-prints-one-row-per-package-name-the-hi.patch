@@ -1,0 +1,60 @@
+From b082917ac4ee57d2856118a8182f814824137cf3 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Tue, 27 Oct 2026 19:26:14 +0100
+Subject: [PATCH 54/54] upkg: list --tsv prints one row per package name, the
+ highest version
+
+upkg_list_tsv walked pkg_hash_fetch_available(), one pkg_t per version in the feeds, and looked
+installed and upgradable up by name, so every version row got the same flags: up-pi 1.0 installed with
+1.1 in the feed printed '1.1 1 1' and '1.0 1 1'. For list (UPKG_LIST_ALL) only the highest version of a
+name (pkg_compare_versions over the same-name run after the name sort) is a row. list-installed and
+list-upgradable are unchanged.
+---
+ libopkg/opkg_cmd.c | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
+index c0207dd..95133fc 100644
+--- a/libopkg/opkg_cmd.c
++++ b/libopkg/opkg_cmd.c
+@@ -774,6 +774,28 @@ static unsigned int upkg_uhc_print(FILE *out, int which, const char *glob)
+     return shown;
+ }
+ 
++/* 1 when VEC (sorted by name) holds another entry of the same name as entry I with a higher version, or an equal one
++ * before I: `upkg list --tsv` shows one row per name, the highest version */
++static int upkg_tsv_not_highest(pkg_vec_t *vec, unsigned int i)
++{
++    unsigned int k, lo = i, hi = i;
++
++    while (lo > 0 && !strcmp(vec->pkgs[lo - 1]->name, vec->pkgs[i]->name))
++        lo--;
++    while (hi + 1 < vec->len && !strcmp(vec->pkgs[hi + 1]->name, vec->pkgs[i]->name))
++        hi++;
++    for (k = lo; k <= hi; k++) {
++        int c;
++
++        if (k == i)
++            continue;
++        c = pkg_compare_versions(vec->pkgs[k], vec->pkgs[i]);
++        if (c > 0 || (c == 0 && k < i))
++            return 1;
++    }
++    return 0;
++}
++
+ /* `upkg list|list-installed|list-upgradable --tsv [glob]`: one load of the package hash (and the drawer), one row
+  * per package, the feed rows then the UHC rows. */
+ static int upkg_list_tsv(FILE *out, int which, int argc, char **argv)
+@@ -804,6 +826,8 @@ static int upkg_list_tsv(FILE *out, int which, int argc, char **argv)
+ 
+         if (glob && fnmatch(glob, pkg->name, 0))
+             continue;
++        if (which == UPKG_LIST_ALL && upkg_tsv_not_highest(vec, i))
++            continue;
+         installed = which == UPKG_LIST_INSTALLED || pkg_hash_fetch_installed_by_name(pkg->name) != NULL;
+         ver = pkg_version_str_alloc(pkg);
+         if (which == UPKG_LIST_UPGRADABLE) {
+-- 
+2.50.1 (Apple Git-155)
+
