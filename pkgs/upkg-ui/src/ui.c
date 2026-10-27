@@ -3,6 +3,9 @@
  * upkg-ui binary (add-on install questions, upkg-ask) and `upkg browse` (inside upkg) both link
  * it, so there is one set of widgets. The line builders are in chrome.c (pure, unit tested);
  * this file is curses and state. ui.h is the interface. */
+/* wcwidth: glibc declares it only under __USE_XOPEN, which _XOPEN_SOURCE_EXTENDED alone does not
+ * set; _GNU_SOURCE does, and adds nothing for ixemul or the Mac (ports CI, Linux host build) */
+#define _GNU_SOURCE 1
 #define _XOPEN_SOURCE_EXTENDED 1
 #include <ctype.h>
 #include <langinfo.h>
@@ -721,6 +724,12 @@ static int run(void)
 		}
 		early = 0;
 		if (r == KEY_CODE_YES && c == KEY_RESIZE) {
+			/* the terminal's contents are unknown after a resize: vtcon reflows its normal
+			 * screen, where this UI lives (no smcup), and ncurses repaints in full only when
+			 * the size it reads has changed (resizeterm's clearok). A KEY_RESIZE at a size it
+			 * already knows sent only the diff, and the reflowed rows stayed (A1200: every
+			 * second row blank after a Shell resize). check/resize.sh */
+			clearok(curscr, TRUE);
 			redraw = 1;
 			continue;
 		}
