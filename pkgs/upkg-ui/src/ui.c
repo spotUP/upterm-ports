@@ -229,6 +229,7 @@ static int msel, mtop;
 
 /* the button row: labels split from --buttons (or Yes,No / OK), the selected one, the accepted one */
 static char *blabel[MAX_BUTTONS];
+static char *blist; /* the strdup'd --buttons text the labels point into; freed by the next split and ui_stop */
 static int nbtn, bsel, bchosen;
 
 /* textbox and programbox: stored lines, and the wrapped rows drawn from them */
@@ -794,9 +795,12 @@ const char *ui_init_buttons(void)
 		blabel[0] = "OK", nbtn = 1;
 		return NULL;
 	}
+	free(blist);
+	blist = NULL;
 	list = strdup(ui_opt.buttons);
 	if (!list)
 		return "out of memory";
+	blist = list;
 	for (p = list; nbtn < MAX_BUTTONS; ) {
 		blabel[nbtn++] = p;
 		p = strchr(p, ',');
@@ -930,6 +934,8 @@ void ui_prepare(void)
 	}
 }
 
+static SCREEN *screen; /* the SCREEN newterm made; ui_stop deletes it */
+
 int ui_start(const char *who)
 {
 	SCREEN *scr;
@@ -947,6 +953,7 @@ int ui_start(const char *who)
 		fprintf(stderr, "%s: cannot initialise the terminal\n", who);
 		return 2;
 	}
+	screen = scr;
 	set_term(scr);
 	if (!ui_opt.keep_tite)
 		leave_alternate_screen();
@@ -961,9 +968,44 @@ int ui_start(const char *who)
 	return 0;
 }
 
+/* The inverse of ui_start: the terminal modes go back, the SCREEN and the key stream are released
+ * and every file-scope widget state is reset, so ui_start can run again in the same process (a
+ * server that opens a console window per menu). ui_opt belongs to the caller and is left alone. */
 void ui_stop(void)
 {
 	endwin();
+	if (screen) {
+		delscreen(screen);
+		screen = NULL;
+	}
+	if (keyfp) {
+		fclose(keyfp);
+		keyfp = NULL;
+	}
+	clear_lines();
+	free(lines);
+	lines = NULL;
+	nlines = lcap = 0;
+	free(rows);
+	rows = NULL;
+	nrows = rcap = rows_lines = rows_w = 0;
+	free(blist);
+	blist = NULL;
+	memset(blabel, 0, sizeof blabel);
+	nbtn = bsel = bchosen = 0;
+	memset(buf, 0, sizeof buf);
+	blen = bpos = boff = bx = by = 0;
+	msel = mtop = 0;
+	widget_row = 0;
+	tbtop = follow = pdone = 0;
+	hotkey = 0;
+	tick = pair_n = 0;
+	osd = 0;
+	utf8 = 0;
+	a_chrome = a_ink = a_dim = a_acc = a_sel = a_field = 0;
+	memset(a_col, 0, sizeof a_col);
+	tick_fn = NULL;
+	tick_ctx = NULL;
 }
 
 void ui_suspend(void)
