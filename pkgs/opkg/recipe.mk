@@ -77,6 +77,7 @@
 # same version: installed, other version: upgrade); a name in both sources keeps both rows. check/rows.sh + rows_test.c.
 # patches/0045: upkg list, list-installed, list-upgradable add the UHC rows (text rows tagged uhc:<name>); --tsv prints nine tab-separated
 # fields per row (doc/upkg-tsv.txt); info uhc:<name>. check/uhc_list.sh.
+# patches/0046: upkg browse shows a UHC row as uhc:<name> in the tag column (selection, info and the commands use that tag); check/browse_uhc.sh.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5
