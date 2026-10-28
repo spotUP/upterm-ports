@@ -1,0 +1,5 @@
+# Offline cases only: the rig and the CI host have no shared server. https is checked by hand on a rig (see check/tls.sh).
+unsupported	curl -s nosuch://example
+malformed	curl -s "http://"
+badoption	curl --nosuchoption
+missing-file	curl -s file:///nonexistent-upterm/x
