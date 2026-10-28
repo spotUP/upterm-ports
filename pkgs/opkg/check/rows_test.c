@@ -71,6 +71,8 @@ int opkg_cmd_exec(opkg_cmd_t *cmd, int argc, const char **argv)
     return exec_rc;
 }
 opkg_conf_t *opkg_config;
+/* the opkg status hash is not linked here: upkg_uhc.c asks upkg_ipk_installed, no ipk is installed in this test */
+int upkg_ipk_installed(const char *name) { (void)name; return 0; }
 void pkg_hash_deinit(void) { deinit_calls++; }
 void pkg_hash_init(void) { init_calls++; }
 int pkg_hash_load_feeds(void) { feeds_calls++; return 0; }

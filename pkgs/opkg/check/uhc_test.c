@@ -14,6 +14,10 @@ void upkg_progress_plan(int m) { (void)m; }
 void upkg_progress_next(void) {}
 void upkg_progress(const char *phase, const char *name) { (void)phase; (void)name; }
 
+/* the opkg status hash is not linked here: upkg_ipk_installed answers from this flag */
+static int ipk_has;
+int upkg_ipk_installed(const char *name) { (void)name; return ipk_has; }
+
 #include "upkg_uhc.c"
 
 /* upkg_uhc.c runs scripts through xsystem; uhc_run_test.c covers that path, here it is never reached */
@@ -68,6 +72,25 @@ int main(int argc, char **argv)
     CHECK(!strcmp(u.pkg[0].installed, "7.10.5"));    /* current */
     CHECK(!strcmp(u.pkg[1].installed, ""));          /* not installed */
     CHECK(!strcmp(u.pkg[2].installed, "5.40"));      /* older than the script's 5.42 */
+
+    /* patch 0059: `upkg remove <bare>` resolves a name installed only as UHC to that UHC package; the fixture
+     * drawer has Installed/unzip and Installed/curl, not Installed/lzx */
+    {
+        const char *n = NULL;
+
+        CHECK(upkg_uhc_resolve_remove("unzip", 0, &n) == UPKG_RM_UHC && n && !strcmp(n, "unzip"));
+        n = NULL;
+        CHECK(upkg_uhc_resolve_remove("uhc:curl", 0, &n) == UPKG_RM_UHC && n && !strcmp(n, "curl"));
+        n = NULL;
+        CHECK(upkg_uhc_resolve_remove("uhc:unzip", 1, &n) == UPKG_RM_UHC && n && !strcmp(n, "unzip"));   /* the prefix is explicit */
+        CHECK(upkg_uhc_resolve_remove("unzip", 1, &n) == UPKG_RM_AMBIGUOUS);     /* installed as ipk and as UHC */
+        CHECK(upkg_uhc_resolve_remove("unzip", 1, NULL) == UPKG_RM_AMBIGUOUS);
+        CHECK(upkg_uhc_resolve_remove("nope", 0, &n) == UPKG_RM_NOT_UHC);        /* in neither: opkg reports it */
+        CHECK(upkg_uhc_resolve_remove("lzx", 0, &n) == UPKG_RM_NOT_UHC);         /* in the catalogue, not installed */
+        CHECK(upkg_uhc_resolve_remove("curl", 1, &n) == UPKG_RM_AMBIGUOUS);
+        CHECK(upkg_uhc_resolve_remove("../unzip", 0, &n) == UPKG_RM_NOT_UHC);    /* never leaves Installed/ */
+        CHECK(upkg_uhc_resolve_remove("-v", 0, &n) == UPKG_RM_NOT_UHC);
+    }
 
     /* odd drawers */
     snprintf(odd, sizeof odd, "%s/odd", argv[2]);

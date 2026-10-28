@@ -109,6 +109,8 @@
 # them and the next status write lost them). pkg_arch_switch; check/fpu_upgrade_switch.sh.
 # patches/0058: -1 (xsystem's own failure: curl killed by a signal, as after Ctrl-C, or a failed fork) reads "curl did not finish";
 # the PATH hint stays for 127 and 255 only. check/curl_msg.sh (fake curl that kills itself).
+# patches/0059: upkg remove <name> removes a bare name installed only as UHC (what list-installed shows as uhc:<name>); installed both ways
+# it prints the conflict and exits 20 (upkg_uhc_resolve_remove; remove only, install/upgrade/info/list keep D3). check/uhc.sh, check/uhc_run.sh.
 opkg_VERSION   := 0.9.0
 opkg_URL       := https://downloads.yoctoproject.org/releases/opkg/opkg-$(opkg_VERSION).tar.gz
 opkg_SHA256    := 440ef321862e01f83da4d02884a0cbb4d9d7b32f82faa81a6a85493f0c89d0f5

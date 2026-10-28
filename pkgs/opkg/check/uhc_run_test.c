@@ -28,6 +28,10 @@ void upkg_progress(const char *phase, const char *name)
     prog_n++;
 }
 
+/* the opkg status hash is not linked here: upkg_ipk_installed answers from this flag */
+static int ipk_has;
+int upkg_ipk_installed(const char *name) { (void)name; return ipk_has; }
+
 #include "upkg_uhc.c"
 
 void *xmalloc(size_t n) { void *p = malloc(n ? n : 1); if (!p) abort(); return p; }
@@ -188,6 +192,28 @@ int main(int argc, char **argv)
         snprintf(p, sizeof p, "%s/Packages/Installed/unzip", argv[2]); CHECK(access(p, F_OK) != 0);
         snprintf(p, sizeof p, "%s/bin/other", argv[2]); CHECK(access(p, F_OK) == 0);       /* only the named files go */
         snprintf(p, sizeof p, "%s/Packages/unzip", argv[2]); CHECK(access(p, F_OK) == 0);  /* the script stays */
+        /* patch 0059: the bare name `unzip` (what list-installed shows without the prefix) removes the UHC package when no
+         * ipk of that name is installed; installed both ways it removes nothing, stays in argv and exits 20 */
+        snprintf(p, sizeof p, "%s/Packages/Installed/unzip", argv[2]); put(p, "5.42\n");
+        snprintf(p, sizeof p, "%s/bin/UnZip", argv[2]); put(p, "x");
+        ipk_has = 1;
+        args[0] = (char *)"unzip"; ac = 1;
+        rc = upkg_uhc_run_args("remove", &ac, args, &ran);
+        CHECK(rc == 20 && ac == 1 && ran == 0);
+        snprintf(p, sizeof p, "%s/bin/UnZip", argv[2]); CHECK(access(p, F_OK) == 0);
+        snprintf(p, sizeof p, "%s/Packages/Installed/unzip", argv[2]); CHECK(access(p, F_OK) == 0);
+        ipk_has = 0;
+        args[0] = (char *)"unzip"; args[1] = (char *)"someipk"; ac = 2;
+        rc = upkg_uhc_run_args("remove", &ac, args, &ran);
+        CHECK(rc == 0 && ran == 1 && ac == 1 && !strcmp(args[0], "someipk"));       /* the ipk name stays for opkg */
+        snprintf(p, sizeof p, "%s/bin/UnZip", argv[2]); CHECK(access(p, F_OK) != 0);
+        snprintf(p, sizeof p, "%s/Packages/Installed/unzip", argv[2]); CHECK(access(p, F_OK) != 0);
+        /* upgrade keeps D3: a bare name is the ipk */
+        snprintf(p, sizeof p, "%s/Packages/Installed/unzip", argv[2]); put(p, "5.42\n");
+        args[0] = (char *)"unzip"; ac = 1; x_calls = 0;
+        rc = upkg_uhc_run_args("upgrade", &ac, args, &ran);
+        CHECK(rc == 0 && ran == 0 && ac == 1 && x_calls == 0);
+        snprintf(p, sizeof p, "%s/bin/UnZip", argv[2]); put(p, "x");
         /* refuses when the parse finds nothing: the variables are unset, the Installed record stays */
         snprintf(p, sizeof p, "%s/Packages/Installed/unzip", argv[2]); put(p, "5.42\n");
         setenv("UPKG_UHC_ENV", "/nonexistent/env/", 1);
