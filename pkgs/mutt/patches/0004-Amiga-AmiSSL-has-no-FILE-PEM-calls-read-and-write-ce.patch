@@ -1,0 +1,61 @@
+From 4e7150d77a614ca35bf3349de5da13514cba8f99 Mon Sep 17 00:00:00 2001
+From: spotUP <x@localhost>
+Date: Wed, 28 Oct 2026 10:40:37 +0100
+Subject: [PATCH 4/4] Amiga: AmiSSL has no FILE* PEM calls, read and write
+ certificates through memory BIOs
+
+---
+ mutt_ssl.c | 37 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+
+diff --git a/mutt_ssl.c b/mutt_ssl.c
+index 15c8cd9..dc1e074 100644
+--- a/mutt_ssl.c
++++ b/mutt_ssl.c
+@@ -85,6 +85,43 @@ typedef struct
+ sslsockdata;
+ 
+ /* local prototypes */
++#ifdef AMIGA_BSDSOCKET
++/* UP-Term: AmiSSL has no FILE* PEM calls (its FILE is not ixemul's), only the BIO ones.
++ * Read one PEM block from fp into a memory BIO (an empty one at EOF gives the same
++ * NO_START_LINE error the FILE* call does) and write through a memory BIO. */
++static X509 *amiga_pem_read_x509 (FILE *fp, X509 **x, pem_password_cb *cb, void *u)
++{
++  char line[256];
++  BIO *bio = BIO_new (BIO_s_mem ());
++  X509 *r;
++
++  while (bio && fgets (line, sizeof (line), fp))
++  {
++    BIO_puts (bio, line);
++    if (!strncmp (line, "-----END", 8))
++      break;
++  }
++  r = bio ? PEM_read_bio_X509 (bio, x, cb, u) : NULL;
++  BIO_free (bio);
++  return r;
++}
++
++static int amiga_pem_write_x509 (FILE *fp, X509 *x)
++{
++  BIO *bio = BIO_new (BIO_s_mem ());
++  char *data;
++  long n;
++  int rc = 0;
++
++  if (bio && PEM_write_bio_X509 (bio, x) && (n = BIO_get_mem_data (bio, &data)) > 0)
++    rc = fwrite (data, 1, n, fp) == (size_t) n;
++  BIO_free (bio);
++  return rc;
++}
++#define PEM_read_X509 amiga_pem_read_x509
++#define PEM_write_X509 amiga_pem_write_x509
++#endif
++
+ static int ssl_init (void);
+ static int add_entropy (const char *file);
+ static int ssl_socket_read (CONNECTION* conn, char* buf, size_t len);
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,50 @@
+From: spotUP <retroranksmail@gmail.com>
+Subject: [PATCH] Amiga: short temp file names for the 30 character FFS limit
+
+mutt_mktemp names carry hostname, uid, pid and a 64-bit number (about 46 characters) and fail
+with errno 63 on FFS. Use prefix-pid-counter-random24, all hex, no hostname.
+---
+diff --git a/muttlib.c b/muttlib.c
+--- a/muttlib.c
++++ b/muttlib.c
+@@ -964,10 +964,20 @@
+   RANDOM64 random64;
+   mutt_random_bytes(random64.char_array, sizeof(random64));
+ 
++#ifdef __amigaos__
++  /* FFS names are at most 30 characters: no hostname or uid, a short random part. */
++  static unsigned int amiga_tmp_counter;
++  mutt_buffer_printf (buf, "%s/%s-%x-%x-%06x%s%s",
++                      NONULL (Tempdir), NONULL (prefix),
++                      (unsigned int) getpid (), ++amiga_tmp_counter,
++                      (unsigned int) (random64.int_64 & 0xffffff),
++                      suffix ? "." : "", NONULL (suffix));
++#else
+   mutt_buffer_printf (buf, "%s/%s-%s-%d-%d-%"PRIu64"%s%s",
+                       NONULL (Tempdir), NONULL (prefix), NONULL (Hostname),
+                       (int) getuid (), (int) getpid (), random64.int_64,
+                       suffix ? "." : "", NONULL (suffix));
++#endif
+   dprint (3, (debugfile, "%s:%d: mutt_mktemp returns \"%s\".\n", src, line, mutt_b2s (buf)));
+   if (unlink (mutt_b2s (buf)) && errno != ENOENT)
+     dprint (1, (debugfile, "%s:%d: ERROR: unlink(\"%s\"): %s (errno %d)\n",
+@@ -980,10 +990,19 @@
+   RANDOM64 random64;
+   mutt_random_bytes(random64.char_array, sizeof(random64));
+ 
++#ifdef __amigaos__
++  static unsigned int amiga_tmp_counter;
++  size_t n = snprintf (s, slen, "%s/%s-%x-%x-%06x%s%s",
++                       NONULL (Tempdir), NONULL (prefix),
++                       (unsigned int) getpid (), ++amiga_tmp_counter,
++                       (unsigned int) (random64.int_64 & 0xffffff),
++                       suffix ? "." : "", NONULL (suffix));
++#else
+   size_t n = snprintf (s, slen, "%s/%s-%s-%d-%d-%"PRIu64"%s%s",
+                        NONULL (Tempdir), NONULL (prefix), NONULL (Hostname),
+                        (int) getuid (), (int) getpid (), random64.int_64,
+                        suffix ? "." : "", NONULL (suffix));
++#endif
+   if (n >= slen)
+     dprint (1, (debugfile, "%s:%d: ERROR: insufficient buffer space to hold temporary filename! slen=%zu but need %zu\n",
+                 src, line, slen, n));
