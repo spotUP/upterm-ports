@@ -6,10 +6,15 @@
 # enables AmiSSL on that path. So this curl needs a running bsdsocket.library stack
 # (Roadshow, AmiTCP) and not ixnet; the rest of curl stays ixemul libc.
 # The header clash and its overlay drawer are explained in mk/amissl.mk, shared with the other TLS ports.
-# ac_cv_func_pipe=no: curl_setup.h undefines HAVE_FCNTL on this bsdsocket-direct build, so
+# ac_cv_func_pipe=no ac_cv_func_poll=no: curl_setup.h undefines HAVE_FCNTL on this bsdsocket-direct build, so
 # curlx_nonblock uses IoctlSocket(FIONBIO), which fails (EBADF) on the ixemul pipe fds that
 # Curl_wakeup_init would pick; curl_multi_init then returns NULL (tool rc 27). Without pipe()
 # the wakeup pair is the bsdsocket loopback socket pair, so every polled fd is a socket.
+# ac_cv_func_poll=no: libixcompat's poll() waits on ixemul fds and reports nothing (poll=0, revents 0)
+# for a bsdsocket socket that WaitSelect shows writable (measured on rig 10); without it curl's
+# select-based Curl_poll goes through WaitSelect (curl_setup.h) and every polled fd is a bsdsocket socket.
+# bsdsocket.library keeps its own errno: lib/amigaos.c registers ixemul's (patch 0002), else a
+# non-blocking connect() leaves errno 0 and curl fails it as 'Undefined error: 0'.
 # No pthreads (ixemul has none; configure has no switch, so
 # the cache variables are preset): the mutex code would need a timespec that ixemul's
 # devices/timer.h macros break. No stdatomic either: libgcc for m68k has no __atomic_exchange_4.
@@ -33,7 +38,7 @@ curl_CONFIGURE_CMD = rsync -a --exclude .git $(curl_SRC)/ $(curl_OBJ)/src/ && \
 	--disable-docs --disable-manual --disable-ipv6 --disable-threaded-resolver --disable-netrc \
 	--disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp \
 	--disable-pop3 --disable-imap --disable-smtp --disable-gopher --disable-mqtt --disable-ntlm \
-	--disable-unix-sockets --disable-ares ac_cv_header_pthread_h=no ac_cv_func_pthread_create=no ac_cv_header_stdatomic_h=no ac_cv_func_pipe=no --with-amissl --without-libpsl --without-libidn2 \
+	--disable-unix-sockets --disable-ares ac_cv_header_pthread_h=no ac_cv_func_pthread_create=no ac_cv_header_stdatomic_h=no ac_cv_func_pipe=no ac_cv_func_poll=no --with-amissl --without-libpsl --without-libidn2 \
 	--without-brotli --without-zstd --without-nghttp2 --without-libssh2 --with-zlib=$(SYSROOT)$(PREFIX)
 curl_BUILD_CMD = $(MAKE) -C $(curl_OBJ)/b -j$(JOBS)
 curl_INSTALL_CMD = install -d $(SYSROOT)$(PREFIX)/bin && install -m 755 $(curl_OBJ)/b/src/curl $(SYSROOT)$(PREFIX)/bin/curl

@@ -1,0 +1,74 @@
+From 152a02f9cc3dbe6f637e6a0da10a9062edea297f Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Wed, 28 Oct 2026 09:57:00 +0100
+Subject: [PATCH 2/2] amigaos: register errno with bsdsocket.library on the
+ AmiSSL OS3 build
+
+bsdsocket.library keeps its own errno. Curl_amiga_init was compiled out for USE_AMISSL, so errno
+stayed 0 after a failing socket call: a non-blocking connect() (EINPROGRESS) looked like a hard
+failure ('Undefined error: 0', rc 7).
+---
+ lib/amigaos.c | 25 +++++++++++++++++++++++++
+ lib/amigaos.h |  3 +--
+ 2 files changed, 26 insertions(+), 2 deletions(-)
+
+diff --git a/lib/amigaos.c b/lib/amigaos.c
+index 3f61565..ed15aa5 100644
+--- a/lib/amigaos.c
++++ b/lib/amigaos.c
+@@ -34,6 +34,8 @@
+ #    include <bsdsocket/socketbasetags.h>
+ #  elif !defined(USE_AMISSL)
+ #    include <amitcp/socketbasetags.h>
++#  else
++#    include <bsdsocket/socketbasetags.h>
+ #  endif
+ #  ifdef __libnix__
+ #    include <stabs.h>
+@@ -232,6 +234,29 @@ CURLcode Curl_amiga_init(void)
+ ADD2EXIT(Curl_amiga_cleanup, -50);
+ #endif
+ 
++#else /* AmiSSL on OS3 */
++/*
++ * The libamisslauto constructors open bsdsocket.library and set SocketBase; nothing
++ * else runs here. bsdsocket keeps its own errno, so register ours once, or every
++ * failing socket call leaves errno at 0 (a non-blocking connect() is then not seen
++ * as EINPROGRESS and fails with "Undefined error: 0").
++ */
++extern struct Library *SocketBase;
++
++CURLcode Curl_amiga_init(void)
++{
++  if(!SocketBase)
++    return CURLE_FAILED_INIT;
++  if(SocketBaseTags(SBTM_SETVAL(SBTC_ERRNOPTR(sizeof(errno))), (ULONG)&errno,
++                    TAG_DONE))
++    return CURLE_FAILED_INIT;
++  return CURLE_OK;
++}
++
++void Curl_amiga_cleanup(void)
++{
++}
++
+ #endif /* !USE_AMISSL */
+ 
+ #endif /* HAVE_PROTO_BSDSOCKET_H */
+diff --git a/lib/amigaos.h b/lib/amigaos.h
+index 58278f0..1b8c8f3 100644
+--- a/lib/amigaos.h
++++ b/lib/amigaos.h
+@@ -25,8 +25,7 @@
+  ***************************************************************************/
+ #include "curl_setup.h"
+ 
+-#if defined(__AMIGA__) && defined(HAVE_PROTO_BSDSOCKET_H) && \
+-  (!defined(USE_AMISSL) || defined(__amigaos4__))
++#if defined(__AMIGA__) && defined(HAVE_PROTO_BSDSOCKET_H)
+ 
+ CURLcode Curl_amiga_init(void);
+ void Curl_amiga_cleanup(void);
+-- 
+2.50.1 (Apple Git-155)
+
