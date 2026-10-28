@@ -4,6 +4,7 @@
 
 .DEFAULT_GOAL := help
 include mk/common.mk
+include mk/amissl.mk
 
 PKGS := $(sort $(patsubst pkgs/%/recipe.mk,%,$(wildcard pkgs/*/recipe.mk)))
 include $(foreach p,$(PKGS),pkgs/$(p)/recipe.mk)
