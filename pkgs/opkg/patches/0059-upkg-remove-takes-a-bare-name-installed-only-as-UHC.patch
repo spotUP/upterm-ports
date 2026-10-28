@@ -1,0 +1,149 @@
+From 2ac9ba6282ed5404741d57278f282c0d4e6fbc29 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Wed, 28 Oct 2026 13:26:58 +0100
+Subject: [PATCH] upkg: remove takes a bare name installed only as UHC
+
+list-installed shows a UHC package as uhc:pipe, but upkg remove pipe answered 'No packages
+removed': upkg_uhc_name matched only the prefix and a bare name went to opkg, which has no ipk
+of that name. upkg_uhc_resolve_remove (remove only) reads a bare name as uhc:<name> when
+Installed/<name> exists and no ipk of that name is installed. Installed both ways it prints the
+conflict, removes nothing and exits 20; the user says uhc:<name>. install, upgrade, info and
+list keep D3 (a bare name is the ipk). Host checks: check/uhc.sh, check/uhc_run.sh.
+---
+ libopkg/opkg_cmd.c |  6 +++++
+ libopkg/upkg_uhc.c | 58 ++++++++++++++++++++++++++++++++++++++++------
+ libopkg/upkg_uhc.h | 13 ++++++++++-
+ 3 files changed, 69 insertions(+), 8 deletions(-)
+
+diff --git a/libopkg/opkg_cmd.c b/libopkg/opkg_cmd.c
+index 95133fc..2feedf2 100644
+--- a/libopkg/opkg_cmd.c
++++ b/libopkg/opkg_cmd.c
+@@ -458,6 +458,12 @@ static int opkg_configure_packages(char *pkg_name)
+     return err;
+ }
+ 
++/* upkg: whether an ipk of this name is installed (upkg_uhc_resolve_remove asks) */
++int upkg_ipk_installed(const char *name)
++{
++    return pkg_hash_fetch_installed_by_name(name) != NULL;
++}
++
+ static int opkg_remove_cmd(int argc, char **argv);
+ 
+ static int opkg_install_cmd(int argc, char **argv)
+diff --git a/libopkg/upkg_uhc.c b/libopkg/upkg_uhc.c
+index 91478a1..e4d6bd6 100644
+--- a/libopkg/upkg_uhc.c
++++ b/libopkg/upkg_uhc.c
+@@ -172,6 +172,35 @@ const char *upkg_uhc_name(const char *arg)
+     return arg && !strncasecmp(arg, UPKG_UHC_PREFIX, n) && arg[n] ? arg + n : NULL;
+ }
+ 
++int upkg_uhc_resolve_remove(const char *arg, int ipk_installed, const char **name_out)
++{
++    const char *name = upkg_uhc_name(arg);
++    char *rel, *rec;
++    int has;
++
++    if (name_out)
++        *name_out = NULL;
++    if (name) {
++        if (name_out)
++            *name_out = name;
++        return UPKG_RM_UHC;
++    }
++    if (!arg || !*arg || arg[0] == '-' || strchr(arg, '/') || strchr(arg, ':'))
++        return UPKG_RM_NOT_UHC;
++    sprintf_alloc(&rel, "Installed/%s", arg);
++    rec = upkg_uhc_script_path(upkg_uhc_dir(), rel);
++    has = access(rec, F_OK) == 0;
++    free(rel);
++    free(rec);
++    if (!has)
++        return UPKG_RM_NOT_UHC;
++    if (ipk_installed)
++        return UPKG_RM_AMBIGUOUS;
++    if (name_out)
++        *name_out = arg;
++    return UPKG_RM_UHC;
++}
++
+ char *upkg_uhc_target(const char *name)
+ {
+     char *s;
+@@ -535,24 +564,39 @@ static int uhc_remove(const char *name)
+ 
+ int upkg_uhc_run_args(const char *cmd, int *argc, char **argv, int *ran)
+ {
+-    int i, k = 0, rc = 0, total = 0;
++    int i, k = 0, rc = 0, total = 0, remove = !strcmp(cmd, "remove");
++    const char *name;
+ 
+     *ran = 0;
+-    for (i = 0; i < *argc; i++)
+-        if (upkg_uhc_name(argv[i]))
++    for (i = 0; i < *argc; i++) {
++        if (remove ? upkg_uhc_resolve_remove(argv[i], upkg_ipk_installed(argv[i]), NULL) == UPKG_RM_UHC : upkg_uhc_name(argv[i]) != NULL)
+             total++;
++    }
+     upkg_progress_plan(total);
+     for (i = 0; i < *argc; i++) {
+-        const char *name = upkg_uhc_name(argv[i]);
+-        int r;
++        int r, kind = UPKG_RM_NOT_UHC;
+ 
++        name = NULL;
++        if (remove)
++            kind = upkg_uhc_resolve_remove(argv[i], upkg_ipk_installed(argv[i]), &name);
++        else
++            name = upkg_uhc_name(argv[i]);
++        if (kind == UPKG_RM_AMBIGUOUS) {
++            printf("upkg: '%s' is installed twice, as the ipk '%s' and as 'uhc:%s'; nothing removed. "
++                   "Remove the UHC package with: upkg remove uhc:%s\n", argv[i], argv[i], argv[i], argv[i]);
++            fflush(stdout);
++            argv[k++] = argv[i];
++            if (!rc)
++                rc = 20;
++            continue;
++        }
+         if (!name) {
+             argv[k++] = argv[i];
+             continue;
+         }
+         upkg_progress_next();
+-        upkg_progress(!strcmp(cmd, "remove") ? "remove" : "script", argv[i]);
+-        if (!strcmp(cmd, "remove"))
++        upkg_progress(remove ? "remove" : "script", argv[i]);
++        if (remove)
+             r = uhc_remove(name);
+         else
+             r = uhc_install(name);
+diff --git a/libopkg/upkg_uhc.h b/libopkg/upkg_uhc.h
+index 72b953c..844ac51 100644
+--- a/libopkg/upkg_uhc.h
++++ b/libopkg/upkg_uhc.h
+@@ -85,8 +85,19 @@ void upkg_uhc_files_free(char **files, size_t n);
+  * Uses the Copy-line parser of upkg_uhc_files. The value of --tsv field 7. */
+ char *upkg_uhc_launch(const char *script, const char *name);
+ 
++/* Which package `upkg remove ARG` means. "uhc:x" is UHC x. A bare x is the UHC package x when only UHC has it installed
++ * (Installed/x exists, IPK_INSTALLED is 0), the ipk when only the ipk is, and a conflict when both are: the user must say
++ * "uhc:x" (the ipk keeps the bare name). Returns UPKG_RM_UHC (*NAME_OUT, when not NULL, points into ARG), UPKG_RM_AMBIGUOUS,
++ * or UPKG_RM_NOT_UHC (leave ARG to opkg, which reports an unknown name). */
++enum { UPKG_RM_NOT_UHC = 0, UPKG_RM_UHC = 1, UPKG_RM_AMBIGUOUS = 2 };
++int upkg_uhc_resolve_remove(const char *arg, int ipk_installed, const char **name_out);
++
++/* Whether an ipk named NAME is installed (the opkg status hash; defined in opkg_cmd.c, stubbed by the host checks). */
++int upkg_ipk_installed(const char *name);
++
+ /* Run (install, upgrade) or take away (remove) the "uhc:<n>" entries of ARGV for the opkg command CMD, and delete
+- * them from ARGV (*ARGC drops). *RAN is how many ran. Returns 0, or the first failing exit code. */
++ * them from ARGV (*ARGC drops). For "remove" a bare name installed only as UHC counts as "uhc:<name>"
++ * (upkg_uhc_resolve_remove); one installed both ways prints the conflict, removes nothing, stays in ARGV and the rc is 20. *RAN is how many ran. Returns 0, or the first failing exit code. */
+ int upkg_uhc_run_args(const char *cmd, int *argc, char **argv, int *ran);
+ 
+ #ifdef __cplusplus
+-- 
+2.50.1 (Apple Git-155)
+
