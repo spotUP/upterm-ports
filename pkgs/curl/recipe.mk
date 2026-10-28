@@ -41,7 +41,12 @@ curl_CONFIGURE_CMD = rsync -a --exclude .git $(curl_SRC)/ $(curl_OBJ)/src/ && \
 	--disable-unix-sockets --disable-ares ac_cv_header_pthread_h=no ac_cv_func_pthread_create=no ac_cv_header_stdatomic_h=no ac_cv_func_pipe=no ac_cv_func_poll=no --with-amissl --without-libpsl --without-libidn2 \
 	--without-brotli --without-zstd --without-nghttp2 --without-libssh2 --with-zlib=$(SYSROOT)$(PREFIX)
 curl_BUILD_CMD = $(MAKE) -C $(curl_OBJ)/b -j$(JOBS)
-curl_INSTALL_CMD = install -d $(SYSROOT)$(PREFIX)/bin && install -m 755 $(curl_OBJ)/b/src/curl $(SYSROOT)$(PREFIX)/bin/curl
+# libcurl.a and its headers go into the sysroot for git (git-remote-https); the link line then
+# needs -lamisslstubs -lamisslauto after -lcurl.
+curl_INSTALL_CMD = install -d $(SYSROOT)$(PREFIX)/bin $(SYSROOT)$(PREFIX)/lib $(SYSROOT)$(PREFIX)/include/curl && \
+	install -m 755 $(curl_OBJ)/b/src/curl $(SYSROOT)$(PREFIX)/bin/curl && \
+	install -m 644 $(curl_OBJ)/b/lib/.libs/libcurl.a $(SYSROOT)$(PREFIX)/lib/libcurl.a && \
+	install -m 644 $(curl_OBJ)/src/include/curl/*.h $(SYSROOT)$(PREFIX)/include/curl/
 curl_LICENSE_FILES := COPYING
 curl_HOST_CONFIGURE_CMD = mkdir -p $(curl_HOBJ)
 curl_HOST_BUILD_CMD = mkdir -p $(curl_HOBJ)/inst/bin
