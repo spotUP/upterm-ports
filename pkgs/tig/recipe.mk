@@ -9,6 +9,8 @@ tig_SHA256    := 99d4a0fdd3d93547ebacfe511195cb92e4f75b91644c06293c067f401addeb3
 tig_LICENSE   := GPL-2.0-or-later
 tig_LICENSE_FILES := COPYING
 tig_DEPS      := ixcompat ncurses iconv
+# Runtime packages (upkg Depends:, vtcon tools/pkgs.py depends()); _DEPS above are build-time static libraries.
+tig_RUNTIME_DEPENDS := up-git
 tig_BINS      := bin/tig
 tig_STACK     := 262144
 # started by ptyrun (vfork+exec), which ignores the $STACK: cookie (see nnn): define __stack too
