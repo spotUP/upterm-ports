@@ -33,6 +33,7 @@ test:
 	sh tools/test_bitchx_parallel.sh
 	sh tools/test_fetched_no_lha.sh
 	sh tools/test_patches.sh
+	sh tools/test_amisslstubs_no_poll.sh
 	cc -Wall -Wextra -o build/test_chrome pkgs/upkg-ui/src/test_chrome.c pkgs/upkg-ui/src/chrome.c && build/test_chrome
 
 sizes:
