@@ -1,0 +1,67 @@
+From 9c1e50ef5d386cb8899c0f9c8efbf694104248b4 Mon Sep 17 00:00:00 2001
+From: spotUP <x@localhost>
+Date: Wed, 28 Oct 2026 10:38:52 +0100
+Subject: [PATCH 3/3] Use bsdsocket.library sockets for AmiSSL: socket I/O
+ through bsdsocket, errno registered
+
+AmiSSL's SSL_set_fd needs a bsdsocket.library socket, and ixemul's read/write/close/select do not know one. With AMIGA_BSDSOCKET raw_socket_* go through bsdsocket and its errno is registered at start (else a non-blocking connect leaves errno at 0).
+---
+ main.c        | 10 ++++++++++
+ mutt_socket.c | 13 +++++++++++++
+ 2 files changed, 23 insertions(+)
+
+diff --git a/main.c b/main.c
+index 7f42077..91d7af9 100644
+--- a/main.c
++++ b/main.c
+@@ -25,6 +25,10 @@
+ #endif
+ 
+ #include "mutt.h"
++#ifdef AMIGA_BSDSOCKET
++#include <proto/bsdsocket.h>
++#include <bsdsocket/socketbasetags.h>
++#endif
+ #include "mutt_curses.h"
+ #include "keymap.h"
+ #include "mailbox.h"
+@@ -673,6 +677,12 @@ int main (int argc, char **argv, char **environ)
+     exit(1);
+   }
+ 
++#ifdef AMIGA_BSDSOCKET
++  /* bsdsocket.library keeps its own errno: register ours, or a non-blocking connect() leaves
++   * errno at 0 and looks like a hard failure */
++  if (SocketBase != NULL)
++    SocketBaseTags (SBTM_SETVAL (SBTC_ERRNOPTR (sizeof (errno))), (ULONG) &errno, TAG_DONE);
++#endif
+   setlocale (LC_ALL, "");
+ 
+ #ifdef ENABLE_NLS
+diff --git a/mutt_socket.c b/mutt_socket.c
+index 3e19207..fe9c818 100644
+--- a/mutt_socket.c
++++ b/mutt_socket.c
+@@ -49,6 +49,19 @@
+ #include <string.h>
+ #include <errno.h>
+ 
++#ifdef AMIGA_BSDSOCKET
++/* UP-Term: with AmiSSL every socket is a bsdsocket.library socket, not an ixemul fd: SSL_set_fd
++ * needs the real socket and ixemul's read/write/close/select do not know it.  libamisslauto
++ * opens bsdsocket.library and defines SocketBase; the stubs turn socket/connect/gethostbyname
++ * into bsdsocket calls. */
++#include <proto/bsdsocket.h>
++#include <bsdsocket/socketbasetags.h>
++#define close(s)		CloseSocket(s)
++#define read(s,b,l)		recv(s, (void *)(b), (long)(l), 0)
++#define write(s,b,l)		send(s, (const void *)(b), (long)(l), 0)
++#define select(n,r,w,e,t)	WaitSelect(n, r, w, e, t, NULL)
++#endif
++
+ /* support for multiple socket connections */
+ static CONNECTION *Connections = NULL;
+ 
+-- 
+2.50.1 (Apple Git-155)
+
