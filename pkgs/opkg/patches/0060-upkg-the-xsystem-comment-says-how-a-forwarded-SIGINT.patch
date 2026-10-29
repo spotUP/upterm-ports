@@ -1,0 +1,45 @@
+From 35935bde089bbd4d1be97163d1e5ba87d5d4f145 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Thu, 29 Oct 2026 11:42:17 +0100
+Subject: [PATCH] upkg: the xsystem comment says how a forwarded SIGINT reaches
+ curl
+
+The comment called curl a native clib2 program and said ixemul kill() sends
+SIGBREAKF_CTRL_C to a non-ixemul task. curl is an ixemul program that waits
+in a native bsdsocket WaitSelect; kill() left its SIGINT pending until
+ixemul-vtcon 627d6ce, which sends the Ctrl-C break to such a wait. Comment
+only.
+---
+ libopkg/xsystem.c | 16 +++++++++-------
+ 1 file changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/libopkg/xsystem.c b/libopkg/xsystem.c
+index 7949e89..eff2bba 100644
+--- a/libopkg/xsystem.c
++++ b/libopkg/xsystem.c
+@@ -63,13 +63,15 @@ int upkg_xsystem_is_unattended(void)
+ 
+ /* Waiting for the child. ixemul's wait4 sleeps in a loop that never returns EINTR, and its sleep eats
+    the Ctrl-C break (clears SIGBREAKF_CTRL_C) whether or not a SIGINT reaches this task, so a Ctrl-C
+-   sent to upkg was lost and upkg sat in waitpid until the child (curl, a native clib2 program that
+-   may ignore the break itself) finished: 23 to 25 s against a stalled server. So never block in wait4:
+-   poll with WNOHANG and nap with the dos.library Delay (which leaves the break set), and look for a
+-   break or a SIGINT between polls. On a break: forward it to the child (ixemul kill() sends
+-   SIGBREAKF_CTRL_C to a non-ixemul task), give the child UPKG_BREAK_GRACE seconds to leave, then
+-   stop waiting. A child that ignores the break is left running (it exits when its transfer ends or
+-   when curl honours Ctrl-C); upkg itself ends at once with the exit code of an interrupted program. */
++   sent to upkg was lost and upkg sat in waitpid until the child (curl, an ixemul program that waits
++   for the network in a native bsdsocket WaitSelect) finished: 23 to 25 s against a stalled server.
++   So never block in wait4: poll with WNOHANG and nap with the dos.library Delay (which leaves the
++   break set), and look for a break or a SIGINT between polls. On a break: forward SIGINT to the child
++   with kill() (ixemul-vtcon 627d6ce and later turn a pending SIGINT into SIGBREAKF_CTRL_C for a task
++   waiting natively on that break; curl ends its transfer on it since pkgs/curl patch 0003), give the
++   child UPKG_BREAK_GRACE seconds to leave, then stop waiting. A child that ignores the break is left
++   running (it exits when its transfer ends); upkg itself ends at once with the exit code of an
++   interrupted program. */
+ #define UPKG_BREAK_GRACE 3
+ #define UPKG_NAP_MS 50
+ 
+-- 
+2.50.1 (Apple Git-155)
+
