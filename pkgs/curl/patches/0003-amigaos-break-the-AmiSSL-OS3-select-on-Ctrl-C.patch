@@ -1,0 +1,83 @@
+From d1571e54cf5f434cb8f9c2faca60e85e44672a3e Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Thu, 29 Oct 2026 09:13:52 +0100
+Subject: [PATCH 3/3] amigaos: abort the transfer on Ctrl-C in the AmiSSL OS3
+ select
+
+curl_setup.h mapped select to WaitSelect with a signal mask of 0 on the
+AmiSSL OS3 build, so a Ctrl-C sent during a stalled transfer was not seen
+until the server answered. Route it through Curl_amiga_select with
+SIGBREAKF_CTRL_C in the mask; when it fires set Curl_amiga_break, which
+Curl_pgrsCheckX turns into CURLE_ABORTED_BY_CALLBACK.
+---
+ lib/amigaos.c    | 18 ++++++++++++++++++
+ lib/curl_setup.h |  5 ++++-
+ lib/progress.c   |  5 +++++
+ 3 files changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/lib/amigaos.c b/lib/amigaos.c
+index ed15aa5..1f8e5b0 100644
+--- a/lib/amigaos.c
++++ b/lib/amigaos.c
+@@ -259,6 +259,24 @@ void Curl_amiga_cleanup(void)
+ 
+ #endif /* !USE_AMISSL */
+ 
++#if defined(USE_AMISSL) && !defined(__amigaos4__)
++/* Set once Ctrl-C has been seen by Curl_amiga_select; Curl_pgrsCheckX turns it
++   into CURLE_ABORTED_BY_CALLBACK so every transfer in the handle fails. */
++int Curl_amiga_break;
++
++/* WaitSelect with SIGBREAKF_CTRL_C in its signal mask. With a mask of 0 the
++   wait ignores Ctrl-C until the server answers. */
++int Curl_amiga_select(int nfds, fd_set *readfds, fd_set *writefds,
++                      fd_set *errorfds, struct timeval *timeout)
++{
++  unsigned long sigs = SIGBREAKF_CTRL_C;
++  int r = WaitSelect(nfds, readfds, writefds, errorfds, timeout, &sigs);
++  if(sigs & SIGBREAKF_CTRL_C)
++    Curl_amiga_break = 1;
++  return r;
++}
++#endif
++
+ #endif /* HAVE_PROTO_BSDSOCKET_H */
+ 
+ #endif /* __AMIGA__ */
+diff --git a/lib/curl_setup.h b/lib/curl_setup.h
+index 0af3a67..d2537af 100644
+--- a/lib/curl_setup.h
++++ b/lib/curl_setup.h
+@@ -445,9 +445,12 @@
+      /* use bsdsocket.library directly, instead of libc networking functions */
+ #    define _SYS_MBUF_H /* m_len define clashes with curl */
+ #    include <proto/bsdsocket.h>
+-#    ifdef __amigaos4__
++#    if defined(__amigaos4__) || defined(USE_AMISSL)
+        int Curl_amiga_select(int nfds, fd_set *readfds, fd_set *writefds,
+                              fd_set *errorfds, struct timeval *timeout);
++#      if !defined(__amigaos4__)
++       extern int Curl_amiga_break;
++#      endif
+ #      define select(a, b, c, d, e) Curl_amiga_select(a, b, c, d, e)
+ #    else
+ #      define select(a, b, c, d, e) WaitSelect(a, b, c, d, e, 0)
+diff --git a/lib/progress.c b/lib/progress.c
+index fcb8bf2..4b680d5 100644
+--- a/lib/progress.c
++++ b/lib/progress.c
+@@ -726,6 +726,11 @@ CURLcode Curl_pgrsCheckX(struct Curl_easy *data,
+ {
+   CURLcode result;
+ 
++#if defined(__AMIGA__) && !defined(__amigaos4__) && defined(USE_AMISSL)
++  if(Curl_amiga_break)
++    return CURLE_ABORTED_BY_CALLBACK;
++#endif
++
+   result = pgrs_update(data, pnow);
+   if(!result && !data->req.done)
+     result = pgrs_speedcheck(data, pnow);
+-- 
+2.50.1 (Apple Git-155)
+
