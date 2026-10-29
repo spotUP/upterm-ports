@@ -12,8 +12,12 @@
 # No fork: built with --disable-dired (the only fork user in this config); check_bin verifies.
 lynx_VERSION   := 2.9.3
 lynx_SUMMARY   := lynx 2.9.3 text web browser (https via AmiSSL) in UP-Term:bin
-lynx_URL       := https://invisible-island.net/archives/lynx/tarballs/lynx$(lynx_VERSION).tar.gz
-lynx_SHA256    := 6e99e46980974a6d89eceefbb26ca8c7aa7702b78ecb5bad383b859af225d052
+# The invisible-island.net tarball has answered 403 since 2026-10-29; the author's own GitHub tag
+# (ThomasDickey/lynx-snapshots v2-9-3) unpacks to a tree identical to Debian's lynx_2.9.3.orig.tar.bz2
+# (diff -r, no differences). The default archive name would be v2-9-3.tar.gz, so name it.
+lynx_URL       := https://github.com/ThomasDickey/lynx-snapshots/archive/refs/tags/v2-9-3.tar.gz
+lynx_ARCHIVE   := $(DL)/lynx-$(lynx_VERSION).tar.gz
+lynx_SHA256    := 914e1dfb7dd53c876a0549f7128f85e558e18a05b7e675a402d745507d05e964
 lynx_LICENSE   := GPL-2.0-only
 lynx_LICENSE_FILES := COPYING COPYHEADER
 lynx_DEPS      := ixcompat ncurses
