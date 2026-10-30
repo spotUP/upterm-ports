@@ -644,7 +644,7 @@ static int key_text(int fn, wint_t c)
 
 static int hotkey; /* the --hotkeys key that ended the menu, 0 for Enter */
 
-static int key_menu(int fn, wint_t c)
+static int key_menu_raw(int fn, wint_t c)
 {
 	int n = ui_opt.nentries, room = menu_room(widget_row), i;
 	if (fn) {
@@ -694,6 +694,25 @@ static int key_menu(int fn, wint_t c)
 		}
 	}
 	return -1;
+}
+
+/* The cursor-move hook (ui_on_move): runs after a key moved the menu cursor, before the redraw, so a caller can
+ * preview the row under it on every key instead of on the next tick. */
+static void (*move_fn)(void *ctx);
+static void *move_ctx;
+
+void ui_on_move(void (*fn)(void *ctx), void *ctx)
+{
+	move_fn = fn;
+	move_ctx = ctx;
+}
+
+static int key_menu(int fn, wint_t c)
+{
+	int old = msel, r = key_menu_raw(fn, c);
+	if (msel != old && move_fn)
+		move_fn(move_ctx);
+	return r;
 }
 
 static int invalid; /* ui_invalidate: redraw after the tick */
@@ -1035,6 +1054,7 @@ void ui_stop(void)
 	a_chrome = a_ink = a_dim = a_acc = a_sel = a_field = 0;
 	memset(a_col, 0, sizeof a_col);
 	tick_fn = NULL;
+	move_fn = NULL;
 	tick_ctx = NULL;
 }
 

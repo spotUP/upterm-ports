@@ -64,6 +64,9 @@ int ui_run(void);
  * UI_TICK, keeping ui_selected() and the filter as they were. NULL turns it off. */
 #define UI_TICK 4
 void ui_on_tick(int (*fn)(void *ctx), void *ctx);
+/* fn runs after a key moved a menu's cursor (arrows, Home, End, PageUp/Down, first-letter jump), before the
+ * redraw; ui_selected() is the new row. NULL turns it off; ui_stop clears it, as it clears the tick. */
+void ui_on_move(void (*fn)(void *ctx), void *ctx);
 /* the same for a widget of KIND on the screen already up: prompt and buttons replace ui_opt's;
  * 2 when the buttons are bad */
 int ui_view(int kind, const char *prompt, const char *buttons);
