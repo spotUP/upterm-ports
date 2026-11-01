@@ -28,6 +28,11 @@ printf '#!/bin/sh\nkill -TERM $$\n' > "$w/fake/curl"; chmod +x "$w/fake/curl"
 line=$(run "$w/fake:/usr/bin:/bin")
 case $line in *"curl did not finish"*) ;; *) fail "curl killed by a signal: want 'curl did not finish', got: $line" ;; esac
 case $line in *"in PATH"*) fail "curl killed by a signal names the PATH: $line" ;; esac
+# status -1 with no curl on PATH is "curl not found" (patches/0061; the rig returns -1 for a missing curl): a fake
+# curl that removes itself and then kills itself ends -1 with curl gone when the probe runs
+printf '#!/bin/sh\nrm -f "$0"\nkill -TERM $$\n' > "$w/fake/curl"; chmod +x "$w/fake/curl"
+line=$(run "$w/fake:/bin")
+case $line in *"curl not found"*"in PATH"*) ;; *) fail "status -1, curl gone from PATH: want 'curl not found ... PATH', got: $line" ;; esac
 line=$(run "$w/empty")
 case $line in *"curl not found"*"in PATH"*) ;; *) fail "no curl on PATH: want 'curl not found ... PATH', got: $line" ;; esac
-echo "[OK] curl_msg: 22 HTTP error, 6 resolve, 7 reach, 28 timed out, 3 generic, signal did not finish, missing curl names PATH"
+echo "[OK] curl_msg: 22 HTTP error, 6 resolve, 7 reach, 28 timed out, 3 generic, signal did not finish, -1 without curl names PATH, missing curl names PATH"

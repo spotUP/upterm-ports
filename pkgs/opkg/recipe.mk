@@ -111,6 +111,8 @@
 # the PATH hint stays for 127 and 255 only. check/curl_msg.sh (fake curl that kills itself).
 # patches/0059: upkg remove <name> removes a bare name installed only as UHC (what list-installed shows as uhc:<name>); installed both ways
 # it prints the conflict and exits 20 (upkg_uhc_resolve_remove; remove only, install/upgrade/info/list keep D3). check/uhc.sh, check/uhc_run.sh.
+# patches/0061: -1 reads "curl not found" again when curl is not on PATH (the rig returns -1 for a missing curl); with curl on PATH
+# it stays "curl did not finish". check/curl_msg.sh (fake curl that removes itself, then kills itself).
 # patches/0060: comment only. The xsystem note on the forwarded SIGINT names curl as an ixemul program in a native WaitSelect,
 # woken by ixemul-vtcon 627d6ce (setrun sends SIGBREAKF_CTRL_C for a pending SIGINT), not a native clib2 task.
 opkg_VERSION   := 0.9.0
