@@ -19,6 +19,7 @@ vbcc_FEED_MIN_BASE := 1.0
 vbcc_DEPS      :=
 # kit-stage copies the whole drawer (vtcon: dist/slim.txt makes it the up-vbcc add-on, not part of the base)
 vbcc_DRAWER    := vbcc
+vbcc_DATA      := vbcc
 vbcc_LICENSE_FILES := README.md
 vbcc_DIR       := $(SYSROOT)$(PREFIX)/vbcc
 vbcc_CONFIGURE_CMD = mkdir -p $(vbcc_OBJ)
