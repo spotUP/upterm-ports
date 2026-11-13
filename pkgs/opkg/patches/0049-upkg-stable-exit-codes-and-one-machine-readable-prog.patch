@@ -4,7 +4,7 @@ Date: Tue, 27 Oct 2026 10:22:54 +0100
 Subject: [PATCH 49/50] upkg: stable exit codes and one machine-readable
  progress line per step
 
-Front-ends (Amarchy, scripts) need to tell a missing package from a dead
+Front-ends (Patina, scripts) need to tell a missing package from a dead
 network from a failing package script without parsing messages.
 
 Exit codes sit on the AmigaDOS bands: 0 ok, 5 WARN (nothing matched or

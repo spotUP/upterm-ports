@@ -1,5 +1,5 @@
 /* hotstale.c: driver for hotstale.sh. Runs one menu with --hotkeys "st" twice on the same
- * terminal, as a program that re-shows a menu does (amarchy-menu). The keys are 's' then Enter;
+ * terminal, as a program that re-shows a menu does (patina-menu). The keys are 's' then Enter;
  * writes "<hotkey of run 1> <hotkey of run 2>" to argv[1]. */
 #include <stdio.h>
 #include <upkgui/ui.h>

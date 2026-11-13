@@ -86,7 +86,7 @@ Verdicts (rig 8, `--max --os 32`, vbcc_rig.py --upkg, vtcon worktree vbcc-kit d6
   control install OK, up-vbcc install OK, vc lands, record and User-Startup block present, all compile-and-run lines OK. A second run WITHOUT the control also installs
   up-vbcc OK. So content of the 3.0 MB ipk is not the trigger, and neither is the control's presence.
 - Cause (most likely, UNVERIFIED because the old rig state was overwritten by the restart): a stale VTC:ixp6/ixemul.library on rig 8. rig.py stage_ixemul's own docstring records
-  the same symptom (a 19 Oct ixemul made amarchy-menu stop with "Illegal instruction"); `rig.py start` refreshes it every start and the crash is gone after it.
+  the same symptom (a 19 Oct ixemul made patina-menu stop with "Illegal instruction"); `rig.py start` refreshes it every start and the crash is gone after it.
   The old crashing run had no start between it and the earlier builds. To prove it: put the 19 Oct ixemul into VTC:ixp6 and rerun (not done).
 - Probe 2 (ipk diff, data.tar.gz): up-vbcc 304 entries, longest path 105 chars (7 paths over 100, ustar prefix needed), no symlinks, no hardlinks, no zero-length files;
   up-bitchx 1004 entries, longest 90, none over 100. The only first-difference is the path length; install works anyway, so it is not the cause.

@@ -1,5 +1,5 @@
 #!/bin/sh
-# questions.sh UPKG: host check of patch 0050, the question channel for a front-end without a terminal (Amarchy).
+# questions.sh UPKG: host check of patch 0050, the question channel for a front-end without a terminal (Patina).
 #   upkg questions PKG: tab-separated id, kind, default, choices, prompt, answered|new; rc 0, 5 none, 12 unknown
 #   upkg install|upgrade PKG --answers FILE: id=value lines; runs with no terminal; a missing answer is rc 15 naming the
 #   id on stderr (nothing installed); a bad answer is rc 11.

@@ -31,7 +31,7 @@ main(void)
     int n, row, col, pass;
 
     /* %i bumps the parameters while formatting: the memo must be keyed by the caller's (5,2), not the
-     * bumped (6,3), or a later cup to (6,3) gets the text of (5,2) (amarchy-menu drew a row on the wrong line) */
+     * bumped (6,3), or a later cup to (6,3) gets the text of (5,2) (patina-menu drew a row on the wrong line) */
     bad += expect("cup 5,2", tiparm(cup_fmt, 5, 2), "\033[6;3H");
     bad += expect("cup 6,3 after 5,2", tiparm(cup_fmt, 6, 3), "\033[7;4H");
     if (bad)

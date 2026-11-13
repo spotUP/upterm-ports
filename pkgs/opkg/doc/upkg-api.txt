@@ -1,7 +1,7 @@
 upkg exit codes and progress lines: the interface for front-ends
 =================================================================
 
-A program that runs upkg (Amarchy, a script) reads two things: the exit code
+A program that runs upkg (Patina, a script) reads two things: the exit code
 and, with stdout not a terminal, one progress line per step.
 
 EXIT CODES
@@ -74,7 +74,7 @@ QUESTIONS AND ANSWERS (a front-end with no terminal)
 ----------------------------------------------------
 
 A package with UP-Term-Interactive: yes asks questions during its install or
-upgrade. Without a terminal that is exit code 15. A front-end such as Amarchy
+upgrade. Without a terminal that is exit code 15. A front-end such as Patina
 reads the questions first, asks the user, and passes the answers back.
 
     upkg questions <pkg>
