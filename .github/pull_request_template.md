@@ -18,6 +18,10 @@ Upstream URL:
 - [ ] The last lines of `make host-<name>` are pasted below
 - [ ] `sh tools/recipe_lint.sh <name>` is ok
 - [ ] Feed package only: `_FEED_ID`, `_SUMMARY` set, and `pkg_rows.py check <name>` is clean
+- [ ] Built and run on a rig, or the description says it was not
+- [ ] Version or revision bumped (new upstream version: revision 1; package-only change: next revision)
+- [ ] Licence file present in the source and listed in `_LICENSE_FILES`
+- [ ] FPU build needed? Say yes or no (only maths-heavy ports get one)
 - [ ] No binaries, archives or build output are committed
 - [ ] Patches (if any) are `git format-patch` files and the install steps contain no fork
 

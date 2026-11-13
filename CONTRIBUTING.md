@@ -39,14 +39,14 @@ Source: `RULES.md` and `docs/adding-a-package.md`, sections 3, 4 and 6.
 - At most 4 build jobs.
 - No binaries, archives or build output in the pull request.
 - Not accepted yet: your own feeds, binary-only packages, packages that need a C library change (those go to `ixemul-vtcon` first).
-- Version change: change `_VERSION`, `_URL`, `_SHA256` together. How feed versions and revisions are numbered is decided by the owner when publishing (unverified: no rule is written in this repo).
+- Version and revision: a new upstream version changes `_VERSION`, `_URL` and `_SHA256` together, and the package goes out as revision 1 (`1.2-r1`). A change to the package only (a new patch, different build flags) with the same upstream version raises the revision (`1.2-r1` to `1.2-r2`). The recipe has no revision field: `_VERSION` is the upstream version alone, and the owner adds and bumps `-rN` when publishing the feed. Say in the pull request which kind of change it is.
 
 ## Pull request flow
 
-- Branch: the repo uses `port/<name>` for package work (for example `port/htop`); this is a convention seen in use, not an enforced rule.
+- Branch: name it `port/<name>` (for example `port/htop`).
 - Commits: one imperative subject line per change (for example "Add htop recipe"), no generated files.
-- The pull request description states: the package and upstream version, the licence (name, text location, redistribution), the last lines of `make host-<name>`, and that `tools/recipe_lint.sh <name>` is ok. For a feed package, the output of `pkg_rows.py check`.
-- GitHub runs `.github/workflows/pr.yml` on the changed packages (recipe lint, sha256 of the download, `make test`, advisory host build, feed rows check). A green run is not a release.
+- The pull request description follows `.github/pull_request_template.md`, which GitHub fills in for you. It states: the package and upstream version, the licence (name, text location, redistribution), the last lines of `make host-<name>`, and that `tools/recipe_lint.sh <name>` is ok. For a feed package, the output of `pkg_rows.py check`.
+- GitHub runs `.github/workflows/pr.yml` on the changed packages (recipe lint, sha256 of the download, `make test`, advisory host build, feed rows check). A green run is not a release. The checklist template is `.github/pull_request_template.md`.
 - After merge the owner builds, checks on a rig and publishes. You do nothing further.
 
 ## For AI agents
