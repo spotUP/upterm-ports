@@ -1,0 +1,71 @@
+From 63eae8a24af84bbc4c141c9bcb09b78d880ad882 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Fri, 13 Nov 2026 01:32:12 +0100
+Subject: [PATCH 62/62] upkg: remove names why nothing was removed
+
+---
+ libopkg/solvers/internal/opkg_action.c | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/libopkg/solvers/internal/opkg_action.c b/libopkg/solvers/internal/opkg_action.c
+index 59be3a2..069bda1 100644
+--- a/libopkg/solvers/internal/opkg_action.c
++++ b/libopkg/solvers/internal/opkg_action.c
+@@ -56,6 +56,7 @@ int opkg_solver_remove(int num_pkgs, char **pkg_names)
+     pkg_t *pkg_to_remove;
+     pkg_vec_t *available, *pkgs_to_remove;
+     int done = 0;
++    const char *why = NULL; /* upkg: first reason a package was skipped */
+ 
+     available = pkg_vec_alloc();
+     pkgs_to_remove = pkg_vec_alloc();
+@@ -78,6 +79,7 @@ int opkg_solver_remove(int num_pkgs, char **pkg_names)
+ 
+             if (pkg_to_remove == NULL) {
+                 opkg_msg(ERROR, "Package %s is not installed.\n", pkg->name);
++                if (!why) why = "not installed";
+                 continue;
+             }
+             if (pkg->state_status == SS_NOT_INSTALLED) {
+@@ -110,6 +112,7 @@ int opkg_solver_remove(int num_pkgs, char **pkg_names)
+                     if (!opkg_config->force_removal_of_dependent_packages) {
+                         print_dependents_warning(pkg, dependents);
+                         free(dependents);
++                        if (!why) why = "other packages depend on it";
+                         err = -1;
+                         continue;
+                     }
+@@ -135,6 +138,7 @@ int opkg_solver_remove(int num_pkgs, char **pkg_names)
+         /* upkg: a name or glob that matches no installed package is an error, not silence */
+         if (!matched) {
+             fprintf(stderr, "%s is not installed.\n", pkg_names[i]);
++            if (!why) why = "not installed";
+             if (!err)
+                 err = UPKG_RC_NOTHING;
+         }
+@@ -145,6 +149,7 @@ int opkg_solver_remove(int num_pkgs, char **pkg_names)
+         upkg_progress_next();
+         upkg_progress("remove", pkgs_to_remove->pkgs[i]->name);
+         if (opkg_remove_pkg(pkgs_to_remove->pkgs[i])) {
++            if (!why) why = "removal failed";
+             err = -1;
+             break;
+         } else {
+@@ -152,8 +157,12 @@ int opkg_solver_remove(int num_pkgs, char **pkg_names)
+         }
+     }
+ 
+-    if (done == 0)
+-        opkg_msg(NOTICE, "No packages removed.\n");
++    if (done == 0) {
++        if (why)
++            opkg_msg(NOTICE, "No packages removed: %s.\n", why);
++        else
++            opkg_msg(NOTICE, "No packages removed.\n");
++    }
+ 
+     pkg_vec_free(available);
+     pkg_vec_free(pkgs_to_remove);
+-- 
+2.50.1 (Apple Git-155)
+

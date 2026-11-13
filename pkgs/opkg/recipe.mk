@@ -62,6 +62,8 @@
 # postinst and to the Install All question pass); an upgrade keeps that file and runs its scripts with the terminal, so it asks only the
 # questions the old version never asked. UPKG_ASK_UNATTENDED=1 (Install All, a progress box) says the missing terminal is on purpose.
 # check/upgrade_new_questions.sh (v1 asks Q1, v2 asks Q1 and Q2, v3 adds Q3 unattended); check/upkg-ask.fixture is the script's copy.
+# patches/0062: `upkg remove` that removes nothing closes with "No packages removed: <reason>." (not installed, other packages depend on
+# it, removal failed) instead of a bare "No packages removed."; "NAME is not installed." stays on stderr, exit 5 kept. check/remove_reason.sh.
 # patches/0028: write_status_files_if_changed returns -1 when the status file or a changed file list fails to write or close
 # (ENOSPC shows at fclose; ferror is checked too) and every caller folds it into its result, so the command exits non-zero.
 # check/status_write_rc.sh (RLIMIT_FSIZE stands in for a full disk).
