@@ -31,10 +31,28 @@ PY
   for o in lists_dir lock_file info_dir status_file cache_dir; do echo "option $o $w/$o"; done; } > "$w/conf"
 u() { "$upkg" -f "$w/conf" "$@"; }
 fail() { echo "[FAIL] $*"; exit 1; }
-# run "$@" on a pty (stdout is a terminal): prints its output
+# run "$@" on a pty (stdout is a terminal): prints its output. Not pty.spawn: on
+# macOS with Python 3.9 (bpo-26228) it can miss the EOF after the child exits and
+# hang forever; this is the pty.fork + waitpid loop of questions.sh, 60 s cap.
 tty() { python3 -I -c '
-import pty, sys
-pty.spawn(sys.argv[1:])' "$@" </dev/null | tr -d '\r'; }
+import os, pty, sys, time, select
+pid, fd = pty.fork()
+if pid == 0:
+    os.execv(sys.argv[1], sys.argv[1:])
+buf = b""; start = time.time()
+while True:
+    r, _, _ = select.select([fd], [], [], 0.3)
+    if r:
+        try: d = os.read(fd, 4096)
+        except OSError: break
+        if not d: break
+        buf += d
+    if os.waitpid(pid, os.WNOHANG)[0]:
+        try: buf += os.read(fd, 65536)
+        except OSError: pass
+        break
+    if time.time() - start > 60: os.kill(pid, 9); break
+sys.stdout.buffer.write(buf)' "$@" </dev/null | tr -d '\r'; }
 u update >/dev/null 2>&1 || fail "update"
 
 # 0018 no match
