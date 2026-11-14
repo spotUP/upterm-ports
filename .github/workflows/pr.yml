@@ -87,7 +87,7 @@ jobs:
             if [ -n "$(make -s "print-${p}_OWN")$(make -s "print-${p}_LHA_URLS")" ]; then
               echo "$p: own or prebuilt, checked by its own rules"; continue
             fi
-            sh tools/fetch.sh "$(make -s "print-${p}_URL")" "$(make -s "print-${p}_SHA256")" "build/dl/$p.archive"
+            sh tools/fetch.sh "$(make -s "print-${p}_URL")" "$(make -s "print-${p}_SHA256")" "build/dl/$p.archive" $(make -s "print-${p}_MIRRORS")
           done
 
   test:
