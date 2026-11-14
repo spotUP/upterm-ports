@@ -72,6 +72,11 @@ for p in $PKGS; do
 		echo "kit-stage: $p held back: $hold" >&2
 		continue
 	fi
+	# checked before BINS/DATA copy from it, so a missing drawer gets this message, not a bare cp error
+	drawer=$(var "$p" DRAWER)
+	if [ -n "$drawer" ]; then
+		[ -d "$SYSROOT$PREFIX/$drawer" ] || { echo "kit-stage: $p: no drawer $drawer in $SYSROOT$PREFIX" >&2; exit 1; }
+	fi
 	for b in $(var "$p" BINS); do
 		cp "$SYSROOT$PREFIX/$b" "$KIT/bin/"
 		n=$(basename "$b")
@@ -87,9 +92,7 @@ for p in $PKGS; do
 	for d in $(var "$p" DATA); do
 		mkdir -p "$KIT/$(dirname "$d")" && cp -R "$SYSROOT$PREFIX/$d" "$KIT/$(dirname "$d")/"
 	done
-	drawer=$(var "$p" DRAWER)
 	if [ -n "$drawer" ]; then
-		[ -d "$SYSROOT$PREFIX/$drawer" ] || { echo "kit-stage: $p: no drawer $drawer in $SYSROOT$PREFIX" >&2; exit 1; }
 		mkdir -p "$KIT/$(dirname "$drawer")" && cp -R "$SYSROOT$PREFIX/$drawer" "$KIT/$(dirname "$drawer")/"
 	fi
 	[ -d "$ROOT/pkgs/$p/kit" ] && cp -R "$ROOT/pkgs/$p/kit/." "$KIT/"
