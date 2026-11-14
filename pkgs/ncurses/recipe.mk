@@ -2,6 +2,7 @@
 # library ncursesw for less, nano, vim, and the terminal tools.
 ncurses_VERSION := 6.6
 ncurses_URL     := https://invisible-island.net/archives/ncurses/ncurses-$(ncurses_VERSION).tar.gz
+ncurses_MIRRORS := https://ftp.gnu.org/gnu/ncurses/ncurses-$(ncurses_VERSION).tar.gz
 ncurses_SHA256  := 355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11
 ncurses_LICENSE := MIT (X11)
 ncurses_DEPS    := ixcompat

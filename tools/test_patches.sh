@@ -10,7 +10,7 @@ p=fzy
 fail() { echo "test_patches: $*" >&2; exit 1; }
 mkdir -p build/dl
 arc=$(make -s print-${p}_ARCHIVE)
-[ -f "$arc" ] || tools/fetch.sh "$(make -s print-${p}_URL)" "$(make -s print-${p}_SHA256)" "$arc" >/dev/null
+[ -f "$arc" ] || tools/fetch.sh "$(make -s print-${p}_URL)" "$(make -s print-${p}_SHA256)" "$arc" $(make -s print-${p}_MIRRORS) >/dev/null
 src=$(make -s print-${p}_SRC)
 rm -f $ROOT/build/state/$p.unpacked
 make -s $ROOT/build/state/$p.unpacked >/dev/null
