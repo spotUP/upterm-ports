@@ -167,6 +167,7 @@ The feed is getting two builds of every package (plan `thoughts/shared/plans/202
 - `-D__NO_MATH_INLINES` is required: the compat `math.h` clashes with GCC's inline `atan2` under `-m68881`.
 - The FPU build links against its own sysroot, so 68020 and FPU objects never mix.
 - What this means for a recipe: follow rule 6 of section 3. A recipe that uses `$(CPU)`, `$(SYSINC)` and `$(SYSLIB)` needs no change; a recipe that names a CPU flag builds a 68020 binary into the FPU package.
+- Which builds a port needs: the 68020 soft-float build is required for every port. An extra FPU build is only for maths-heavy ports. The feed marks it by the opkg `Architecture` field, `m68k-amigaos-fpu` (priority 20) against `m68k-amigaos` (priority 10); note in the pull request if you think a port needs it.
 - Check both builds when the owner asks for it: the rig check in section 7 runs on a 68060 rig (FPU build) and on a 68020 rig (68020 build).
 
 ## 6. Licence checklist
