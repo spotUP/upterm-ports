@@ -4,6 +4,7 @@
 # autoconf) and builds in the source directory, so a copy is built.
 zlib_VERSION   := 1.3.2
 zlib_URL       := https://zlib.net/zlib-$(zlib_VERSION).tar.xz
+zlib_MIRRORS   := https://github.com/madler/zlib/releases/download/v$(zlib_VERSION)/zlib-$(zlib_VERSION).tar.xz
 zlib_SHA256    := d7a0654783a4da529d1bb793b7ad9c3318020af77667bcae35f95d0e42a792f3
 zlib_LICENSE   := Zlib
 zlib_DEPS      := ixcompat

@@ -69,6 +69,7 @@ CHECK_PATH = $($(1)_HOBJ)/inst/bin$(foreach d,$($(1)_CHECK_DEPS),:$(HOSTB)/$(d)/
 # ---- the recipe driver --------------------------------------------------------
 # A package <p> is pkgs/<p>/recipe.mk. It sets:
 #   <p>_VERSION, <p>_URL, <p>_SHA256   the upstream archive (sha256-verified)
+#   <p>_MIRRORS     optional fallback URLs (same file name), tried in order when <p>_URL fails
 #   <p>_DEPS        packages whose install it builds against (stamps)
 #   <p>_CONFIGURE   extra configure arguments for the m68k build
 #   <p>_CMAKE       non-empty: a CMake package. <p>_CONFIGURE then holds -D options;
@@ -131,7 +132,7 @@ $(1): $(STATE)/$(1).checked
 
 $(STATE)/$(1).fetched: pkgs/$(1)/recipe.mk
 	@mkdir -p $(STATE)
-	$$(if $$($(1)_OWN)$$($(1)_LHA_URLS),,$(ROOT)/tools/fetch.sh $$($(1)_URL) $$($(1)_SHA256) $$($(1)_ARCHIVE))
+	$$(if $$($(1)_OWN)$$($(1)_LHA_URLS),,$(ROOT)/tools/fetch.sh $$($(1)_URL) $$($(1)_SHA256) $$($(1)_ARCHIVE) $$($(1)_MIRRORS))
 	set --$$(foreach h,$$($(1)_LHA_SHA256S), '$$(h)'); $$(foreach u,$$($(1)_LHA_URLS),$(ROOT)/tools/fetch.sh $$(u) $$$$1 $(DL)/$$(notdir $$(u)) && shift;)
 	@touch $$@
 
