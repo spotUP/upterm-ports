@@ -19,7 +19,7 @@ Upstream URL:
 - [ ] `sh tools/recipe_lint.sh <name>` is ok
 - [ ] Feed package only: `_FEED_ID`, `_SUMMARY` set, and `pkg_rows.py check <name>` is clean
 - [ ] Built and run on a rig, or the description says it was not
-- [ ] Version or revision bumped (new upstream version: revision 1; package-only change: next revision)
+- [ ] Version or revision bumped (new upstream version: revision 1, `<NAME>_REVISION` removed; package-only change: next `<NAME>_REVISION`)
 - [ ] Licence file present in the source and listed in `_LICENSE_FILES`
 - [ ] FPU build needed? Say yes or no (only maths-heavy ports get one)
 - [ ] No binaries, archives or build output are committed
