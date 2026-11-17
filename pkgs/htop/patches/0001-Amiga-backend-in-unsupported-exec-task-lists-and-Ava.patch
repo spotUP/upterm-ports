@@ -1,0 +1,156 @@
+From 69a88a9148c9394b8855ea240451fbb012ef397c Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 17:18:41 +0100
+Subject: [PATCH 1/3] Amiga backend in unsupported: exec task lists and
+ AvailMem (as vtcon ps/top); help and ? print the usage
+
+---
+ CommandLine.c                         |  5 ++
+ unsupported/UnsupportedMachine.c      | 11 ++++
+ unsupported/UnsupportedProcessTable.c | 79 +++++++++++++++++++++++++++
+ 3 files changed, 95 insertions(+)
+
+diff --git a/CommandLine.c b/CommandLine.c
+index 1ca40c0..eb711a8 100644
+--- a/CommandLine.c
++++ b/CommandLine.c
+@@ -359,6 +359,11 @@ static CommandLineStatus parseArguments(int argc, char** argv, CommandLineSettin
+       }
+    }
+ 
++   if (optind == argc - 1 && (String_eq(argv[optind], "help") || String_eq(argv[optind], "?"))) {
++      printHelpFlag(program);
++      return STATUS_OK_EXIT;
++   }
++
+    if (optind < argc) {
+       fprintf(stderr, "Error: unsupported non-option ARGV-elements:");
+       while (optind < argc)
+diff --git a/unsupported/UnsupportedMachine.c b/unsupported/UnsupportedMachine.c
+index f9aa9c2..31a45d4 100644
+--- a/unsupported/UnsupportedMachine.c
++++ b/unsupported/UnsupportedMachine.c
+@@ -41,6 +41,11 @@ bool Machine_isCPUonline(const Machine* host, unsigned int id) {
+    return true;
+ }
+ 
++#ifdef __amigaos__
++#include <exec/memory.h>
++#include <proto/exec.h>
++#endif
++
+ void Machine_scan(Machine* super) {
+    UnsupportedMachine* this = (UnsupportedMachine*) super;
+    super->existingCPUs = 1;
+@@ -48,8 +53,14 @@ void Machine_scan(Machine* super) {
+    super->totalSwap = 0;
+    super->usedSwap = 0;
+    super->cachedSwap = 0;
++#ifdef __amigaos__
++   /* chip and fast memory together, in KiB */
++   super->totalMem = AvailMem(MEMF_ANY | MEMF_TOTAL) / 1024;
++   this->usedMem = super->totalMem - AvailMem(MEMF_ANY) / 1024;
++#else
+    super->totalMem = 0;
+    this->usedMem = 0;
++#endif
+    this->cachedMem = 0;
+ }
+ 
+diff --git a/unsupported/UnsupportedProcessTable.c b/unsupported/UnsupportedProcessTable.c
+index dfb2acd..1bbc749 100644
+--- a/unsupported/UnsupportedProcessTable.c
++++ b/unsupported/UnsupportedProcessTable.c
+@@ -32,6 +32,84 @@ void ProcessTable_delete(Object* cast) {
+    free(this);
+ }
+ 
++#ifdef __amigaos__
++#include <exec/execbase.h>
++#include <exec/tasks.h>
++#include <dos/dosextens.h>
++#include <proto/exec.h>
++#include "Settings.h"
++#include "Machine.h"
++
++#define AMIGA_MAXTASKS 256
++typedef struct { void* id; char name[64]; char cmd[64]; int pri; int state; int isProcess; } AmigaTask;
++
++static void amigaTask(AmigaTask* t, struct Task* k) {
++   const char* n = k->tc_Node.ln_Name;
++   size_t i = 0;
++   memset(t, 0, sizeof(*t));
++   t->id = k;
++   while (n && n[i] && i < sizeof(t->name) - 1) { t->name[i] = n[i]; i++; }
++   t->pri = k->tc_Node.ln_Pri;
++   t->state = k->tc_State == TS_RUN ? RUNNING : k->tc_State == TS_READY ? RUNNABLE : SLEEPING;
++   if (k->tc_Node.ln_Type == NT_PROCESS) {
++      struct Process* p = (struct Process*) k;
++      struct CommandLineInterface* cli = (struct CommandLineInterface*) BADDR(p->pr_CLI);
++      t->isProcess = 1;
++      if (cli && cli->cli_Module && cli->cli_CommandName) {
++         const unsigned char* b = (const unsigned char*) BADDR(cli->cli_CommandName);
++         size_t len = b[0] < sizeof(t->cmd) - 1 ? b[0] : sizeof(t->cmd) - 1;
++         memcpy(t->cmd, b + 1, len);
++      }
++   }
++}
++
++/* the same read as vtcon proc/tasks_amiga.c (ps, top): exec's running, ready and waiting lists under Forbid */
++static int amigaSnapshot(AmigaTask* t, int max) {
++   struct ExecBase* eb = *(struct ExecBase**) 4;
++   struct Node* n;
++   int i = 0;
++   Forbid();
++   amigaTask(&t[i++], eb->ThisTask);
++   for (n = eb->TaskReady.lh_Head; n->ln_Succ && i < max; n = n->ln_Succ)
++      amigaTask(&t[i++], (struct Task*) n);
++   for (n = eb->TaskWait.lh_Head; n->ln_Succ && i < max; n = n->ln_Succ)
++      amigaTask(&t[i++], (struct Task*) n);
++   Permit();
++   return i;
++}
++
++void ProcessTable_goThroughEntries(ProcessTable* super) {
++   static AmigaTask tasks[AMIGA_MAXTASKS];
++   int count = amigaSnapshot(tasks, AMIGA_MAXTASKS);
++   const Settings* settings = super->super.host->settings;
++   (void) settings;
++   for (int i = 0; i < count; i++) {
++      const AmigaTask* t = &tasks[i];
++      pid_t pid = (pid_t)(unsigned long) t->id;
++      bool preExisting = true;
++      Process* proc = ProcessTable_getProcess(super, pid, &preExisting, UnsupportedProcess_new);
++      Process_setPid(proc, pid);
++      Process_setParent(proc, 0);
++      Process_setThreadGroup(proc, pid);
++      Process_updateComm(proc, t->name);
++      Process_updateCmdline(proc, t->cmd[0] ? t->cmd : t->name, 0, 0);
++      proc->super.updated = true;
++      proc->state = t->state;
++      proc->isKernelThread = !t->isProcess;
++      proc->isUserlandThread = false;
++      proc->super.show = !(settings->hideKernelThreads && proc->isKernelThread);
++      proc->priority = t->pri;
++      proc->nice = 0;
++      proc->nlwp = 1;
++      proc->percent_cpu = 0.0F;
++      proc->percent_mem = 0.0F;
++      proc->st_uid = 0;
++      proc->user = "root";
++      if (!preExisting)
++         ProcessTable_add(super, proc);
++   }
++}
++#else
+ void ProcessTable_goThroughEntries(ProcessTable* super) {
+    bool preExisting = true;
+    Process* proc;
+@@ -88,3 +166,4 @@ void ProcessTable_goThroughEntries(ProcessTable* super) {
+    if (!preExisting)
+       ProcessTable_add(super, proc);
+ }
++#endif
+-- 
+2.50.1 (Apple Git-155)
+

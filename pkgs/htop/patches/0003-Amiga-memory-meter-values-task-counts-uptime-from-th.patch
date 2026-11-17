@@ -1,0 +1,73 @@
+From ac46d17e4ffc45fe438bc2b62ebfeb2c633902b5 Mon Sep 17 00:00:00 2001
+From: spotUP <retroranksmail@gmail.com>
+Date: Sun, 25 Oct 2026 17:53:18 +0100
+Subject: [PATCH 3/3] Amiga: memory meter values, task counts, uptime from the
+ E-clock
+
+---
+ unsupported/Platform.c                | 16 ++++++++++++++++
+ unsupported/UnsupportedProcessTable.c |  5 +++++
+ 2 files changed, 21 insertions(+)
+
+diff --git a/unsupported/Platform.c b/unsupported/Platform.c
+index a5f19cf..f40d5b7 100644
+--- a/unsupported/Platform.c
++++ b/unsupported/Platform.c
+@@ -11,6 +11,8 @@ in the source distribution for its full text.
+ #include "unsupported/Platform.h"
+ 
+ #include <math.h>
++#include <time.h>
++#include "unsupported/UnsupportedMachine.h"
+ 
+ #include "CPUMeter.h"
+ #include "DateTimeMeter.h"
+@@ -104,6 +106,12 @@ void Platform_setBindings(Htop_Action* keys) {
+ }
+ 
+ int Platform_getUptime(void) {
++#ifdef __amigaos__
++   /* timer.device E-clock, counting since power-on (ixemul CLOCK_MONOTONIC) */
++   struct timespec ts;
++   if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
++      return (int) ts.tv_sec;
++#endif
+    return 0;
+ }
+ 
+@@ -131,8 +139,16 @@ double Platform_setCPUValues(Meter* this, unsigned int cpu) {
+ 
+ void Platform_setMemoryValues(Meter* this) {
+    double* v = this->values;
++#ifdef __amigaos__
++   const Machine* host = this->host;
++   const UnsupportedMachine* uhost = (const UnsupportedMachine*) host;
++   this->total = host->totalMem;
++   v[MEMORY_CLASS_USED] = uhost->usedMem;
++   v[MEMORY_CLASS_CACHED] = uhost->cachedMem;
++#else
+    v[MEMORY_CLASS_USED] = NAN;
+    v[MEMORY_CLASS_CACHED] = NAN;
++#endif
+ 
+    this->curItems = 2;
+ }
+diff --git a/unsupported/UnsupportedProcessTable.c b/unsupported/UnsupportedProcessTable.c
+index 1bbc749..51ffbc3 100644
+--- a/unsupported/UnsupportedProcessTable.c
++++ b/unsupported/UnsupportedProcessTable.c
+@@ -105,6 +105,11 @@ void ProcessTable_goThroughEntries(ProcessTable* super) {
+       proc->percent_mem = 0.0F;
+       proc->st_uid = 0;
+       proc->user = "root";
++      super->totalTasks++;
++      if (proc->isKernelThread)
++         super->kernelThreads++;
++      if (proc->state == RUNNING)
++         super->runningTasks++;
+       if (!preExisting)
+          ProcessTable_add(super, proc);
+    }
+-- 
+2.50.1 (Apple Git-155)
+

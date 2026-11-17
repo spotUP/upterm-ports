@@ -1,0 +1,42 @@
+From a9658719a312d60b41b2a13cff579b130bf979c9 Mon Sep 17 00:00:00 2001
+From: spotUP <spotUP@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 17:47:47 +0100
+Subject: [PATCH 2/3] No fork: the lsof and strace screens take their failure
+ path
+
+---
+ OpenFilesScreen.c | 3 ++-
+ TraceScreen.c     | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/OpenFilesScreen.c b/OpenFilesScreen.c
+index 095cd72..2b1b582 100644
+--- a/OpenFilesScreen.c
++++ b/OpenFilesScreen.c
+@@ -108,7 +108,8 @@ static OpenFiles_ProcessData* OpenFilesScreen_getProcessData(pid_t pid) {
+       return pdata;
+    }
+ 
+-   pid_t child = fork();
++   /* ixemul has vfork only, and lsof/strace do not exist on the Amiga: take the failure path */
++   pid_t child = -1;
+    if (child < 0) {
+       close(fdpair[1]);
+       close(fdpair[0]);
+diff --git a/TraceScreen.c b/TraceScreen.c
+index 5b78434..3a2605c 100644
+--- a/TraceScreen.c
++++ b/TraceScreen.c
+@@ -76,7 +76,8 @@ bool TraceScreen_forkTracer(TraceScreen* this) {
+    if (fcntl(fdpair[1], F_SETFL, O_NONBLOCK) < 0)
+       goto err;
+ 
+-   pid_t child = fork();
++   /* ixemul has vfork only, and lsof/strace do not exist on the Amiga: take the failure path */
++   pid_t child = -1;
+    if (child < 0)
+       goto err;
+ 
+-- 
+2.50.1 (Apple Git-155)
+
