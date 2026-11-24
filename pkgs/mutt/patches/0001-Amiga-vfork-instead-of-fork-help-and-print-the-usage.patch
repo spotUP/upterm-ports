@@ -1,18 +1,16 @@
 From 75a9fd1fd05c4c38db3c9b8117380cce1e9c10f0 Mon Sep 17 00:00:00 2001
 From: spotUP <spotUP@users.noreply.github.com>
 Date: Fri, 23 Oct 2026 14:50:06 +0200
-Subject: [PATCH 1/2] Amiga: vfork instead of fork, help and ? print the usage,
- byte-wide fgetwc
+Subject: [PATCH 1/2] Amiga: vfork instead of fork, help and ? print the usage
 
 ---
  background.c  | 2 +-
  filter.c      | 2 +-
- handler.c     | 5 +++++
  main.c        | 4 ++++
  mutt_tunnel.c | 2 +-
  sendlib.c     | 4 ++--
  system.c      | 4 ++--
- 7 files changed, 16 insertions(+), 7 deletions(-)
+ 6 files changed, 11 insertions(+), 7 deletions(-)
 
 diff --git a/background.c b/background.c
 index 1c13013..28b8db5 100644
@@ -40,22 +38,6 @@ index 0dab2f9..bef5d87 100644
    {
      mutt_unblock_signals_system (0);
      mutt_reset_child_signals ();
-diff --git a/handler.c b/handler.c
-index cedf352..e17136d 100644
---- a/handler.c
-+++ b/handler.c
-@@ -38,6 +38,11 @@
- #include "rfc3676.h"
- #include "pager.h"
- 
-+/* UP-Term: ixemul has no fgetwc/ungetwc; its locale is C (ISO 8859-1), one byte is one character */
-+#include <wchar.h>
-+#define fgetwc(f) ((wint_t) (getc (f) & 0xFFFFFFFFu))
-+#define ungetwc(c, f) ((wint_t) ungetc ((int) (c), (f)))
-+
- #define BUFI_SIZE 1000
- #define BUFO_SIZE 2000
- 
 diff --git a/main.c b/main.c
 index bcc17b3..7f42077 100644
 --- a/main.c
