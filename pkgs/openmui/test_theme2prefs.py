@@ -57,7 +57,10 @@ def main():
         assert spec[6] == want, "0x%x: radius %s, want %s" % (rid, spec[6], want)
     # no radius keys in the theme: UP-MCC's defaults
     dflt = records(theme2prefs.prefs(theme))
-    assert dflt[0x2b] == b"B0221141\0" and dflt[0x33] == b"B1444461\0", (dflt[0x2b], dflt[0x33])
+    assert dflt[0x2b] == b"B0443341\0" and dflt[0x2c] == b"B0443341\0" and dflt[0x33] == b"B1444461\0", (dflt[0x2b], dflt[0x33])
+    # button and image button: UP-Button padding, 2 px more per side than stock 2211
+    for rid in (0x2b, 0x2c):
+        assert [int(c, 16) for c in rec[rid][2:6].decode()] == [4, 4, 3, 3], hex(rid)
     assert len(theme2prefs.FRAME) == len(FRAME_IDS)
     assert rec[0x37] == b"2:r101010\0"  # colour records still there
     print("[OK] %d frame keys rounded, %d records" % (len(FRAME_IDS), len(rec)))

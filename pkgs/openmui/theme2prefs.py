@@ -26,8 +26,9 @@ IMG = {0x37: "background", 0x38: "background", 0x95: "background", 0x54: "backgr
        0x84: "surface", 0x86: "surface_raised"}                                           # string background, active
 # MUICFG_Frame_* id -> stock default spec (configdata.c DefFramespecValues): type digit,
 # state (0 up, 1 down), inner left/right/top/bottom. Rounded = type digit "B", the radius
-# and width digits appended.
-FRAME = {0x2b: "202211", 0x2c: "202211", 0x2d: "212211", 0x2e: "302211",  # button, image button, text, string
+# and width digits appended. Button and image button get 2 px more inner spacing per side
+# than stock (2211 -> 4433), the padding UP-Button has.
+FRAME = {0x2b: "204433", 0x2c: "204433", 0x2d: "212211", 0x2e: "302211",  # button, image button, text, string
          0x2f: "212211", 0x30: "202211", 0x31: "202211", 0x32: "210000",  # readlist, inputlist, prop, gauge
          0x33: "314444", 0x34: "112211", 0x35: "212211", 0x36: "400000",  # group, popup, virtual, slider
          0x90: "202200", 0x18: "300000"}                                  # knob, drag
