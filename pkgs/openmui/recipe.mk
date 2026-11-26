@@ -5,7 +5,7 @@
 # place the drawer. The licences ask that the notices and the source travel with the
 # binaries: LICENSE, ReadMe and Source.tar.gz stay in the drawer.
 # Default look: Themes/OpenMUI/<theme>.prefs (theme2prefs.py, from the UP-MCC theme files) is a
-# ready global.prefs with flat frames; Themes/OpenMUI/UseTheme makes the prefs drawers and
+# ready global.prefs with rounded frames; Themes/OpenMUI/UseTheme makes the prefs drawers and
 # copies the active one to ENVARC:OpenMUI/ and ENV:OpenMUI/ (kit: run it at install).
 # shortcut: prebuilt payload, a source build needs -std=gnu17 (our gcc is 6.5), a host
 # FlexCat and the thebar submodule; upgrade when we patch OpenMUI itself (README.md).

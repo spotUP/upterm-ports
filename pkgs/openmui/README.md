@@ -51,8 +51,14 @@ system, and a plain `Copy` into them fails ("object not found"), leaving the sto
 Install with `UseTheme`, which makes them first.
 
 Frames: every `MUICFG_Frame_*` key (button, image button, text, string, lists, prop,
-gauge, group, popup, virtual, slider, knob, drag) is type 1, a one-pixel rectangle in
-one pen, instead of the stock two-tone bevels. `test_theme2prefs.py` checks this.
+gauge, group, popup, virtual, slider, knob, drag) is type B (FST_ROUNDED, drawn by
+`Libs/OpenMUI/Zframes.mui`): a one-pixel rounded outline with the background clipped to
+the same radius, like UP-Button's rounded face, instead of the stock two-tone bevels.
+Radius: the theme's `gui.radius_small` (4) for small widgets, `gui.radius` (6) for
+groups and lists. A box not taller than 2 * radius + 4 gets the rounded background but
+no outline. The outline pen is MPEN_HALFSHADOW (between the screen's shadow and
+background pens); the theme's outline colour needs a muimaster patch.
+`test_theme2prefs.py` checks every key.
 
 Install the Dark one by default, and copy the matching one wherever
 `ENV:UP-MCC/theme` is switched. Applications started after the copy use it; a

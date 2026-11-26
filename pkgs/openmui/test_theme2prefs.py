@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Host test for theme2prefs.py: decodes the generated global.prefs the way OpenMUI
 reads it (FORM PREF, MUIC records id/len/payload, dataspace.c ds_record, no padding)
-and checks every MUICFG_Frame_* key is flat (type 1, FST_RECT) and parses as a frame
-spec (frame.c zune_frame_spec_to_intern). usage: python3 test_theme2prefs.py"""
+and checks every MUICFG_Frame_* key is rounded (type B, FST_ROUNDED, 8 digits with the
+theme's radius and width 1) and parses as a frame spec (frame.c zune_frame_spec_to_intern). usage: python3 test_theme2prefs.py"""
 import os, struct, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -42,7 +42,7 @@ def spec_ok(spec):
 
 def main():
     theme = "\n".join("gui.%s = %06X" % (k, 0x101010 * (i + 1)) for i, k in enumerate(KEYS))
-    rec = records(theme2prefs.prefs(theme))
+    rec = records(theme2prefs.prefs(theme + "\ngui.radius = 6\ngui.radius_small = 4"))
     missing = FRAME_IDS - rec.keys()
     assert not missing, "frame keys missing: %s" % sorted(hex(i) for i in missing)
     for rid in sorted(FRAME_IDS):
@@ -50,10 +50,17 @@ def main():
         assert raw.endswith(b"\0"), hex(rid)
         spec = raw[:-1].decode()
         assert spec_ok(spec), "0x%x: bad frame spec %r" % (rid, spec)
-        assert spec[0] == "1", "0x%x: frame type %s is not flat (want 1, FST_RECT)" % (rid, spec[0])
+        assert spec[0] == "B", "0x%x: frame type %s is not rounded (want B, FST_ROUNDED)" % (rid, spec[0])
+        assert len(spec) == 8 and spec[7] == "1", "0x%x: %r lacks radius and width 1" % (rid, spec)
+        assert spec[1:6] == theme2prefs.FRAME[rid][1:], "0x%x: stock state/spacing changed" % rid
+        want = "6" if rid in theme2prefs.LARGE else "4"
+        assert spec[6] == want, "0x%x: radius %s, want %s" % (rid, spec[6], want)
+    # no radius keys in the theme: UP-MCC's defaults
+    dflt = records(theme2prefs.prefs(theme))
+    assert dflt[0x2b] == b"B0221141\0" and dflt[0x33] == b"B1444461\0", (dflt[0x2b], dflt[0x33])
     assert len(theme2prefs.FRAME) == len(FRAME_IDS)
     assert rec[0x37] == b"2:r101010\0"  # colour records still there
-    print("[OK] %d frame keys flat, %d records" % (len(FRAME_IDS), len(rec)))
+    print("[OK] %d frame keys rounded, %d records" % (len(FRAME_IDS), len(rec)))
 
 
 if __name__ == "__main__":
