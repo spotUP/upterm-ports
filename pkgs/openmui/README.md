@@ -44,12 +44,22 @@ string gadget colours and focus ring to the theme's colours as RGB pen specs.
 | File | Target |
 |---|---|
 | `Themes/OpenMUI/<theme>.prefs` | `ENVARC:OpenMUI/global.prefs` and `ENV:OpenMUI/global.prefs` |
+| `Themes/OpenMUI/UseTheme` | AmigaDOS script: `Execute UseTheme Dark FROM=<drawer>` makes the prefs drawers and copies both files |
+
+The drawers `ENVARC:OpenMUI`, `ENV:OpenMUI` and `ENV(ARC):UP-MCC` do not exist on a fresh
+system, and a plain `Copy` into them fails ("object not found"), leaving the stock look.
+Install with `UseTheme`, which makes them first.
+
+Frames: every `MUICFG_Frame_*` key (button, image button, text, string, lists, prop,
+gauge, group, popup, virtual, slider, knob, drag) is type 1, a one-pixel rectangle in
+one pen, instead of the stock two-tone bevels. `test_theme2prefs.py` checks this.
 
 Install the Dark one by default, and copy the matching one wherever
 `ENV:UP-MCC/theme` is switched. Applications started after the copy use it; a
 running one keeps its colours until restarted. Do not overwrite a `global.prefs`
 the user saved from Prefs/OpenMUI without a backup.
 
-Limit: colours only. Frames, shine/shadow and label text use the screen's pens,
+Limit: the frame and label pens are the screen's shine/shadow/text pens (OpenMUI has no
+prefs key for them),
 and the widgets are still drawn by the stock classes, not by UP-*.mcc. Drawing
 them with UP-MCC needs a muimaster source patch (class substitution).

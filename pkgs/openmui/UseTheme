@@ -1,0 +1,24 @@
+.key THEME/A,FROM/A
+.bra {
+.ket }
+; UseTheme <Dark|Light> FROM=<openmui drawer, e.g. UP-Term:openmui>
+; Makes the prefs drawers (a fresh system has no ENVARC:OpenMUI, ENV:OpenMUI or
+; ENV(ARC):UP-MCC, and Copy into them fails "object not found") and installs the
+; theme's OpenMUI global.prefs and UP-MCC theme. Programs started afterwards use it.
+FailAt 21
+IF NOT EXISTS ENVARC:OpenMUI
+  MakeDir ENVARC:OpenMUI
+ENDIF
+IF NOT EXISTS ENV:OpenMUI
+  MakeDir ENV:OpenMUI
+ENDIF
+IF NOT EXISTS ENVARC:UP-MCC
+  MakeDir ENVARC:UP-MCC
+ENDIF
+IF NOT EXISTS ENV:UP-MCC
+  MakeDir ENV:UP-MCC
+ENDIF
+Copy "{FROM}/Themes/OpenMUI/{THEME}.prefs" ENVARC:OpenMUI/global.prefs QUIET
+Copy "{FROM}/Themes/OpenMUI/{THEME}.prefs" ENV:OpenMUI/global.prefs QUIET
+Copy "{FROM}/Themes/UP-MCC/{THEME}.theme" ENVARC:UP-MCC/theme QUIET
+Copy "{FROM}/Themes/UP-MCC/{THEME}.theme" ENV:UP-MCC/theme QUIET
