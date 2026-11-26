@@ -4,6 +4,8 @@
 # themes). mk/common.mk's <p>_LHA_URLS mode does fetch + unpack; the steps below only
 # place the drawer. The licences ask that the notices and the source travel with the
 # binaries: LICENSE, ReadMe and Source.tar.gz stay in the drawer.
+# Default look: Themes/OpenMUI/<theme>.prefs (theme2prefs.py, from the UP-MCC theme files) is a
+# ready global.prefs; the kit copies the active one to ENVARC:OpenMUI/ and ENV:OpenMUI/.
 # shortcut: prebuilt payload, a source build needs -std=gnu17 (our gcc is 6.5), a host
 # FlexCat and the thebar submodule; upgrade when we patch OpenMUI itself (README.md).
 openmui_VERSION   := 1.0
@@ -22,4 +24,7 @@ openmui_INSTALL_CMD = rm -rf $(openmui_DIR) && mkdir -p $(openmui_DIR) && \
 	cp $(ROOT)/pkgs/openmui/README.md $(openmui_DIR)/README.upkg.md && \
 	test -f $(openmui_DIR)/Libs/muimaster.library && test -f $(openmui_DIR)/Libs/up-mcc.library && \
 	test -f $(openmui_DIR)/Libs/MUI/UP-Button.mcc && test -f $(openmui_DIR)/Prefs/OpenMUI && \
-	test -f $(openmui_DIR)/LICENSE && test -f $(openmui_DIR)/Source.tar.gz
+	test -f $(openmui_DIR)/LICENSE && test -f $(openmui_DIR)/Source.tar.gz && \
+	mkdir -p $(openmui_DIR)/Themes/OpenMUI && for t in Dark Light; do \
+	python3 $(ROOT)/pkgs/openmui/theme2prefs.py $(openmui_DIR)/Themes/UP-MCC/$$t.theme \
+	> $(openmui_DIR)/Themes/OpenMUI/$$t.prefs || exit 1; done

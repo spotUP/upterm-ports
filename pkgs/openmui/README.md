@@ -33,3 +33,23 @@ source (`Source.tar.gz`) must travel with the binaries; the recipe keeps them.
 A source build needs: `-std=gnu17` (our m68k-amigaos-gcc is 6.5; upstream uses
 GCC 16), a host FlexCat, sfdc, fd2sfd, and the `thebar` git submodule. Do that when
 OpenMUI itself has to change (for example UP-MCC as the built-in default look).
+
+## Default look: UP-MCC colours for every MUI application
+
+`make openmui` also writes `Themes/OpenMUI/Dark.prefs` and `Light.prefs`
+(`theme2prefs.py`, generated from `Themes/UP-MCC/*.theme`). Each is a complete
+OpenMUI `global.prefs` (IFF PREF/MUIC) that sets the stock classes' backgrounds,
+string gadget colours and focus ring to the theme's colours as RGB pen specs.
+
+| File | Target |
+|---|---|
+| `Themes/OpenMUI/<theme>.prefs` | `ENVARC:OpenMUI/global.prefs` and `ENV:OpenMUI/global.prefs` |
+
+Install the Dark one by default, and copy the matching one wherever
+`ENV:UP-MCC/theme` is switched. Applications started after the copy use it; a
+running one keeps its colours until restarted. Do not overwrite a `global.prefs`
+the user saved from Prefs/OpenMUI without a backup.
+
+Limit: colours only. Frames, shine/shadow and label text use the screen's pens,
+and the widgets are still drawn by the stock classes, not by UP-*.mcc. Drawing
+them with UP-MCC needs a muimaster source patch (class substitution).
