@@ -11,9 +11,9 @@ DefFramespecValues) and never type 1 (FST_RECT, the shine pen: a white box). The
 zune_frame_spec_to_intern); the radius is the theme's gui.radius_small for small widgets
 and gui.radius for groups and lists (UP-MCC tokens.h defaults 4 and 6), at most 15.
 frame_rounded_draw skips the outline of a box not taller and wider than 2 * radius + 4.
-shortcut: the outline pen is MPEN_HALFSHADOW, which OpenMUI derives from the screen's
-shadow and background pens (window.c InitRenderInfoPens); no prefs key sets the MUI
-pens, so the theme's outline colour needs a muimaster patch. The stock classes still
+Outline colour: MUICFG_Frame_OutlineColor (0x514, OpenMUI branch up-outline-pen) = the
+theme's gui.track, the 1 px line UP-MCC fields draw (mui_aa.h MUI_AA_FIELD_LINE); without
+it OpenMUI draws the outline in MPEN_HALFSHADOW, invisible on a dark fill. The stock classes still
 draw the widgets, not UP-*.mcc: a muimaster patch (class substitution) is needed for that."""
 import struct, sys
 
@@ -37,7 +37,8 @@ WIDTH = 1
 LARGE = {0x2f, 0x30, 0x33, 0x35}   # readlist, inputlist, group, virtual: gui.radius; others radius_small
 RADIUS_DEFAULT = {"radius": 6, "radius_small": 4}   # UP-MCC tokens.h
 PEN = {0x85: "text", 0x87: "text", 0x400: "accent", 0x401: "accent", 0x402: "accent_text",  # string text/cursor/marked
-       0x8f: "focus_ring"}                                                                 # active object
+       0x8f: "focus_ring",                                                                 # active object
+       0x514: "track"}                                                                     # rounded frame outline
 
 
 def chunk(cid, body):

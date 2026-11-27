@@ -11,7 +11,7 @@ import theme2prefs  # noqa: E402
 # libs/muimaster/classes/configdata.h: every MUICFG_Frame_* id that DefFramespecValues reads
 FRAME_IDS = {0x18, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x90}
 KEYS = ("background", "surface", "surface_raised", "surface_pressed", "surface_hover",
-        "accent", "accent_text", "text", "focus_ring")
+        "accent", "accent_text", "text", "focus_ring", "track")
 
 
 def records(data):
@@ -63,6 +63,7 @@ def main():
         assert [int(c, 16) for c in rec[rid][2:6].decode()] == [4, 4, 3, 3], hex(rid)
     assert len(theme2prefs.FRAME) == len(FRAME_IDS)
     assert rec[0x37] == b"2:r101010\0"  # colour records still there
+    assert rec[0x514] == b"r%06X\0" % (0x101010 * (KEYS.index("track") + 1)), rec[0x514]  # outline = gui.track
     print("[OK] %d frame keys rounded, %d records" % (len(FRAME_IDS), len(rec)))
 
 

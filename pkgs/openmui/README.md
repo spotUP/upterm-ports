@@ -56,8 +56,9 @@ gauge, group, popup, virtual, slider, knob, drag) is type B (FST_ROUNDED, drawn 
 the same radius, like UP-Button's rounded face, instead of the stock two-tone bevels.
 Radius: the theme's `gui.radius_small` (4) for small widgets, `gui.radius` (6) for
 groups and lists. A box not taller than 2 * radius + 4 gets the rounded background but
-no outline. The outline pen is MPEN_HALFSHADOW (between the screen's shadow and
-background pens); the theme's outline colour needs a muimaster patch.
+no outline. The outline colour is the theme's `gui.track` (MUICFG_Frame_OutlineColor
+0x514, needs OpenMUI with branch up-outline-pen; older OpenMUI ignores the key and
+draws MPEN_HALFSHADOW).
 `test_theme2prefs.py` checks every key.
 
 Install the Dark one by default, and copy the matching one wherever
